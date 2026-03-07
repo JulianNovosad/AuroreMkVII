@@ -19,7 +19,7 @@ Makefile
 *.so.*
 *.out
 
-# AuroreMkVI build artifacts (reference codebase, keep sources only)
+# AuroreMkVI: keep only source files, exclude vendored deps and build artifacts
 AuroreMkVI/CMakeFiles/
 AuroreMkVI/CMakeCache.txt
 AuroreMkVI/cmake_install.cmake
@@ -28,6 +28,10 @@ AuroreMkVI/*.cmake
 AuroreMkVI/aurore_mkvi
 AuroreMkVI/*.o
 AuroreMkVI/*.a
+AuroreMkVI/deps/
+AuroreMkVI/include/tensorflow/
+AuroreMkVI/include/flatbuffers/
+AuroreMkVI/ruy/
 
 # Logs and generated data
 logs/

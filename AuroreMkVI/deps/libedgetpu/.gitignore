@@ -1,4 +1,0 @@
-bazel-*
-out/
-dist/
-.DS_Store
