@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/farmhash.dir/link.d -shared -Wl,-soname,libfarmhash.so -o libfarmhash.so CMakeFiles/farmhash.dir/home/pi/Aurore/deps/farmhash/src/farmhash.cc.o

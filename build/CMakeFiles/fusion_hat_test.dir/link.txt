@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG  -lpthread -lrt -fPIE -pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack CMakeFiles/fusion_hat_test.dir/tests/unit/fusion_hat_test.cpp.o CMakeFiles/fusion_hat_test.dir/src/drivers/fusion_hat_i2c.cpp.o -o fusion_hat_test 

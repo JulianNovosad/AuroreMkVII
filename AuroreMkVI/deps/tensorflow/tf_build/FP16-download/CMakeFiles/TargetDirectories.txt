@@ -1,3 +1,0 @@
-/home/pi/Aurore/deps/tensorflow/tf_build/FP16-download/CMakeFiles/fp16.dir
-/home/pi/Aurore/deps/tensorflow/tf_build/FP16-download/CMakeFiles/edit_cache.dir
-/home/pi/Aurore/deps/tensorflow/tf_build/FP16-download/CMakeFiles/rebuild_cache.dir

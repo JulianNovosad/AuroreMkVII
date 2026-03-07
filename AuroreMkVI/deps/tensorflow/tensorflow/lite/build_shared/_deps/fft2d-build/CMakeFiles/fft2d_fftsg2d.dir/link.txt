@@ -1,1 +1,0 @@
-/usr/bin/cc -fPIC -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/fft2d_fftsg2d.dir/link.d -shared -Wl,-soname,libfft2d_fftsg2d.so -o libfft2d_fftsg2d.so CMakeFiles/fft2d_fftsg2d.dir/__/__/fft2d/fftsg2d.c.o  -Wl,-rpath,/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/_deps/fft2d-build: libfft2d_fftsg.so -lm

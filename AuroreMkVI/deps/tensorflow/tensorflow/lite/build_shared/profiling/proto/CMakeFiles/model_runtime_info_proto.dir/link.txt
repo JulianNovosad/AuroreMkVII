@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/model_runtime_info_proto.dir/link.d -shared -Wl,-soname,libmodel_runtime_info_proto.so -o libmodel_runtime_info_proto.so CMakeFiles/model_runtime_info_proto.dir/__/__/tensorflow/lite/profiling/proto/model_runtime_info.pb.cc.o  ../../_deps/protobuf-build/libprotobuf.a

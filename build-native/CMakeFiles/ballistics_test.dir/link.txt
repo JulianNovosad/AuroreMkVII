@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG  -lpthread -lrt -fPIE -pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack CMakeFiles/ballistics_test.dir/tests/unit/ballistics_test.cpp.o CMakeFiles/ballistics_test.dir/src/actuation/ballistic_solver.cpp.o -o ballistics_test 

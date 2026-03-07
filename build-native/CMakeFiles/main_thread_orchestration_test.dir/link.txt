@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG  -lpthread -lrt -fPIE -pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack CMakeFiles/main_thread_orchestration_test.dir/tests/unit/test_main_thread_orchestration.cpp.o -o main_thread_orchestration_test  -lrt 

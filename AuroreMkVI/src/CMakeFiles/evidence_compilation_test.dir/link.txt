@@ -1,1 +1,0 @@
-/usr/bin/c++  -O3 -march=native -mtune=native -Wall -Wextra -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wl,--dependency-file=CMakeFiles/evidence_compilation_test.dir/link.d CMakeFiles/evidence_compilation_test.dir/test_evidence_compilation.cpp.o -o evidence_compilation_test   -L/home/pi/Aurore/artifacts/tflite/lib  -L/home/pi/Aurore/artifacts/abseil/lib

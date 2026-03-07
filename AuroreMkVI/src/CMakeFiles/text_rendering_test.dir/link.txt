@@ -1,1 +1,0 @@
-/usr/bin/c++  -O3 -march=native -mtune=native -Wall -Wextra -Werror -O2 -g -DNDEBUG -Wl,--dependency-file=CMakeFiles/text_rendering_test.dir/link.d CMakeFiles/text_rendering_test.dir/test_text_rendering.cpp.o -o text_rendering_test   -L/home/pi/Aurore/artifacts/tflite/lib  -L/home/pi/Aurore/artifacts/abseil/lib

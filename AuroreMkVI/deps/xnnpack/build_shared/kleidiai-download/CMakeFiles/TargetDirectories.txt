@@ -1,3 +1,0 @@
-/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/CMakeFiles/kleidiai.dir
-/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/CMakeFiles/edit_cache.dir
-/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/CMakeFiles/rebuild_cache.dir

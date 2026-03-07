@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG  -lpthread -lrt -fPIE -pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack CMakeFiles/hud_socket_test.dir/tests/unit/hud_socket_test.cpp.o CMakeFiles/hud_socket_test.dir/src/common/hud_socket.cpp.o CMakeFiles/hud_socket_test.dir/src/state_machine/state_machine.cpp.o -o hud_socket_test 

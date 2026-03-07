@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG  -lpthread -lrt -fPIE -pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack CMakeFiles/state_machine_transitions_test.dir/tests/unit/test_state_machine_transitions.cpp.o CMakeFiles/state_machine_transitions_test.dir/src/state_machine/state_machine.cpp.o -o state_machine_transitions_test 

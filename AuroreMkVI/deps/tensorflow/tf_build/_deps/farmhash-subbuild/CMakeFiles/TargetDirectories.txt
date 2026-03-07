@@ -1,3 +1,0 @@
-/home/pi/Aurore/deps/tensorflow/tf_build/_deps/farmhash-subbuild/CMakeFiles/farmhash-populate.dir
-/home/pi/Aurore/deps/tensorflow/tf_build/_deps/farmhash-subbuild/CMakeFiles/edit_cache.dir
-/home/pi/Aurore/deps/tensorflow/tf_build/_deps/farmhash-subbuild/CMakeFiles/rebuild_cache.dir

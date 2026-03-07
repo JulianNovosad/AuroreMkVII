@@ -1,7 +1,0 @@
-/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-build/CMakeFiles/flatc.dir
-/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-build/CMakeFiles/edit_cache.dir
-/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-build/CMakeFiles/rebuild_cache.dir
-/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-build/CMakeFiles/list_install_components.dir
-/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-build/CMakeFiles/install.dir
-/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-build/CMakeFiles/install/local.dir
-/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-build/CMakeFiles/install/strip.dir

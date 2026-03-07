@@ -1,1 +1,0 @@
-/usr/bin/cc -fPIC -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/pthreadpool.dir/link.d -shared -Wl,-soname,libpthreadpool.so -o libpthreadpool.so "CMakeFiles/pthreadpool.dir/src/portable-api.c.o" CMakeFiles/pthreadpool.dir/src/memory.c.o CMakeFiles/pthreadpool.dir/src/pthreads.c.o

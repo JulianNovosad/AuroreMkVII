@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG  -lpthread -lrt -fPIE -pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack CMakeFiles/aurore_timing_tests.dir/tests/timing/wcet_measurement.cpp.o -o aurore_timing_tests  -lrt 

@@ -1,2 +1,0 @@
-# Hashes of file build rules.
-531763db623ccd5941f0b1c93de204ad build_identifier.c

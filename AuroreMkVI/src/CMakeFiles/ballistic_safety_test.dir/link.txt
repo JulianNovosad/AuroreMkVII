@@ -1,1 +1,0 @@
-/usr/bin/c++  -O3 -march=native -mtune=native -Wall -Wextra -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wl,--dependency-file=CMakeFiles/ballistic_safety_test.dir/link.d CMakeFiles/ballistic_safety_test.dir/ballistic_safety_test.cpp.o -o ballistic_safety_test   -L/home/pi/Aurore/artifacts/tflite/lib  -L/home/pi/Aurore/artifacts/abseil/lib
