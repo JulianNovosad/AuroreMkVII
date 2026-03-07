@@ -1,0 +1,3 @@
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/_deps/fft2d-subbuild/CMakeFiles/fft2d-populate.dir
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/_deps/fft2d-subbuild/CMakeFiles/edit_cache.dir
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/_deps/fft2d-subbuild/CMakeFiles/rebuild_cache.dir

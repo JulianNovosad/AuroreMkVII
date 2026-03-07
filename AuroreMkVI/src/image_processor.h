@@ -1,0 +1,148 @@
+// Verified headers: [atomic, memory, thread, boost/lockfree/spsc_queue.hpp, pipeline_structs.h...]
+// Verification timestamp: 2026-01-06 17:08:04
+#pragma once
+
+#include <atomic>
+#include <memory>
+#include <thread>
+#include <opencv2/opencv.hpp>
+#include <boost/lockfree/spsc_queue.hpp>
+
+#include "pipeline_structs.h"
+// #include "gpu_overlay.h" // Removed GpuOverlay include
+#include <libcamera/pixel_format.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <map>
+
+class ImageProcessor {
+public:
+        // Constructor for processors that apply detection overlays
+        ImageProcessor(ImageQueue* input_queue, ImageQueue* output_queue,
+                       TripleBuffer<DetectionResults>* detection_buffer,
+                       TripleBuffer<OverlayBallisticPoint>* ballistic_overlay_buffer,
+                       std::shared_ptr<BufferPool<uint8_t>> buffer_pool,
+                       std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
+                       libcamera::PixelFormat input_pixel_format,
+                       int output_width, int output_height,
+                       DetectionOverlayQueue* overlay_queue,
+                       // int drm_fd, // Removed drm_fd
+                       const std::string& module_name);
+        
+        // Constructor for processors that only do basic processing (like for TPU inference)
+        ImageProcessor(ImageQueue* input_queue, ImageQueue* output_queue,
+                       std::shared_ptr<BufferPool<uint8_t>> buffer_pool,
+                       std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
+                       libcamera::PixelFormat input_pixel_format,
+                        int output_width, int output_height,
+                        // int drm_fd, // Removed drm_fd
+                        bool is_tpu_stream,
+                        const std::string& module_name);
+        
+        // Constructor specifically for TPU processing (sets is_tpu_stream_ = true internally)
+        ImageProcessor(ImageQueue* input_queue, ImageQueue* output_queue,
+                       std::shared_ptr<BufferPool<uint8_t>> buffer_pool,
+                       std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
+                       libcamera::PixelFormat input_pixel_format,
+                        int output_width, int output_height,
+                        // int drm_fd, // Removed drm_fd
+                        const std::string& module_name);
+        
+        // Constructor for latest-wins pipeline (triple buffer, non-blocking)
+        ImageProcessor(LatestImageBuffer* input_buffer,
+                       LatestImageBuffer* output_buffer,
+                       std::shared_ptr<BufferPool<uint8_t>> buffer_pool,
+                       std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
+                       libcamera::PixelFormat input_pixel_format,
+                       int output_width, int output_height,
+                       // int drm_fd, // Removed drm_fd
+                       const std::string& module_name);
+        
+        ~ImageProcessor();
+    
+        bool start();
+        void stop();
+        void start(const std::string& phone_ip);
+        bool is_running() const;        
+        // Set skip factor (process only every Nth frame)
+        void set_skip_factor(int skip_factor) { skip_factor_ = skip_factor; }
+    
+        // Timing methods for monitoring
+        long long get_queue_pop_timing_us() const { return avg_queue_pop_time_us_; }
+        long long get_preprocess_timing_us() const { return avg_preprocess_time_us_; }
+    
+        // Method to set application reference for updating counters
+        void set_application_ref(class Application* app) { app_ref_ = app; }
+        void set_is_tpu_stream(bool is_tpu) { is_tpu_stream_ = is_tpu; }
+        
+        // Method to change output size at runtime (for DRM display matching)
+        // Note: GPU overlay will need thread restart to update; frame data will be correct size
+        void set_output_size(int width, int height) {
+            output_width_ = width;
+            output_height_ = height;
+            printf("ImageProcessor[%s]: Output size updated to %dx%d (restart thread to update overlay)\n", 
+                   module_name_.c_str(), width, height);
+        }
+    
+    private:
+        void worker_thread_func();
+        void overlay_drain_thread_func(); // Drains overlay queue into triple buffer
+        void apply_detections_to_frame(cv::Mat& frame, const DetectionResults& detections);
+    
+        ImageQueue* input_queue_;
+        ImageQueue* output_queue_;
+        TripleBuffer<DetectionResults>* detection_buffer_ptr_;  // Pointer to triple buffer (null for non-overlay processors)
+        TripleBuffer<OverlayBallisticPoint>* ballistic_overlay_buffer_; // New member for ballistic points
+        DetectionOverlayQueue* overlay_queue_;
+        TripleBuffer<OverlayData> overlay_triple_buffer_; // Triple buffer for non-blocking overlay data access
+        std::thread overlay_drain_thread_; // Thread to drain overlay queue into triple buffer
+        std::atomic<bool> overlay_drain_running_{false};
+        std::shared_ptr<BufferPool<uint8_t>> buffer_pool_;
+        std::shared_ptr<ObjectPool<ImageData>> image_data_pool_;
+        libcamera::PixelFormat input_pixel_format_;
+        int output_width_;
+        int output_height_;
+        std::string module_name_;
+        int skip_factor_ = 1;
+        uint64_t frame_counter_ = 0;
+        bool is_tpu_stream_;
+        std::atomic<bool> running_;
+        std::atomic<bool> is_running_;
+        std::thread worker_thread_;        
+        // Timing statistics
+        mutable std::atomic<long long> avg_queue_pop_time_us_{0};
+        mutable std::atomic<long long> avg_preprocess_time_us_{0};
+    
+        // Caching for sticky detections
+        DetectionResults last_detections_;
+        std::chrono::steady_clock::time_point last_detection_time_;
+
+        // Zero-Copy FD Cache
+        struct MappedBuffer {
+            void* start;
+            size_t length;
+            int internal_fd; // Duplicated FD to ensure ownership and validity
+        };
+        
+        struct BufferKey {
+            dev_t dev;
+            ino_t ino;
+            bool operator<(const BufferKey& other) const {
+                if (dev != other.dev) return dev < other.dev;
+                return ino < other.ino;
+            }
+        };
+
+        std::map<BufferKey, MappedBuffer> fd_map_; 
+        std::mutex fd_map_mutex_;
+
+        // Latest-wins mode members
+        LatestImageBuffer* input_buffer_ = nullptr;
+        LatestImageBuffer* output_buffer_ = nullptr;
+        bool latest_wins_mode_ = false;
+
+        // Application reference for updating counters
+        class Application* app_ref_ = nullptr;
+        // int drm_fd_ = -1; // Removed drm_fd_
+        // std::unique_ptr<GpuOverlay> gpu_overlay_; // Removed gpu_overlay_
+    };

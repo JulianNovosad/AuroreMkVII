@@ -1,0 +1,32 @@
+CMakeFiles/microkernels-all.dir/src/qu8-igemm/gen/qu8-igemm-3x4-minmax-rndnu-scalar.c.o: \
+ /home/pi/Aurore/deps/xnnpack/src/qu8-igemm/gen/qu8-igemm-3x4-minmax-rndnu-scalar.c \
+ /usr/aarch64-linux-gnu/include/stdc-predef.h \
+ /usr/aarch64-linux-gnu/include/assert.h \
+ /usr/aarch64-linux-gnu/include/features.h \
+ /usr/aarch64-linux-gnu/include/features-time64.h \
+ /usr/aarch64-linux-gnu/include/bits/wordsize.h \
+ /usr/aarch64-linux-gnu/include/bits/timesize.h \
+ /usr/aarch64-linux-gnu/include/sys/cdefs.h \
+ /usr/aarch64-linux-gnu/include/bits/long-double.h \
+ /usr/aarch64-linux-gnu/include/gnu/stubs.h \
+ /usr/aarch64-linux-gnu/include/gnu/stubs-lp64.h \
+ /home/pi/Aurore/deps/xnnpack/src/xnnpack/math.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/stdbool.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/stddef.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/stdint.h \
+ /usr/aarch64-linux-gnu/include/stdint.h \
+ /usr/aarch64-linux-gnu/include/bits/libc-header-start.h \
+ /usr/aarch64-linux-gnu/include/bits/types.h \
+ /usr/aarch64-linux-gnu/include/bits/typesizes.h \
+ /usr/aarch64-linux-gnu/include/bits/time64.h \
+ /usr/aarch64-linux-gnu/include/bits/wchar.h \
+ /usr/aarch64-linux-gnu/include/bits/stdint-intn.h \
+ /usr/aarch64-linux-gnu/include/bits/stdint-uintn.h \
+ /usr/aarch64-linux-gnu/include/bits/stdint-least.h \
+ /usr/aarch64-linux-gnu/include/string.h \
+ /home/pi/Aurore/deps/xnnpack/src/xnnpack/common.h \
+ /home/pi/Aurore/deps/xnnpack/src/xnnpack/fp16.h \
+ /home/pi/Aurore/deps/xnnpack/src/xnnpack/gemm.h \
+ /home/pi/Aurore/deps/xnnpack/src/xnnpack/microparams.h \
+ /home/pi/Aurore/deps/xnnpack/include/xnnpack.h \
+ /home/pi/Aurore/deps/xnnpack/build_shared/pthreadpool-source/include/pthreadpool.h

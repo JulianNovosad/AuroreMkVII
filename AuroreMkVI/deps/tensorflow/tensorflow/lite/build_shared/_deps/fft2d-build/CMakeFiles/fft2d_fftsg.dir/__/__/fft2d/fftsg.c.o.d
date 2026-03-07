@@ -1,0 +1,26 @@
+_deps/fft2d-build/CMakeFiles/fft2d_fftsg.dir/__/__/fft2d/fftsg.c.o: \
+ /home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/fft2d/fftsg.c \
+ /usr/aarch64-linux-gnu/include/stdc-predef.h \
+ /usr/aarch64-linux-gnu/include/math.h \
+ /usr/aarch64-linux-gnu/include/bits/libc-header-start.h \
+ /usr/aarch64-linux-gnu/include/features.h \
+ /usr/aarch64-linux-gnu/include/features-time64.h \
+ /usr/aarch64-linux-gnu/include/bits/wordsize.h \
+ /usr/aarch64-linux-gnu/include/bits/timesize.h \
+ /usr/aarch64-linux-gnu/include/sys/cdefs.h \
+ /usr/aarch64-linux-gnu/include/bits/long-double.h \
+ /usr/aarch64-linux-gnu/include/gnu/stubs.h \
+ /usr/aarch64-linux-gnu/include/gnu/stubs-lp64.h \
+ /usr/aarch64-linux-gnu/include/bits/types.h \
+ /usr/aarch64-linux-gnu/include/bits/typesizes.h \
+ /usr/aarch64-linux-gnu/include/bits/time64.h \
+ /usr/aarch64-linux-gnu/include/bits/math-vector.h \
+ /usr/aarch64-linux-gnu/include/bits/libm-simd-decl-stubs.h \
+ /usr/aarch64-linux-gnu/include/bits/floatn.h \
+ /usr/aarch64-linux-gnu/include/bits/floatn-common.h \
+ /usr/aarch64-linux-gnu/include/bits/flt-eval-method.h \
+ /usr/aarch64-linux-gnu/include/bits/fp-logb.h \
+ /usr/aarch64-linux-gnu/include/bits/fp-fast.h \
+ /usr/aarch64-linux-gnu/include/bits/mathcalls-macros.h \
+ /usr/aarch64-linux-gnu/include/bits/mathcalls-helper-functions.h \
+ /usr/aarch64-linux-gnu/include/bits/mathcalls.h

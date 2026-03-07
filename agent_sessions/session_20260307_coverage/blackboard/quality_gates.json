@@ -1,0 +1,35 @@
+{
+  "gates": [
+    {
+      "gate_id": "gate_001",
+      "name": "diagnostics_complete",
+      "description": "Root cause identified",
+      "status": "passed",
+      "required_for": ["testing", "implementation"]
+    },
+    {
+      "gate_id": "gate_002",
+      "name": "tests_generated",
+      "description": "Test plan and regression tests created",
+      "status": "passed",
+      "required_for": ["implementation"]
+    },
+    {
+      "gate_id": "gate_003",
+      "name": "coverage_minimum",
+      "description": "Minimum coverage threshold met",
+      "status": "pending",
+      "required_for": ["verification"]
+    }
+  ],
+  "gate_history": [
+    {
+      "gate": "tests_generated",
+      "transitioned_at": "2026-03-07T10:15:00Z",
+      "from": false,
+      "to": true,
+      "validated_by": "test-coverage-architect"
+    }
+  ],
+  "coverage_minimum": 80
+}

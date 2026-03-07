@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG  -lpthread -lrt -fPIE -pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack CMakeFiles/ring_buffer_test.dir/tests/unit/ring_buffer_test.cpp.o -o ring_buffer_test 

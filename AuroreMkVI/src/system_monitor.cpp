@@ -1,0 +1,288 @@
+// Verified headers: [system_monitor.h, fstream, sstream, string, regex...]
+// Verification timestamp: 2026-01-06 17:08:04
+#include "system_monitor.h"
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <iostream>
+#include <future>
+
+extern std::atomic<bool> g_running;
+
+SystemMonitor::SystemMonitor(std::chrono::seconds interval_s)
+    : interval_s_(interval_s) {
+    // Initialize CPU usage stats by calling it once
+    read_cpu_usage(); 
+    APP_LOG_INFO("SystemMonitor created with interval: " + std::to_string(interval_s_.count()) + " seconds.");
+}
+
+SystemMonitor::~SystemMonitor() {
+    stop();
+    APP_LOG_INFO("SystemMonitor destroyed.");
+}
+
+bool SystemMonitor::start() {
+    if (running_.exchange(true)) {
+        APP_LOG_ERROR("SystemMonitor is already running.");
+        return false;
+    }
+    worker_thread_ = std::thread(&SystemMonitor::worker_thread_func, this);
+    APP_LOG_INFO("SystemMonitor started.");
+    return true;
+}
+
+void SystemMonitor::stop() {
+    if (running_.exchange(false)) {
+        APP_LOG_INFO("Stopping SystemMonitor...");
+        {
+            std::lock_guard<std::mutex> lock(stop_mutex_);
+            stop_cv_.notify_all();
+        }
+        if (worker_thread_.joinable()) {
+            auto shared_promise = std::make_shared<std::promise<void>>();
+            std::future<void> future = shared_promise->get_future();
+            std::thread joiner_thread([this, shared_promise]() {
+                try {
+                    if (worker_thread_.joinable()) {
+                        worker_thread_.join();
+                    }
+                    shared_promise->set_value();
+                } catch (...) {}
+            });
+            if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
+                APP_LOG_WARNING("[SHUTDOWN] SystemMonitor worker thread did not join within 3s, detaching.");
+                if (worker_thread_.joinable()) worker_thread_.detach();
+                joiner_thread.detach();
+            } else {
+                if (joiner_thread.joinable()) joiner_thread.join();
+            }
+        }
+        APP_LOG_INFO("SystemMonitor stopped.");
+    }
+}
+
+void SystemMonitor::worker_thread_func() {
+    APP_LOG_INFO("SystemMonitor worker thread started.");
+    auto next_tick = std::chrono::steady_clock::now();
+    while (running_.load(std::memory_order_acquire) && g_running.load(std::memory_order_acquire)) {
+        float cpu_temp = read_cpu_temperature();
+        float memory_usage_percent = read_memory_usage();
+        float cpu_usage = read_cpu_usage();
+        float tpu_temp = read_tpu_temperature();
+        float gpu_temp = read_gpu_temperature();
+
+        // Store latest metrics in atomic variables for access by other modules
+        latest_cpu_temp_.store(cpu_temp);
+        latest_cpu_usage_.store(cpu_usage);
+        latest_memory_usage_.store(memory_usage_percent);
+        latest_tpu_temp_.store(tpu_temp);
+        latest_gpu_temp_.store(gpu_temp);
+
+        // Log to unified CSV
+        ::aurore::logging::CsvLogEntry sys_entry;
+        ::aurore::logging::copy_to_array(sys_entry.module, "SystemMonitor");
+        copy_to_array(sys_entry.event, "system_stats");
+        sys_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        sys_entry.call_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        sys_entry.sys_cpu_temp_c = cpu_temp;
+        sys_entry.sys_cpu_usage_pct = cpu_usage;
+        sys_entry.sys_ram_usage_pct = memory_usage_percent;
+        sys_entry.tpu_temp_c = tpu_temp;
+        sys_entry.gpu_temp_c = gpu_temp; // Add GPU temperature to CSV
+        sys_entry.sys_voltage_v = 0.0f; // Default if not available
+        ::aurore::logging::Logger::getInstance().log_csv(sys_entry);
+
+        next_tick += interval_s_;
+        std::unique_lock<std::mutex> lock(stop_mutex_);
+        if (stop_cv_.wait_until(lock, next_tick, [this] { return !running_.load(std::memory_order_acquire) || !g_running.load(std::memory_order_acquire); })) {
+            break; // Shutdown requested
+        }
+    }
+    APP_LOG_INFO("SystemMonitor worker thread stopped.");
+}
+
+float SystemMonitor::read_cpu_temperature() {
+    float temp = 0.0f;
+    std::ifstream temp_file("/sys/class/thermal/thermal_zone0/temp");
+    if (temp_file.is_open()) {
+        int raw_temp;
+        temp_file >> raw_temp;
+        temp = static_cast<float>(raw_temp) / 1000.0f; // raw_temp is in milli-degrees Celsius
+        temp_file.close();
+    } else {
+        APP_LOG_WARNING("SystemMonitor: Could not open /sys/class/thermal/thermal_zone0/temp to read CPU temperature.");
+    }
+    return temp;
+}
+
+float SystemMonitor::read_cpu_usage() {
+    std::ifstream stat_file("/proc/stat");
+    std::string line;
+    float cpu_usage = 0.0f;
+
+    if (stat_file.is_open()) {
+        std::getline(stat_file, line);
+        stat_file.close();
+
+        std::stringstream ss(line);
+        std::string cpu_label;
+        long user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice;
+
+        ss >> cpu_label >> user >> nice >> system >> idle >> iowait >> irq >> softirq >> steal >> guest >> guest_nice;
+
+        if (cpu_label == "cpu") {
+            long current_idle_cpu_time = idle + iowait;
+            long current_total_cpu_time = user + nice + system + idle + iowait + irq + softirq + steal;
+
+            // Only calculate if previous values exist (not the first call)
+            if (prev_total_cpu_time_ != 0 && prev_idle_cpu_time_ != 0) {
+                long total_cpu_time_diff = current_total_cpu_time - prev_total_cpu_time_;
+                long idle_cpu_time_diff = current_idle_cpu_time - prev_idle_cpu_time_;
+
+                if (total_cpu_time_diff > 0) {
+                    cpu_usage = 100.0f * (1.0f - static_cast<float>(idle_cpu_time_diff) / static_cast<float>(total_cpu_time_diff));
+                }
+            }
+            // Update previous values for the next calculation
+            prev_total_cpu_time_ = current_total_cpu_time;
+            prev_idle_cpu_time_ = current_idle_cpu_time;
+        }
+    } else {
+        APP_LOG_WARNING("SystemMonitor: Could not open /proc/stat to read CPU usage.");
+    }
+    return cpu_usage;
+}
+
+float SystemMonitor::read_memory_usage() {
+    long total_memory = 0;
+    long free_memory = 0;
+    long buffers_memory = 0;
+    long cached_memory = 0;
+
+    std::ifstream mem_file("/proc/meminfo");
+    if (mem_file.is_open()) {
+        std::string line;
+        while (std::getline(mem_file, line)) {
+            if (line.compare(0, 9, "MemTotal:") == 0) {
+                size_t pos = line.find_first_of("0123456789");
+                if (pos != std::string::npos) {
+                    total_memory = std::stol(line.substr(pos));
+                }
+            } else if (line.compare(0, 8, "MemFree:") == 0) {
+                size_t pos = line.find_first_of("0123456789");
+                if (pos != std::string::npos) {
+                    free_memory = std::stol(line.substr(pos));
+                }
+            } else if (line.compare(0, 8, "Buffers:") == 0) {
+                size_t pos = line.find_first_of("0123456789");
+                if (pos != std::string::npos) {
+                    buffers_memory = std::stol(line.substr(pos));
+                }
+            } else if (line.compare(0, 7, "Cached:") == 0) {
+                size_t pos = line.find_first_of("0123456789");
+                if (pos != std::string::npos) {
+                    cached_memory = std::stol(line.substr(pos));
+                }
+            }
+        }
+        mem_file.close();
+    } else {
+        APP_LOG_WARNING("SystemMonitor: Could not open /proc/meminfo to read memory usage.");
+        return 0.0f;
+    }
+
+    // According to proc(5) man page, MemAvailable is a more accurate indicator of usable memory.
+    // If not available (older kernels), a common formula for used memory is:
+    // Used = Total - Free - Buffers - Cached
+    long used_memory = total_memory - free_memory - buffers_memory - cached_memory;
+    if (total_memory > 0) {
+        return static_cast<float>(used_memory) / static_cast<float>(total_memory) * 100.0f;
+    }
+    return 0.0f;
+}
+
+float SystemMonitor::read_tpu_temperature() {
+    std::ifstream temp_file("/sys/class/apex/apex_0/temp");
+    if (!temp_file.is_open()) {
+        return -1.0f;
+    }
+    std::string line;
+    if (std::getline(temp_file, line)) {
+        try {
+            return std::stof(line) / 1000.0f;
+        } catch (const std::invalid_argument& ia) {
+            APP_LOG_ERROR("Invalid argument while parsing TPU temperature: " + std::string(ia.what()));
+            return -2.0f;
+        } catch (const std::out_of_range& oor) {
+            APP_LOG_ERROR("Out of range while parsing TPU temperature: " + std::string(oor.what()));
+            return -3.0f;
+        }
+    }
+    return -4.0f; // Error reading line
+}
+
+float SystemMonitor::read_gpu_temperature() {
+    float temp = 0.0f;
+    // Use an asynchronous call to vcgencmd to avoid blocking
+    std::future<std::string> future = std::async(std::launch::async, []() -> std::string {
+        char buffer[128];
+        std::string result = "";
+        FILE* pipe = popen("vcgencmd measure_temp", "r");
+        if (!pipe) {
+            APP_LOG_WARNING("SystemMonitor: Failed to open pipe for vcgencmd.");
+            return "";
+        }
+        try {
+            while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                result += buffer;
+            }
+        } catch (...) {
+            pclose(pipe);
+            APP_LOG_WARNING("SystemMonitor: Exception while reading vcgencmd output.");
+            return "";
+        }
+        pclose(pipe);
+        return result;
+    });
+
+    std::string output = "";
+    // Wait for at most 100ms for the command to complete
+    if (future.wait_for(std::chrono::milliseconds(100)) == std::future_status::ready) {
+        output = future.get();
+    } else {
+        APP_LOG_WARNING("SystemMonitor: vcgencmd timed out after 100ms.");
+        return -1.0f;
+    }
+    
+    // Parse output: "temp=xx.x'C"
+    size_t eq_pos = output.find('=');
+    size_t c_pos = output.find('\'');
+    if (eq_pos != std::string::npos && c_pos != std::string::npos && eq_pos < c_pos) {
+        try {
+            temp = std::stof(output.substr(eq_pos + 1, c_pos - eq_pos - 1));
+        } catch (const std::exception& e) {
+            APP_LOG_ERROR("SystemMonitor: Failed to parse GPU temperature: " + std::string(e.what()));
+        }
+    } else {
+        APP_LOG_WARNING("SystemMonitor: Unexpected vcgencmd output format: " + output);
+    }
+    return temp;
+}
+
+void SystemMonitor::get_performance_metrics() {
+    // This function is called by the Application main_loop to log current system stats
+    float cpu_temp = read_cpu_temperature();
+    float memory_usage_percent = read_memory_usage();
+    float cpu_usage = read_cpu_usage();
+    
+    // Store latest metrics in atomic variables for access by other modules
+    latest_cpu_temp_.store(cpu_temp);
+    latest_cpu_usage_.store(cpu_usage);
+    latest_memory_usage_.store(memory_usage_percent);
+    
+    APP_LOG_INFO("--- SystemMonitor Performance Metrics ---");
+    APP_LOG_INFO("  CPU Usage: " + std::to_string(cpu_usage) + "%");
+    APP_LOG_INFO("  CPU Temperature: " + std::to_string(cpu_temp) + " C");
+    APP_LOG_INFO("  Memory Usage: " + std::to_string(memory_usage_percent) + "%");
+    APP_LOG_INFO("-----------------------------------------");
+}

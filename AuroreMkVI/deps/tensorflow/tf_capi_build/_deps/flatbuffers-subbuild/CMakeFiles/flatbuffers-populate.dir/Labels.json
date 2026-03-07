@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/flatbuffers-subbuild/CMakeFiles/flatbuffers-populate"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/flatbuffers-subbuild/CMakeFiles/flatbuffers-populate.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/flatbuffers-subbuild/CMakeFiles/flatbuffers-populate-complete.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/flatbuffers-subbuild/flatbuffers-populate-prefix/src/flatbuffers-populate-stamp/flatbuffers-populate-build.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/flatbuffers-subbuild/flatbuffers-populate-prefix/src/flatbuffers-populate-stamp/flatbuffers-populate-configure.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/flatbuffers-subbuild/flatbuffers-populate-prefix/src/flatbuffers-populate-stamp/flatbuffers-populate-download.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/flatbuffers-subbuild/flatbuffers-populate-prefix/src/flatbuffers-populate-stamp/flatbuffers-populate-install.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/flatbuffers-subbuild/flatbuffers-populate-prefix/src/flatbuffers-populate-stamp/flatbuffers-populate-mkdir.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/flatbuffers-subbuild/flatbuffers-populate-prefix/src/flatbuffers-populate-stamp/flatbuffers-populate-patch.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/flatbuffers-subbuild/flatbuffers-populate-prefix/src/flatbuffers-populate-stamp/flatbuffers-populate-test.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/flatbuffers-subbuild/flatbuffers-populate-prefix/src/flatbuffers-populate-stamp/flatbuffers-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"flatbuffers-populate"
+		],
+		"name" : "flatbuffers-populate"
+	}
+}

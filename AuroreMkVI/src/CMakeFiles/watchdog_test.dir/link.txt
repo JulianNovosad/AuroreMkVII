@@ -1,0 +1,1 @@
+/usr/bin/c++  -O3 -march=native -mtune=native -Wall -Wextra -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wl,--dependency-file=CMakeFiles/watchdog_test.dir/link.d CMakeFiles/watchdog_test.dir/test_per_frame_watchdog.cpp.o CMakeFiles/watchdog_test.dir/per_frame_watchdog.cpp.o -o watchdog_test   -L/home/pi/Aurore/artifacts/tflite/lib  -L/home/pi/Aurore/artifacts/abseil/lib

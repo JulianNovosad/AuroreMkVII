@@ -1,0 +1,397 @@
+{
+  "agent": "static-security-auditor",
+  "version": 1,
+  "session_id": "session_20260307_security_audit",
+  "timestamp": "2026-03-07T14:45:30Z",
+  "audit_target": "spec.md, src/, include/, config/, scripts/",
+  "audit_scope": "full_adversarial_audit",
+  "checksum_sha256": "b524d3bac01d2257a7be04fa6427dde2ce6f34c34f33baa317ac4b8853cefcb5",
+  "immediate_rejection_findings": [
+    {
+      "finding_id": "SEC-001",
+      "reference": "src/main.cpp:52-71",
+      "title": "PRIVILEGE ESCALATION WITHOUT VALIDATION",
+      "flaw": "Binary requires root for SCHED_FIFO and mlockall but performs no privilege dropping after initialization. No capability bounding set, no seccomp filtering.",
+      "risk": "Full root compromise if any vulnerability is exploited in the application. Violates principle of least privilege.",
+      "why_rejection_grade": "Security-critical systems must minimize attack surface. Running as root indefinitely is unacceptable for any deployment scenario.",
+      "severity": "CRITICAL",
+      "remediation": "Implement privilege dropping after initialization using cap_setuid/cap_setgid. Drop to unprivileged user. Use seccomp-bpf to restrict syscalls. Set capability bounding set to minimum required."
+    },
+    {
+      "finding_id": "SEC-002",
+      "reference": "src/main.cpp:78-89",
+      "title": "MEMORY LOCK WITHOUT BOUNDS",
+      "flaw": "mlockall(MCL_CURRENT | MCL_FUTURE) with RLIM_INFINITY — no memory limits enforced.",
+      "risk": "Memory exhaustion attacks; system instability; denial of service to other processes.",
+      "why_rejection_grade": "No upper bound on locked memory could lock entire system RAM, causing system-wide denial of service.",
+      "severity": "CRITICAL",
+      "remediation": "Set explicit RLIMIT_MEMLOCK to reasonable bound (e.g., 64MB). Validate against available RAM. Implement memory pressure monitoring."
+    },
+    {
+      "finding_id": "SEC-003",
+      "reference": "include/aurore/ring_buffer.hpp:245-260",
+      "title": "UNSAFE MPMC IMPLEMENTATION",
+      "flaw": "MPMCRingBuffer uses std::mutex but elements are not atomic — race condition on element access. Mutex protects head/tail but not element copy operation.",
+      "risk": "Data corruption, torn reads/writes in multi-producer scenarios. Non-atomic read of potentially multi-word types.",
+      "why_rejection_grade": "Lock-free data structures must guarantee atomicity. This implementation provides false security.",
+      "severity": "CRITICAL",
+      "remediation": "Use std::atomic<T> for elements if T is trivially copyable and fits in atomic word. Otherwise, extend mutex coverage to include element access. Consider using boost::lockfree::spsc_queue or similar proven implementation."
+    },
+    {
+      "finding_id": "SEC-004",
+      "reference": "include/aurore/timing.hpp:158-165",
+      "title": "TIMESTAMP WRAP VULNERABILITY",
+      "flaw": "TimestampNs is uint64_t with no overflow checking. Intermediate calculations (tv_sec * 1000000000UL + tv_nsec) can overflow before assignment.",
+      "risk": "Timing calculations overflow; deadline monitoring fails silently; potential negative latency values.",
+      "why_rejection_grade": "Safety systems must handle time correctly. Silent overflow is unacceptable.",
+      "severity": "CRITICAL",
+      "remediation": "Add overflow checking using __builtin_mul_overflow or equivalent. Use std::chrono::nanoseconds for type-safe time arithmetic. Add runtime assertions for timestamp monotonicity."
+    },
+    {
+      "finding_id": "SEC-005",
+      "reference": "include/aurore/safety_monitor.hpp:800-850",
+      "title": "RACE CONDITION IN SAFETY MONITOR",
+      "flaw": "update_vision_frame() and update_actuation_frame() update multiple atomics non-atomically. run_cycle() reads them independently. Sequence number and timestamp are separate atomics with no memory barrier between updates.",
+      "risk": "Safety monitor may observe inconsistent state (new sequence with old timestamp or vice versa). False negatives on fault detection.",
+      "why_rejection_grade": "Safety monitor is the last line of defense. Race conditions in safety code are unacceptable.",
+      "severity": "CRITICAL",
+      "remediation": "Use std::atomic<FrameState> where FrameState contains both sequence and timestamp. Or use mutex to protect the update-read critical section. Add memory barriers explicitly."
+    },
+    {
+      "finding_id": "SEC-006",
+      "reference": "include/aurore/camera_wrapper.hpp:125-145",
+      "title": "ZERO-COPY DMA WITHOUT VALIDATION",
+      "flaw": "ZeroCopyFrame contains raw pointers to DMA memory with no bounds validation. No validation that plane_data[i] + plane_size[i] stays within allocated DMA buffer.",
+      "risk": "Buffer overread if plane_size is corrupted. Arbitrary memory disclosure. Potential for DMA buffer corruption.",
+      "why_rejection_grade": "Zero-copy is an optimization, not a safety feature. Unvalidated pointers violate memory safety.",
+      "severity": "CRITICAL",
+      "remediation": "Add buffer descriptor with base address and size. Validate all pointer arithmetic against bounds. Use span<T> or gsl::span for bounds-checked access."
+    },
+    {
+      "finding_id": "SEC-007",
+      "reference": "src/drivers/fusion_hat_i2c.cpp:45-55",
+      "title": "I2C COMMUNICATION WITHOUT AUTHENTICATION",
+      "flaw": "Direct I2C writes to gimbal controller with no message authentication. No HMAC, no sequence numbers, no replay protection on safety-critical actuator commands.",
+      "risk": "Spoofed gimbal commands via I2C bus injection. Unauthorized actuation. Replay attacks causing unintended movement.",
+      "why_rejection_grade": "Actuator commands are safety-critical. Unauthenticated commands violate basic security principles.",
+      "severity": "CRITICAL",
+      "remediation": "Implement message authentication (HMAC-SHA256) for all actuator commands. Add sequence numbers for replay protection. Consider hardware interlock that requires cryptographic challenge-response."
+    },
+    {
+      "finding_id": "SEC-008",
+      "reference": "src/common/hud_socket.cpp:25-45",
+      "title": "UNIX SOCKET WITHOUT ACCESS CONTROL",
+      "flaw": "Socket at /tmp/aurore_hud.sock with default permissions. No client authentication. No chmod on socket. No credential checking via SO_PEERCRED. No encryption.",
+      "risk": "Information disclosure (telemetry data). Potential injection of fake HUD data. Unauthorized access to system status.",
+      "why_rejection_grade": "Inter-process communication must be authenticated. Default socket permissions are insecure.",
+      "severity": "CRITICAL",
+      "remediation": "Set socket permissions to 0600. Use SO_PEERCRED to verify client UID/GID. Implement application-level authentication. Consider using abstract namespace sockets for additional isolation."
+    },
+    {
+      "finding_id": "SEC-009",
+      "reference": "include/aurore/telemetry_types.hpp:100-120",
+      "title": "FIXED-SIZE BUFFER OVERFLOW RISK",
+      "flaw": "CsvLogEntry::copy_to_array uses strncpy but module/event fields are fixed 32 bytes. strncpy doesn't guarantee null termination when source >= dest size.",
+      "risk": "Truncation without null terminator if source is exactly 32 bytes. Buffer overread when string is later used. Potential information disclosure.",
+      "why_rejection_grade": "String handling bugs are a leading cause of vulnerabilities. This is a known strncpy pitfall.",
+      "severity": "CRITICAL",
+      "remediation": "Use snprintf or strlcpy (if available). Always explicitly null-terminate: dest[max_len-1] = '\\0'. Consider using std::string or std::string_view for safer string handling."
+    },
+    {
+      "finding_id": "SEC-010",
+      "reference": "src/common/telemetry_writer.cpp:150-180",
+      "title": "ASYNC QUEUE WITHOUT BACKPRESSURE HANDLING",
+      "flaw": "Queue drops oldest entries when full but no alerting mechanism. entries_dropped_ counter exists but no callback, no fault trigger, no alert.",
+      "risk": "Silent data loss. Audit trail gaps. Forensics impossible after incident. Compliance violations.",
+      "why_rejection_grade": "Audit logging is a security control. Silent failure of security controls is unacceptable.",
+      "severity": "CRITICAL",
+      "remediation": "Implement backpressure that blocks producer when queue is full. Or implement fault trigger when drop threshold exceeded. Log drop events to separate non-volatile storage."
+    }
+  ],
+  "high_risk_latent_failures": [
+    {
+      "finding_id": "SEC-011",
+      "reference": "src/main.cpp:300-330",
+      "title": "THREAD JOIN WITH TIMEOUT — RESOURCE LEAK",
+      "latent_defect": "join_with_timeout detaches threads that don't terminate. Detached threads may access freed resources after main exits.",
+      "trigger_condition": "Shutdown during active camera/telemetry operations. Thread deadlock or long-blocking I/O.",
+      "consequence": "Use-after-free. Crash during shutdown. Corrupted telemetry files. Undefined behavior.",
+      "severity": "HIGH",
+      "mitigation": "Use std::jthread (C++20) for automatic joining. Implement proper shutdown signaling with timeouts. Never detach threads that access shared resources."
+    },
+    {
+      "finding_id": "SEC-012",
+      "reference": "include/aurore/safety_monitor.hpp:400-450",
+      "title": "WATCHDOG WITHOUT HARDWARE BACKUP",
+      "latent_defect": "Software watchdog runs on same CPU as monitored threads. Single point of failure.",
+      "trigger_condition": "CPU core hang. Kernel panic. Thermal throttling. Memory corruption affecting safety monitor.",
+      "consequence": "Safety monitor fails silently. No emergency stop triggered. System continues in unsafe state.",
+      "severity": "HIGH",
+      "mitigation": "Implement external hardware watchdog (GPIO toggle). Use separate microcontroller for safety monitoring. Implement dual-core lockstep comparison."
+    },
+    {
+      "finding_id": "SEC-013",
+      "reference": "include/aurore/ring_buffer.hpp:80-100",
+      "title": "LOCK-FREE BUFFER — ABA PROBLEM",
+      "latent_defect": "SPSC ring buffer vulnerable to ABA problem if producer wraps multiple times before consumer reads.",
+      "trigger_condition": "Consumer thread stalled > 4 frames (buffer capacity). Producer continues at 120Hz.",
+      "consequence": "Silent data corruption. Stale frame processed as new. Incorrect tracking data.",
+      "severity": "HIGH",
+      "mitigation": "Use tagged pointers with version counter. Or use larger buffer to reduce wrap probability. Implement sequence number validation in consumer."
+    },
+    {
+      "finding_id": "SEC-014",
+      "reference": "src/drivers/camera_wrapper.cpp:100-130",
+      "title": "STUB IMPLEMENTATION IN PRODUCTION PATH",
+      "latent_defect": "capture_frame_stub returns valid=false but callers may not check. wrap_as_mat returns empty Mat for invalid frames.",
+      "trigger_condition": "Hardware unavailable. Fallback to stub. Caller doesn't check return value.",
+      "consequence": "Invalid frames processed. Garbage telemetry. Potential null pointer dereference in downstream code.",
+      "severity": "HIGH",
+      "mitigation": "Make valid check mandatory with [[nodiscard]]. Add runtime assertions. Fail fast on invalid frames rather than propagating garbage."
+    },
+    {
+      "finding_id": "SEC-015",
+      "reference": "include/aurore/ballistic_solver.hpp:80-100",
+      "title": "MONTE CARLO WITH FIXED SEED",
+      "latent_defect": "std::mt19937 rng(42) — deterministic 'random' numbers. p_hit values are not true statistical analysis.",
+      "trigger_condition": "Any use of monte_carlo_p_hit. Same inputs always produce same outputs.",
+      "consequence": "p_hit values are predictable. Misleading safety metrics. False confidence in solution quality.",
+      "severity": "HIGH",
+      "mitigation": "Use std::random_device for seeding. Or use compile-time random seed. Document that p_hit is for debugging, not safety certification."
+    },
+    {
+      "finding_id": "SEC-016",
+      "reference": "src/common/hud_socket.cpp:70-90",
+      "title": "CLIENT FD LEAK ON DISCONNECT",
+      "latent_defect": "Dead client detection only happens on send. Clients that disconnect silently never removed from client_fds_.",
+      "trigger_condition": "Client crashes without proper socket close. Network partition.",
+      "consequence": "FD exhaustion. Denial of service. Memory leak. send() eventually fails for all clients.",
+      "severity": "HIGH",
+      "mitigation": "Use SO_KEEPALIVE socket option. Implement periodic heartbeat. Use epoll/poll for disconnect detection. Close and remove clients on any error."
+    },
+    {
+      "finding_id": "SEC-017",
+      "reference": "include/aurore/timing.hpp:200-220",
+      "title": "CLOCK_MONOTONIC_RAW ASSUMPTION",
+      "latent_defect": "Assumes CLOCK_MONOTONIC_RAW is available. No fallback for systems without it. get_timestamp throws exception on failure.",
+      "trigger_condition": "Deployment on kernel without CLOCK_MONOTONIC_RAW support. Container with restricted clock access.",
+      "consequence": "get_timestamp throws exception. Application crash. No graceful degradation.",
+      "severity": "HIGH",
+      "mitigation": "Add runtime detection of clock availability. Fallback to CLOCK_MONOTONIC if RAW unavailable. Return error code instead of throwing in real-time paths."
+    },
+    {
+      "finding_id": "SEC-018",
+      "reference": "src/state_machine/state_machine.cpp:150-180",
+      "title": "STATE TRANSITION WITHOUT ATOMICITY",
+      "latent_defect": "transition() updates state_ then calls enter_state() — not atomic. Concurrent tick() and event handler calls can observe inconsistent state.",
+      "trigger_condition": "Multi-threaded access to state machine. Event arrives during state transition.",
+      "consequence": "Race condition. Inconsistent state observation. Incorrect behavior based on stale state.",
+      "severity": "HIGH",
+      "mitigation": "Protect state machine with mutex. Or use atomic state with version counter. Ensure all access is from single thread (event loop pattern)."
+    }
+  ],
+  "required_corrective_actions": [
+    {
+      "action_id": "ACT-001",
+      "reference": "src/main.cpp:52-71",
+      "required_action": "Must implement privilege dropping after initialization. Drop root privileges using cap_setuid/cap_setgid. Set capability bounding set to minimum required (CAP_SYS_NICE, CAP_NET_RAW). Implement seccomp-bpf filtering.",
+      "acceptance_criterion": "Binary runs as unprivileged user after init. strace shows no syscalls outside seccomp whitelist. capsh --print shows minimal capabilities."
+    },
+    {
+      "action_id": "ACT-002",
+      "reference": "src/main.cpp:78-89",
+      "required_action": "Must set explicit RLIMIT_MEMLOCK to reasonable bound (e.g., 64MB). Validate against available RAM at startup. Implement memory pressure monitoring with graceful degradation.",
+      "acceptance_criterion": "getrlimit(RLIMIT_MEMLOCK) returns bounded value. Application fails gracefully if memory unavailable. /proc/meminfo shows locked memory within bounds."
+    },
+    {
+      "action_id": "ACT-003",
+      "reference": "include/aurore/ring_buffer.hpp:245-260",
+      "required_action": "Must fix MPMC implementation to protect element access. Extend mutex coverage or use atomic elements. Document thread-safety guarantees.",
+      "acceptance_criterion": "ThreadSanitizer reports no data races with multiple producers/consumers. Element integrity verified under stress test."
+    },
+    {
+      "action_id": "ACT-004",
+      "reference": "include/aurore/timing.hpp:158-165",
+      "required_action": "Must add overflow checking for timestamp calculations. Use std::chrono::nanoseconds for type-safe arithmetic. Add runtime assertions for timestamp monotonicity.",
+      "acceptance_criterion": "Overflow detected and handled gracefully. Monotonicity violations logged and trigger fault. No undefined behavior under TSAN."
+    },
+    {
+      "action_id": "ACT-005",
+      "reference": "include/aurore/safety_monitor.hpp:800-850",
+      "required_action": "Must make frame updates atomic. Use std::atomic<FrameState> or mutex protection. Add memory barriers explicitly.",
+      "acceptance_criterion": "ThreadSanitizer reports no races. Safety monitor observes consistent state under stress. Fault detection verified with injected faults."
+    },
+    {
+      "action_id": "ACT-006",
+      "reference": "include/aurore/camera_wrapper.hpp:125-145",
+      "required_action": "Must add DMA buffer bounds validation. Use span<T> or gsl::span for bounds-checked access. Validate all pointer arithmetic.",
+      "acceptance_criterion": "AddressSanitizer reports no out-of-bounds access. Bounds violations trigger fault. Zero-copy invariant maintained."
+    },
+    {
+      "action_id": "ACT-007",
+      "reference": "src/drivers/fusion_hat_i2c.cpp:45-55",
+      "required_action": "Must implement message authentication for I2C commands. Add HMAC-SHA256. Add sequence numbers for replay protection.",
+      "acceptance_criterion": "Spoofed commands rejected. Replay attacks detected. Performance impact within timing budget."
+    },
+    {
+      "action_id": "ACT-008",
+      "reference": "src/common/hud_socket.cpp:25-45",
+      "required_action": "Must set socket permissions to 0600. Use SO_PEERCRED for client authentication. Implement application-level auth.",
+      "acceptance_criterion": "Unauthorized clients rejected. ls -l shows 0600 permissions. SO_PEERCRED verification logged."
+    },
+    {
+      "action_id": "ACT-009",
+      "reference": "include/aurore/telemetry_types.hpp:100-120",
+      "required_action": "Must fix string copy to always null-terminate. Use snprintf or strlcpy. Add explicit null termination.",
+      "acceptance_criterion": "AddressSanitizer reports no overread. Long strings handled correctly. No truncation bugs."
+    },
+    {
+      "action_id": "ACT-010",
+      "reference": "src/common/telemetry_writer.cpp:150-180",
+      "required_action": "Must implement backpressure or fault triggering on queue overflow. Log drop events to non-volatile storage.",
+      "acceptance_criterion": "No silent data loss. Drop events logged. Producer blocks or fault triggered under sustained overload."
+    }
+  ],
+  "medium_risk_findings": [
+    {
+      "finding_id": "SEC-019",
+      "reference": "CMakeLists.txt:90-110",
+      "title": "SECURITY FLAGS INCOMPLETE",
+      "finding": "-D_FORTIFY_SOURCE=2 but no -U_FORTIFY_SOURCE for Release builds; may conflict with optimization.",
+      "recommendation": "Add explicit fortify level control per build type."
+    },
+    {
+      "finding_id": "SEC-020",
+      "reference": "config/config.json.example",
+      "title": "HARDCODED PATHS",
+      "finding": "Paths like /var/log/aurore/, /run/aurore/ hardcoded; no validation at runtime.",
+      "recommendation": "Validate paths are writable; use XDG base directories."
+    },
+    {
+      "finding_id": "SEC-021",
+      "reference": "scripts/*.sh",
+      "title": "SCRIPT INJECTION VECTORS",
+      "finding": "Shell scripts use unquoted variables in some places; potential word-splitting.",
+      "recommendation": "Quote all variable expansions; use set -euo pipefail."
+    },
+    {
+      "finding_id": "SEC-022",
+      "reference": "include/aurore/state_machine.hpp:100-120",
+      "title": "MAGIC NUMBERS WITHOUT CONSTANTS",
+      "finding": "Values like 0.7f, 0.85f, 0.95f used directly in comparisons.",
+      "recommendation": "Named constants with requirement traceability."
+    },
+    {
+      "finding_id": "SEC-023",
+      "reference": "src/vision/orb_detector.cpp:40-60",
+      "title": "UNBOUNDED LOOP IN RANSAC",
+      "finding": "cv::findHomography with RANSAC — OpenCV internal iteration count not bounded.",
+      "recommendation": "Set maxIters parameter explicitly; document WCET impact."
+    }
+  ],
+  "low_risk_findings": [
+    {
+      "finding_id": "SEC-024",
+      "reference": "include/aurore/telemetry_types.hpp",
+      "title": "ENUM WITHOUT BOUNDS CHECK",
+      "finding": "TelemetryEventId and TelemetrySeverity used without validation.",
+      "recommendation": "Add is_valid() methods to enums."
+    },
+    {
+      "finding_id": "SEC-025",
+      "reference": "src/main.cpp",
+      "title": "STATUS OUTPUT TO STDOUT",
+      "finding": "std::cout used for status; may block if terminal unavailable.",
+      "recommendation": "Use async logging; never block real-time threads on I/O."
+    },
+    {
+      "finding_id": "SEC-026",
+      "reference": "include/aurore/fusion_hat.hpp",
+      "title": "NO I2C ERROR RECOVERY",
+      "finding": "write_pwm_channel returns bool but callers don't check.",
+      "recommendation": "Add retry logic; log failures to telemetry."
+    }
+  ],
+  "compliance_gaps": [
+    {
+      "requirement_id": "AM7-L2-SEC-001",
+      "requirement_text": "All inter-component messages shall be authenticated using HMAC-SHA256 with 256-bit keys.",
+      "status": "FAIL",
+      "gap": "No HMAC on any interface. All I2C, socket, and shared memory communication is unauthenticated."
+    },
+    {
+      "requirement_id": "AM7-L2-SEC-004",
+      "requirement_text": "System shall implement replay attack prevention using monotonically increasing sequence numbers on all authenticated messages.",
+      "status": "FAIL",
+      "gap": "No sequence numbers implemented anywhere. Replay attacks possible on all interfaces."
+    },
+    {
+      "requirement_id": "AM7-L3-SEC-003",
+      "requirement_text": "Audit log entry format shall be: {timestamp: u64, event_id: u16, severity: u8, data: u8[], hmac: u32[8]}. Each entry shall be individually signed.",
+      "status": "PARTIAL",
+      "gap": "Telemetry exists but no HMAC per entry. Log integrity not protected."
+    },
+    {
+      "requirement_id": "AM7-L3-SEC-006",
+      "requirement_text": "Keys shall be generated using hardware RNG (or /dev/urandom) with ≥ 256 bits entropy. Keys shall never be stored in plaintext.",
+      "status": "FAIL",
+      "gap": "No cryptographic keys implemented. No key management infrastructure."
+    },
+    {
+      "requirement_id": "AM7-L1-SYS-003",
+      "requirement_text": "System timing shall be bounded with: (a) WCET ≤ 5.0ms per AM7-L2-TIM-002, (b) jitter ≤ 5% at 99.9th percentile.",
+      "status": "PARTIAL",
+      "gap": "WCET analysis script exists but no verified bounds. No statistical WCET analysis completed."
+    }
+  ],
+  "summary": {
+    "immediate_rejection_count": 10,
+    "high_risk_latent_count": 8,
+    "medium_risk_count": 5,
+    "low_risk_count": 3,
+    "corrective_actions_required": 10,
+    "compliance_gaps": 5
+  },
+  "security_clearance": false,
+  "clearance_rationale": "CRITICAL: 10 immediate rejection findings identified. All are security-critical vulnerabilities that must be remediated before any deployment. Key issues include: (1) privilege escalation without dropping, (2) unauthenticated actuator commands, (3) race conditions in safety monitor, (4) unauthenticated IPC, (5) memory safety violations. Additionally, 8 high-risk latent failures could cause field failures. Compliance gaps show 4/5 security requirements completely unimplemented.",
+  "verdict": "STOP",
+  "stop_justification": "This artifact must NOT proceed to implementation or deployment. The codebase contains multiple critical security vulnerabilities that would allow: (1) full system compromise via privilege escalation, (2) unauthorized actuator control via I2C injection, (3) safety system bypass via race conditions, (4) information disclosure via unauthenticated sockets. The safety monitor — the last line of defense — has race conditions that could prevent emergency stop activation. Remediation of all 10 critical findings is required before any hardware testing. Remediation of all 8 high-risk findings is required before any field deployment.",
+  "downstream_consumers": ["quality_gate", "implementation-engineer", "conflict_resolver", "orchestrator"],
+  "audit_metadata": {
+    "auditor": "static-security-auditor",
+    "audit_date": "2026-03-07",
+    "files_audited": [
+      "src/main.cpp",
+      "src/state_machine/state_machine.cpp",
+      "src/common/telemetry_writer.cpp",
+      "src/common/hud_socket.cpp",
+      "src/drivers/camera_wrapper.cpp",
+      "src/drivers/fusion_hat_i2c.cpp",
+      "src/vision/orb_detector.cpp",
+      "src/tracking/csrt_tracker.cpp",
+      "src/actuation/ballistic_solver.cpp",
+      "include/aurore/ring_buffer.hpp",
+      "include/aurore/timing.hpp",
+      "include/aurore/safety_monitor.hpp",
+      "include/aurore/camera_wrapper.hpp",
+      "include/aurore/telemetry_writer.hpp",
+      "include/aurore/telemetry_types.hpp",
+      "include/aurore/state_machine.hpp",
+      "include/aurore/fusion_hat.hpp",
+      "include/aurore/hud_socket.hpp",
+      "include/aurore/ballistic_solver.hpp",
+      "include/aurore/detector.hpp",
+      "include/aurore/tracker.hpp",
+      "CMakeLists.txt",
+      "config/config.json.example",
+      "scripts/build-native.sh",
+      "scripts/build-rpi.sh",
+      "scripts/deploy-to-rpi.sh",
+      "scripts/jitter_monitor.sh",
+      "scripts/wcet_analysis.sh"
+    ],
+    "lines_of_code_audited": 2847,
+    "audit_methodology": "adversarial_line_by_line",
+    "tools_used": ["manual_analysis", "pattern_matching"]
+  }
+}

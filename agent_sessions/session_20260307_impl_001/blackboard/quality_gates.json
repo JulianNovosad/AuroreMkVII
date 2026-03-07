@@ -1,0 +1,19 @@
+{
+  "gates": [
+    {"gate_id": "gate_001", "name": "phase1_state_machine_complete", "status": "pending", "required_for": ["phase2_wcet"]},
+    {"gate_id": "gate_002", "name": "phase2_wcet_complete", "status": "pending", "required_for": ["phase3_actuation"]},
+    {"gate_id": "gate_003", "name": "phase3_actuation_complete", "status": "pending", "required_for": ["phase4_hud"]},
+    {"gate_id": "gate_004", "name": "phase4_hud_complete", "status": "pending", "required_for": ["phase5_verification"]},
+    {"gate_id": "gate_005", "name": "phase5_verification_complete", "status": "pending", "required_for": ["session_complete"]},
+    {"gate_id": "gate_006", "name": "integration_analysis_complete", "status": "passed", "required_for": ["implementation"]}
+  ],
+  "gate_history": [
+    {
+      "gate": "integration_analysis_complete",
+      "transitioned_at": "2026-03-07T17:00:00Z",
+      "from": false,
+      "to": true,
+      "validated_by": "cpp-integration-validator"
+    }
+  ]
+}

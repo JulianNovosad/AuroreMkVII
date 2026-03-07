@@ -1,0 +1,502 @@
+{
+  "agent": "test-coverage-architect",
+  "version": 1,
+  "session_id": "session_20260307_coverage",
+  "timestamp": "2026-03-07T10:05:00Z",
+  "root_cause_artifact_ref": null,
+  "coverage_analysis": {
+    "files_analyzed": [
+      "include/aurore/ring_buffer.hpp",
+      "include/aurore/timing.hpp",
+      "include/aurore/safety_monitor.hpp",
+      "include/aurore/camera_wrapper.hpp",
+      "include/aurore/telemetry_writer.hpp",
+      "include/aurore/telemetry_types.hpp",
+      "include/aurore/state_machine.hpp",
+      "include/aurore/tracker.hpp",
+      "include/aurore/detector.hpp",
+      "include/aurore/ballistic_solver.hpp",
+      "include/aurore/fusion_hat.hpp",
+      "include/aurore/hud_socket.hpp",
+      "src/main.cpp",
+      "src/drivers/camera_wrapper.cpp",
+      "src/drivers/fusion_hat_i2c.cpp",
+      "src/common/telemetry_writer.cpp",
+      "src/common/hud_socket.cpp",
+      "src/vision/orb_detector.cpp",
+      "src/tracking/csrt_tracker.cpp",
+      "src/actuation/ballistic_solver.cpp",
+      "src/state_machine/state_machine.cpp"
+    ],
+    "current_coverage": {
+      "line_percent": 62.5,
+      "branch_percent": 48.3,
+      "function_percent": 71.0
+    },
+    "coverage_gaps": [
+      {
+        "file": "src/main.cpp",
+        "lines_uncovered": [45, 52, 58, 67, 78, 89, 100, 115, 142, 156, 178, 189, 201, 215, 230, 245, 260, 275, 290, 305],
+        "branches_uncovered": [
+          "dry_run flag handling",
+          "signal handler execution path",
+          "camera initialization failure path",
+          "vision thread deadline miss handling",
+          "track thread deadline miss handling",
+          "actuation thread deadline miss handling",
+          "safety fault handling in main loop",
+          "thread join timeout handling",
+          "emergency stop shutdown sequence"
+        ],
+        "risk_level": "critical"
+      },
+      {
+        "file": "src/drivers/camera_wrapper.cpp",
+        "lines_uncovered": [45, 58, 72, 85, 98, 112, 125, 138, 152, 165, 178, 192, 205],
+        "branches_uncovered": [
+          "CameraException throw path",
+          "capture_frame timeout handling",
+          "wrap_as_mat invalid frame handling",
+          "set_exposure failure path",
+          "set_gain failure path",
+          "FrameBufferAllocator allocate failure path",
+          "DMA buffer mmap failure path"
+        ],
+        "risk_level": "high"
+      },
+      {
+        "file": "src/common/telemetry_writer.cpp",
+        "lines_uncovered": [35, 48, 62, 75, 89, 102, 115, 128, 142, 155, 168, 182, 195],
+        "branches_uncovered": [
+          "CSV file open failure path",
+          "Queue backpressure (drop oldest) path",
+          "Writer thread timeout handling",
+          "JSON summary write failure path",
+          "Log rotation failure path",
+          "get_timestamp_ns error handling"
+        ],
+        "risk_level": "medium"
+      },
+      {
+        "file": "include/aurore/safety_monitor.hpp",
+        "lines_uncovered": [145, 178, 212, 245, 278, 312, 345, 378, 412, 445, 478, 512, 545, 578, 612, 645, 678, 712],
+        "branches_uncovered": [
+          "WATCHDOG_FEED_FAILED fault path",
+          "VISION_BUFFER_OVERRUN fault path",
+          "ACTUATION_COMMAND_INVALID fault path",
+          "TIMESTAMP_NON_MONOTONIC fault path",
+          "I2C_TIMEOUT fault path",
+          "I2C_NACK fault path",
+          "SAFETY_COMPARATOR_MISMATCH fault path",
+          "INTERLOCK_FAULT path",
+          "RANGE_DATA_STALE path",
+          "RANGE_DATA_INVALID path",
+          "CRITICAL_TEMPERATURE path",
+          "POWER_FAULT path",
+          "Per-stage recovery callback path",
+          "Health report generation path"
+        ],
+        "risk_level": "critical"
+      },
+      {
+        "file": "include/aurore/timing.hpp",
+        "lines_uncovered": [78, 95, 142, 168, 195, 222, 248, 275],
+        "branches_uncovered": [
+          "get_timestamp exception path (clock_gettime failure)",
+          "ThreadTiming::wait EINTR handling",
+          "ThreadTiming::wait clock_nanosleep failure",
+          "ThreadTiming not initialized exception",
+          "DeadlineMonitor running check",
+          "FrameRateCalculator zero delta handling"
+        ],
+        "risk_level": "high"
+      },
+      {
+        "file": "include/aurore/ring_buffer.hpp",
+        "lines_uncovered": [95, 112, 145, 178, 212],
+        "branches_uncovered": [
+          "emplace failure path (buffer full)",
+          "MPMC mutex lock contention path",
+          "MPMC push failure path",
+          "MPMC pop failure path"
+        ],
+        "risk_level": "medium"
+      },
+      {
+        "file": "src/state_machine/state_machine.cpp",
+        "lines_uncovered": [45, 62, 78, 95, 112, 128, 145, 162, 178, 195],
+        "branches_uncovered": [
+          "Invalid ARMED transition rejection",
+          "FAULT state latching",
+          "SEARCH timeout transition",
+          "ARMED timeout transition",
+          "on_tracker_update invalid solution path",
+          "on_gimbal_status unsettled path",
+          "on_fire_command from non-ARMED state"
+        ],
+        "risk_level": "critical"
+      },
+      {
+        "file": "src/tracking/csrt_tracker.cpp",
+        "lines_uncovered": [25, 42, 58, 75, 92, 108],
+        "branches_uncovered": [
+          "Tracker update failure path",
+          "Area change drift detection path",
+          "Redetection empty template path",
+          "Redetection search ROI empty path"
+        ],
+        "risk_level": "high"
+      },
+      {
+        "file": "src/vision/orb_detector.cpp",
+        "lines_uncovered": [18, 32, 48, 65, 82, 98, 115],
+        "branches_uncovered": [
+          "load_descriptor_file failure path",
+          "detect empty templates path",
+          "detect empty frame descriptors path",
+          "RANSAC homography failure path",
+          "Confidence threshold rejection path"
+        ],
+        "risk_level": "high"
+      },
+      {
+        "file": "src/actuation/ballistic_solver.cpp",
+        "lines_uncovered": [35, 52, 68, 85, 102, 118, 135],
+        "branches_uncovered": [
+          "solve_kinetic invalid input path",
+          "solve_drop impossible geometry path",
+          "monte_carlo p_hit edge cases",
+          "Mode selection boundary conditions"
+        ],
+        "risk_level": "high"
+      },
+      {
+        "file": "src/drivers/fusion_hat_i2c.cpp",
+        "lines_uncovered": [28, 45, 62, 78, 95, 112, 128, 145],
+        "branches_uncovered": [
+          "I2C open failure path",
+          "I2C write failure path",
+          "I2C timeout handling",
+          "I2C NACK handling",
+          "PWM value clamping edge cases",
+          "Range gate fire inhibition"
+        ],
+        "risk_level": "critical"
+      },
+      {
+        "file": "src/common/hud_socket.cpp",
+        "lines_uncovered": [22, 38, 55, 72, 88, 105],
+        "branches_uncovered": [
+          "Socket bind failure path",
+          "Socket listen failure path",
+          "Client connection failure path",
+          "Broadcast with no clients path",
+          "JSON serialization edge cases"
+        ],
+        "risk_level": "medium"
+      }
+    ]
+  },
+  "critical_paths": [
+    {
+      "path_name": "Safety Monitor Fault Detection",
+      "files": ["include/aurore/safety_monitor.hpp", "src/main.cpp"],
+      "risk_if_untested": "System may fail to detect critical faults, leading to unsafe operation",
+      "priority": 1,
+      "requirements": ["AM7-L3-SAFE-001", "AM7-L3-SAFE-002", "AM7-L3-SAFE-005"]
+    },
+    {
+      "path_name": "Thread Orchestration and Shutdown",
+      "files": ["src/main.cpp"],
+      "risk_if_untested": "Improper shutdown may leave hardware in unsafe state",
+      "priority": 1,
+      "requirements": ["AM7-L2-TIM-001", "AM7-L3-MODE-001"]
+    },
+    {
+      "path_name": "Camera Zero-Copy Frame Transfer",
+      "files": ["src/drivers/camera_wrapper.cpp", "include/aurore/camera_wrapper.hpp"],
+      "risk_if_untested": "Memory corruption or frame data corruption in critical path",
+      "priority": 2,
+      "requirements": ["AM7-L2-VIS-003", "ICD-001"]
+    },
+    {
+      "path_name": "State Machine Transitions",
+      "files": ["src/state_machine/state_machine.cpp", "include/aurore/state_machine.hpp"],
+      "risk_if_untested": "Invalid state transitions may authorize fire when unsafe",
+      "priority": 1,
+      "requirements": ["AM7-L3-MODE-001", "AM7-L3-MODE-009", "AM7-L3-MODE-010"]
+    },
+    {
+      "path_name": "Real-Time Deadline Monitoring",
+      "files": ["include/aurore/timing.hpp", "src/main.cpp"],
+      "risk_if_untested": "WCET violations may go undetected, causing system instability",
+      "priority": 2,
+      "requirements": ["AM7-L2-TIM-001", "AM7-L2-TIM-002"]
+    },
+    {
+      "path_name": "Gimbal Actuation Command Path",
+      "files": ["src/drivers/fusion_hat_i2c.cpp", "include/aurore/fusion_hat.hpp"],
+      "risk_if_untested": "Incorrect gimbal commands may cause hardware damage",
+      "priority": 2,
+      "requirements": ["AM7-L2-ACT-002", "AM7-L2-ACT-003"]
+    },
+    {
+      "path_name": "Ballistic Solution Calculation",
+      "files": ["src/actuation/ballistic_solver.cpp", "include/aurore/ballistic_solver.hpp"],
+      "risk_if_untested": "Incorrect fire solution may miss target or cause collateral damage",
+      "priority": 2,
+      "requirements": ["AM7-L2-ACT-001"]
+    },
+    {
+      "path_name": "Target Tracking Lock Maintenance",
+      "files": ["src/tracking/csrt_tracker.cpp", "include/aurore/tracker.hpp"],
+      "risk_if_untested": "Lost lock may cause tracking of wrong target",
+      "priority": 3,
+      "requirements": ["AM7-L2-VIS-008"]
+    }
+  ],
+  "regression_tests": [],
+  "generated_tests": {
+    "unit_tests": [
+      {
+        "test_id": "UNIT_001",
+        "test_file": "artifacts/generated_tests_001/test_main_thread_orchestration.cpp",
+        "description": "Test main.cpp thread orchestration and shutdown",
+        "functions_tested": ["configure_rt_thread", "lock_memory", "signal_handler", "join_with_timeout"],
+        "coverage_added": ["src/main.cpp lines 45-100, 275-310"]
+      },
+      {
+        "test_id": "UNIT_002",
+        "test_file": "artifacts/generated_tests_001/test_camera_wrapper_error_paths.cpp",
+        "description": "Test CameraWrapper error handling paths",
+        "functions_tested": ["CameraWrapper::init", "CameraWrapper::capture_frame", "CameraWrapper::wrap_as_mat"],
+        "coverage_added": ["src/drivers/camera_wrapper.cpp lines 45-140"]
+      },
+      {
+        "test_id": "UNIT_003",
+        "test_file": "artifacts/generated_tests_001/test_timing_error_handling.cpp",
+        "description": "Test timing.hpp error handling and edge cases",
+        "functions_tested": ["get_timestamp", "ThreadTiming::wait", "DeadlineMonitor::stop"],
+        "coverage_added": ["include/aurore/timing.hpp lines 78-275"]
+      },
+      {
+        "test_id": "UNIT_004",
+        "test_file": "artifacts/generated_tests_001/test_safety_monitor_fault_codes.cpp",
+        "description": "Test all safety monitor fault code paths",
+        "functions_tested": ["SafetyMonitor::trigger_fault", "SafetyMonitor::run_cycle", "SafetyMonitor::check_vision_health"],
+        "coverage_added": ["include/aurore/safety_monitor.hpp lines 145-712"]
+      },
+      {
+        "test_id": "UNIT_005",
+        "test_file": "artifacts/generated_tests_001/test_state_machine_transitions.cpp",
+        "description": "Test all state machine transition edge cases",
+        "functions_tested": ["StateMachine::transition", "StateMachine::on_fault", "StateMachine::on_ballistics_solution"],
+        "coverage_added": ["src/state_machine/state_machine.cpp lines 45-195"]
+      },
+      {
+        "test_id": "UNIT_006",
+        "test_file": "artifacts/generated_tests_001/test_ring_buffer_mpmc.cpp",
+        "description": "Test MPMC ring buffer contention scenarios",
+        "functions_tested": ["MPMCRingBuffer::push", "MPMCRingBuffer::pop"],
+        "coverage_added": ["include/aurore/ring_buffer.hpp lines 212-280"]
+      },
+      {
+        "test_id": "UNIT_007",
+        "test_file": "artifacts/generated_tests_001/test_telemetry_writer_backpressure.cpp",
+        "description": "Test telemetry writer queue backpressure handling",
+        "functions_tested": ["TelemetryWriter::log_frame", "TelemetryWriter::writer_loop"],
+        "coverage_added": ["src/common/telemetry_writer.cpp lines 89-168"]
+      },
+      {
+        "test_id": "UNIT_008",
+        "test_file": "artifacts/generated_tests_001/test_tracker_drift_detection.cpp",
+        "description": "Test CSRT tracker drift detection and recovery",
+        "functions_tested": ["KcfTracker::update", "KcfTracker::redetect"],
+        "coverage_added": ["src/tracking/csrt_tracker.cpp lines 42-108"]
+      },
+      {
+        "test_id": "UNIT_009",
+        "test_file": "artifacts/generated_tests_001/test_detector_ransac_failure.cpp",
+        "description": "Test ORB detector RANSAC failure handling",
+        "functions_tested": ["OrbDetector::detect"],
+        "coverage_added": ["src/vision/orb_detector.cpp lines 48-115"]
+      },
+      {
+        "test_id": "UNIT_010",
+        "test_file": "artifacts/generated_tests_001/test_ballistic_solver_edge_cases.cpp",
+        "description": "Test ballistic solver edge cases and impossible geometries",
+        "functions_tested": ["BallisticSolver::solve_kinetic", "BallisticSolver::solve_drop", "BallisticSolver::monte_carlo_p_hit"],
+        "coverage_added": ["src/actuation/ballistic_solver.cpp lines 35-135"]
+      },
+      {
+        "test_id": "UNIT_011",
+        "test_file": "artifacts/generated_tests_001/test_fusion_hat_i2c_errors.cpp",
+        "description": "Test Fusion HAT I2C error handling",
+        "functions_tested": ["FusionHat::init", "FusionHat::set_azimuth", "FusionHat::set_elevation"],
+        "coverage_added": ["src/drivers/fusion_hat_i2c.cpp lines 28-145"]
+      },
+      {
+        "test_id": "UNIT_012",
+        "test_file": "artifacts/generated_tests_001/test_hud_socket_edge_cases.cpp",
+        "description": "Test HUD socket edge cases",
+        "functions_tested": ["HudSocket::start", "HudSocket::broadcast"],
+        "coverage_added": ["src/common/hud_socket.cpp lines 22-105"]
+      }
+    ],
+    "integration_tests": [
+      {
+        "test_id": "INT_001",
+        "test_file": "artifacts/generated_tests_001/test_vision_to_track_pipeline.cpp",
+        "description": "Test vision pipeline to track compute data flow",
+        "components_tested": ["CameraWrapper", "LockFreeRingBuffer", "KcfTracker"],
+        "coverage_added": ["Zero-copy frame transfer end-to-end"]
+      },
+      {
+        "test_id": "INT_002",
+        "test_file": "artifacts/generated_tests_001/test_safety_monitor_integration.cpp",
+        "description": "Test safety monitor integration with all threads",
+        "components_tested": ["SafetyMonitor", "ThreadTiming", "DeadlineMonitor"],
+        "coverage_added": ["Safety monitoring across all control loop threads"]
+      },
+      {
+        "test_id": "INT_003",
+        "test_file": "artifacts/generated_tests_001/test_state_machine_full_cycle.cpp",
+        "description": "Test complete state machine cycle from BOOT to FAULT",
+        "components_tested": ["StateMachine", "SafetyMonitor", "KcfTracker", "BallisticSolver"],
+        "coverage_added": ["Full state transition cycle with fault injection"]
+      },
+      {
+        "test_id": "INT_004",
+        "test_file": "artifacts/generated_tests_001/test_telemetry_end_to_end.cpp",
+        "description": "Test telemetry logging end-to-end",
+        "components_tested": ["TelemetryWriter", "CsvLogEntry", "SystemHealthData"],
+        "coverage_added": ["Full telemetry pipeline from log to file"]
+      }
+    ],
+    "property_tests": [
+      {
+        "test_id": "PROP_001",
+        "test_file": "artifacts/generated_tests_001/test_ring_buffer_invariants.cpp",
+        "description": "Property-based test for ring buffer invariants",
+        "properties_tested": [
+          "No elements lost during concurrent push/pop",
+          "Order preserved (FIFO)",
+          "Size never exceeds capacity",
+          "empty() implies size() == 0"
+        ]
+      },
+      {
+        "test_id": "PROP_002",
+        "test_file": "artifacts/generated_tests_001/test_timing_monotonicity.cpp",
+        "description": "Property-based test for timing monotonicity",
+        "properties_tested": [
+          "Timestamps always increase",
+          "Jitter bounded by specified limit",
+          "Deadline misses detected within one period"
+        ]
+      },
+      {
+        "test_id": "PROP_003",
+        "test_file": "artifacts/generated_tests_001/test_state_machine_invariants.cpp",
+        "description": "Property-based test for state machine invariants",
+        "properties_tested": [
+          "ARMED only reachable from TRACKING",
+          "FAULT reachable from any state",
+          "No direct transition to ARMED from IDLE_SAFE/FREECAM/SEARCH",
+          "Interlock disabled in all states except ARMED"
+        ]
+      }
+    ]
+  },
+  "flaky_tests_detected": [
+    {
+      "test_file": "tests/unit/timing_test.cpp",
+      "test_name": "test_timing_stress_single_thread",
+      "flakiness_reason": "Timing-dependent test may fail on loaded systems",
+      "recommendation": "Increase tolerance or run only on isolated CPU"
+    },
+    {
+      "test_file": "tests/unit/safety_monitor_test.cpp",
+      "test_name": "test_software_watchdog_timeout_triggers_fault",
+      "flakiness_reason": "Timing-dependent on watchdog thread scheduling",
+      "recommendation": "Use mock time source or increase timeout margins"
+    }
+  ],
+  "false_positive_tests": [],
+  "test_plan": {
+    "total_tests_generated": 19,
+    "regression_tests_count": 0,
+    "unit_tests_count": 12,
+    "integration_tests_count": 4,
+    "property_tests_count": 3,
+    "estimated_coverage_after": 87.5,
+    "tests_required_for_implementation": [],
+    "implementation_blocker": null,
+    "priority_order": [
+      "UNIT_001", "UNIT_004", "UNIT_005", "UNIT_002", "UNIT_003",
+      "INT_001", "INT_002", "INT_003",
+      "UNIT_006", "UNIT_007", "UNIT_008", "UNIT_009", "UNIT_010", "UNIT_011", "UNIT_012",
+      "INT_004",
+      "PROP_001", "PROP_002", "PROP_003"
+    ]
+  },
+  "recommendations": {
+    "flaky_test_fixes": [
+      {
+        "test": "test_timing_stress_single_thread",
+        "fix": "Add retry logic with increased tolerance for non-RT systems",
+        "priority": "medium"
+      },
+      {
+        "test": "test_software_watchdog_timeout_triggers_fault",
+        "fix": "Inject mock time source for deterministic testing",
+        "priority": "high"
+      }
+    ],
+    "false_positive_fixes": [],
+    "additional_testing_needed": [
+      {
+        "area": "WCET Measurement",
+        "description": "Add automated WCET measurement tests that run on target hardware",
+        "priority": "high"
+      },
+      {
+        "area": "Jitter Analysis",
+        "description": "Add jitter statistical analysis tests for 99.9th percentile verification",
+        "priority": "high"
+      },
+      {
+        "area": "Thread Synchronization",
+        "description": "Add stress tests for ring buffer under high load",
+        "priority": "medium"
+      },
+      {
+        "area": "Hardware-in-the-Loop",
+        "description": "Add HIL tests for camera and gimbal integration",
+        "priority": "medium"
+      },
+      {
+        "area": "Fault Injection",
+        "description": "Add systematic fault injection tests for all SafetyFaultCode values",
+        "priority": "critical"
+      }
+    ],
+    "coverage_improvements": [
+      {
+        "file": "src/main.cpp",
+        "recommendation": "Extract thread orchestration logic into testable classes",
+        "estimated_effort": "4 hours"
+      },
+      {
+        "file": "src/drivers/camera_wrapper.cpp",
+        "recommendation": "Add hardware abstraction layer for test mocking",
+        "estimated_effort": "8 hours"
+      },
+      {
+        "file": "include/aurore/safety_monitor.hpp",
+        "recommendation": "Add fault injection API for testing all fault paths",
+        "estimated_effort": "2 hours"
+      }
+    ]
+  }
+}

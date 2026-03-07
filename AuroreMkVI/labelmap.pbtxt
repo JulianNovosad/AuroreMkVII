@@ -1,0 +1,66 @@
+item {
+    name: "zone_0"
+    id: 1
+    display_name: "Zone 0 (outer)"
+}
+item {
+    name: "zone_1"
+    id: 2
+    display_name: "Zone 1"
+}
+item {
+    name: "zone_2"
+    id: 3
+    display_name: "Zone 2"
+}
+item {
+    name: "zone_3"
+    id: 4
+    display_name: "Zone 3"
+}
+item {
+    name: "zone_4"
+    id: 5
+    display_name: "Zone 4"
+}
+item {
+    name: "zone_5"
+    id: 6
+    display_name: "Zone 5"
+}
+item {
+    name: "zone_6"
+    id: 7
+    display_name: "Zone 6"
+}
+item {
+    name: "zone_7"
+    id: 8
+    display_name: "Zone 7"
+}
+item {
+    name: "zone_8"
+    id: 9
+    display_name: "Zone 8"
+}
+item {
+    name: "zone_9"
+    id: 10
+    display_name: "Zone 9"
+}
+item {
+    name: "zone_10"
+    id: 11
+    display_name: "Zone 10 (inner)"
+}
+item {
+    name: "target"
+    id: 12
+    display_name: "Outer Target Ring"
+}
+item {
+    name: "inner_circle"
+    id: 13
+    display_name: "Bullseye / Inner Circle"
+}
+

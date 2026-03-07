@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/example_proto.dir/link.d -shared -Wl,-soname,libexample_proto.so -o libexample_proto.so CMakeFiles/example_proto.dir/tensorflow/core/example/example.pb.cc.o  -Wl,-rpath,/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/example_proto_generated libfeature_proto.so ../_deps/protobuf-build/libprotobuf.a

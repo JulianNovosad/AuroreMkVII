@@ -1,0 +1,14 @@
+# Target labels
+ ruy-populate
+# Source files and their labels
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ruy-subbuild/CMakeFiles/ruy-populate
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ruy-subbuild/CMakeFiles/ruy-populate.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ruy-subbuild/CMakeFiles/ruy-populate-complete.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ruy-subbuild/ruy-populate-prefix/src/ruy-populate-stamp/ruy-populate-build.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ruy-subbuild/ruy-populate-prefix/src/ruy-populate-stamp/ruy-populate-configure.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ruy-subbuild/ruy-populate-prefix/src/ruy-populate-stamp/ruy-populate-download.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ruy-subbuild/ruy-populate-prefix/src/ruy-populate-stamp/ruy-populate-install.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ruy-subbuild/ruy-populate-prefix/src/ruy-populate-stamp/ruy-populate-mkdir.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ruy-subbuild/ruy-populate-prefix/src/ruy-populate-stamp/ruy-populate-patch.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ruy-subbuild/ruy-populate-prefix/src/ruy-populate-stamp/ruy-populate-test.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ruy-subbuild/ruy-populate-prefix/src/ruy-populate-stamp/ruy-populate-update.rule

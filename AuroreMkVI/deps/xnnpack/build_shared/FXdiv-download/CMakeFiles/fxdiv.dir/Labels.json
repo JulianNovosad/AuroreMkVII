@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/FXdiv-download/CMakeFiles/fxdiv"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/FXdiv-download/CMakeFiles/fxdiv.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/FXdiv-download/CMakeFiles/fxdiv-complete.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/FXdiv-download/fxdiv-prefix/src/fxdiv-stamp/fxdiv-build.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/FXdiv-download/fxdiv-prefix/src/fxdiv-stamp/fxdiv-configure.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/FXdiv-download/fxdiv-prefix/src/fxdiv-stamp/fxdiv-download.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/FXdiv-download/fxdiv-prefix/src/fxdiv-stamp/fxdiv-install.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/FXdiv-download/fxdiv-prefix/src/fxdiv-stamp/fxdiv-mkdir.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/FXdiv-download/fxdiv-prefix/src/fxdiv-stamp/fxdiv-patch.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/FXdiv-download/fxdiv-prefix/src/fxdiv-stamp/fxdiv-test.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/FXdiv-download/fxdiv-prefix/src/fxdiv-stamp/fxdiv-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"fxdiv"
+		],
+		"name" : "fxdiv"
+	}
+}

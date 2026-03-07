@@ -1,0 +1,11 @@
+# Hashes of file build rules.
+b4ba62ef01c0aa3285588ea0165bc861 CMakeFiles/fp16
+1e271c4df95228c0f1862315000101f2 CMakeFiles/fp16-complete
+8612dc097a3962525035cd3cc56533e4 fp16-prefix/src/fp16-stamp/fp16-build
+cb594565b8d6a3adb1b92e8792b1b2e9 fp16-prefix/src/fp16-stamp/fp16-configure
+074523cc1b90942205ad21eba503cdd3 fp16-prefix/src/fp16-stamp/fp16-download
+848bc5fbd791793d44a3e3dd80c8472f fp16-prefix/src/fp16-stamp/fp16-install
+724d049e65220bd3d5652c0074ab121b fp16-prefix/src/fp16-stamp/fp16-mkdir
+ca0b9e1d352cabd963f449d47e03797c fp16-prefix/src/fp16-stamp/fp16-patch
+93e3f4d7131e996b8dbd4abb7df5ab6c fp16-prefix/src/fp16-stamp/fp16-test
+3cf17b546ce4ad33be91ebbad2251212 fp16-prefix/src/fp16-stamp/fp16-update

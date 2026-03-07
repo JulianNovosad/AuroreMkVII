@@ -1,0 +1,37 @@
+CMakeFiles/tensorflow-lite.dir/minimal_logging_default.cc.o: \
+ /home/pi/Aurore/deps/tensorflow/tensorflow/lite/minimal_logging_default.cc \
+ /usr/aarch64-linux-gnu/include/stdc-predef.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/stdarg.h \
+ /usr/include/c++/12/cstdio \
+ /usr/include/aarch64-linux-gnu/c++/12/bits/c++config.h \
+ /usr/include/aarch64-linux-gnu/c++/12/bits/os_defines.h \
+ /usr/aarch64-linux-gnu/include/features.h \
+ /usr/aarch64-linux-gnu/include/features-time64.h \
+ /usr/aarch64-linux-gnu/include/bits/wordsize.h \
+ /usr/aarch64-linux-gnu/include/bits/timesize.h \
+ /usr/aarch64-linux-gnu/include/sys/cdefs.h \
+ /usr/aarch64-linux-gnu/include/bits/long-double.h \
+ /usr/aarch64-linux-gnu/include/gnu/stubs.h \
+ /usr/aarch64-linux-gnu/include/gnu/stubs-lp64.h \
+ /usr/include/aarch64-linux-gnu/c++/12/bits/cpu_defines.h \
+ /usr/include/c++/12/pstl/pstl_config.h \
+ /usr/aarch64-linux-gnu/include/stdio.h \
+ /usr/aarch64-linux-gnu/include/bits/libc-header-start.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/stddef.h \
+ /usr/aarch64-linux-gnu/include/bits/types.h \
+ /usr/aarch64-linux-gnu/include/bits/typesizes.h \
+ /usr/aarch64-linux-gnu/include/bits/time64.h \
+ /usr/aarch64-linux-gnu/include/bits/types/__fpos_t.h \
+ /usr/aarch64-linux-gnu/include/bits/types/__mbstate_t.h \
+ /usr/aarch64-linux-gnu/include/bits/types/__fpos64_t.h \
+ /usr/aarch64-linux-gnu/include/bits/types/__FILE.h \
+ /usr/aarch64-linux-gnu/include/bits/types/FILE.h \
+ /usr/aarch64-linux-gnu/include/bits/types/struct_FILE.h \
+ /usr/aarch64-linux-gnu/include/bits/types/cookie_io_functions_t.h \
+ /usr/aarch64-linux-gnu/include/bits/stdio_lim.h \
+ /usr/aarch64-linux-gnu/include/bits/floatn.h \
+ /usr/aarch64-linux-gnu/include/bits/floatn-common.h \
+ /usr/aarch64-linux-gnu/include/bits/stdio.h \
+ /home/pi/Aurore/deps/tensorflow/tensorflow/lite/minimal_logging.h \
+ /usr/include/c++/12/cstdarg \
+ /home/pi/Aurore/deps/tensorflow/tensorflow/lite/logger.h

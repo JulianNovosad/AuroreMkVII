@@ -1,0 +1,35 @@
+CMakeFiles/microkernels-prod.dir/src/u8-lut32norm/u8-lut32norm-scalar.c.o: \
+ /home/pi/Aurore/deps/xnnpack/src/u8-lut32norm/u8-lut32norm-scalar.c \
+ /usr/aarch64-linux-gnu/include/stdc-predef.h \
+ /usr/aarch64-linux-gnu/include/assert.h \
+ /usr/aarch64-linux-gnu/include/features.h \
+ /usr/aarch64-linux-gnu/include/features-time64.h \
+ /usr/aarch64-linux-gnu/include/bits/wordsize.h \
+ /usr/aarch64-linux-gnu/include/bits/timesize.h \
+ /usr/aarch64-linux-gnu/include/sys/cdefs.h \
+ /usr/aarch64-linux-gnu/include/bits/long-double.h \
+ /usr/aarch64-linux-gnu/include/gnu/stubs.h \
+ /usr/aarch64-linux-gnu/include/gnu/stubs-lp64.h \
+ /home/pi/Aurore/deps/xnnpack/build_shared/FXdiv-source/include/fxdiv.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/stddef.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/stdint.h \
+ /usr/aarch64-linux-gnu/include/stdint.h \
+ /usr/aarch64-linux-gnu/include/bits/libc-header-start.h \
+ /usr/aarch64-linux-gnu/include/bits/types.h \
+ /usr/aarch64-linux-gnu/include/bits/typesizes.h \
+ /usr/aarch64-linux-gnu/include/bits/time64.h \
+ /usr/aarch64-linux-gnu/include/bits/wchar.h \
+ /usr/aarch64-linux-gnu/include/bits/stdint-intn.h \
+ /usr/aarch64-linux-gnu/include/bits/stdint-uintn.h \
+ /usr/aarch64-linux-gnu/include/bits/stdint-least.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/limits.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/syslimits.h \
+ /usr/aarch64-linux-gnu/include/limits.h \
+ /usr/aarch64-linux-gnu/include/bits/posix1_lim.h \
+ /usr/aarch64-linux-gnu/include/bits/local_lim.h \
+ /usr/aarch64-linux-gnu/include/linux/limits.h \
+ /usr/aarch64-linux-gnu/include/bits/pthread_stack_min-dynamic.h \
+ /usr/aarch64-linux-gnu/include/bits/pthread_stack_min.h \
+ /usr/aarch64-linux-gnu/include/bits/posix2_lim.h \
+ /home/pi/Aurore/deps/xnnpack/src/xnnpack/lut.h \
+ /home/pi/Aurore/deps/xnnpack/src/xnnpack/common.h

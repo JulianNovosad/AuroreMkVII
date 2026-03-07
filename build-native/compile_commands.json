@@ -1,0 +1,188 @@
+[
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -DAURORE_VERSION=\\\"0.1.0\\\" -DAURORE_VERSION_MAJOR=0 -DAURORE_VERSION_MINOR=1 -DAURORE_VERSION_PATCH=0 -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/aurore.dir/src/main.cpp.o -c /home/laptop/AuroreMkVII/src/main.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/main.cpp",
+  "output": "CMakeFiles/aurore.dir/src/main.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -DAURORE_VERSION=\\\"0.1.0\\\" -DAURORE_VERSION_MAJOR=0 -DAURORE_VERSION_MINOR=1 -DAURORE_VERSION_PATCH=0 -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/aurore.dir/src/drivers/camera_wrapper.cpp.o -c /home/laptop/AuroreMkVII/src/drivers/camera_wrapper.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/drivers/camera_wrapper.cpp",
+  "output": "CMakeFiles/aurore.dir/src/drivers/camera_wrapper.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -DAURORE_VERSION=\\\"0.1.0\\\" -DAURORE_VERSION_MAJOR=0 -DAURORE_VERSION_MINOR=1 -DAURORE_VERSION_PATCH=0 -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/aurore.dir/src/drivers/fusion_hat.cpp.o -c /home/laptop/AuroreMkVII/src/drivers/fusion_hat.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/drivers/fusion_hat.cpp",
+  "output": "CMakeFiles/aurore.dir/src/drivers/fusion_hat.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -DAURORE_VERSION=\\\"0.1.0\\\" -DAURORE_VERSION_MAJOR=0 -DAURORE_VERSION_MINOR=1 -DAURORE_VERSION_PATCH=0 -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/aurore.dir/src/vision/orb_detector.cpp.o -c /home/laptop/AuroreMkVII/src/vision/orb_detector.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/vision/orb_detector.cpp",
+  "output": "CMakeFiles/aurore.dir/src/vision/orb_detector.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -DAURORE_VERSION=\\\"0.1.0\\\" -DAURORE_VERSION_MAJOR=0 -DAURORE_VERSION_MINOR=1 -DAURORE_VERSION_PATCH=0 -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/aurore.dir/src/tracking/csrt_tracker.cpp.o -c /home/laptop/AuroreMkVII/src/tracking/csrt_tracker.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/tracking/csrt_tracker.cpp",
+  "output": "CMakeFiles/aurore.dir/src/tracking/csrt_tracker.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -DAURORE_VERSION=\\\"0.1.0\\\" -DAURORE_VERSION_MAJOR=0 -DAURORE_VERSION_MINOR=1 -DAURORE_VERSION_PATCH=0 -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/aurore.dir/src/actuation/ballistic_solver.cpp.o -c /home/laptop/AuroreMkVII/src/actuation/ballistic_solver.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/actuation/ballistic_solver.cpp",
+  "output": "CMakeFiles/aurore.dir/src/actuation/ballistic_solver.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -DAURORE_VERSION=\\\"0.1.0\\\" -DAURORE_VERSION_MAJOR=0 -DAURORE_VERSION_MINOR=1 -DAURORE_VERSION_PATCH=0 -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/aurore.dir/src/state_machine/state_machine.cpp.o -c /home/laptop/AuroreMkVII/src/state_machine/state_machine.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/state_machine/state_machine.cpp",
+  "output": "CMakeFiles/aurore.dir/src/state_machine/state_machine.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -DAURORE_VERSION=\\\"0.1.0\\\" -DAURORE_VERSION_MAJOR=0 -DAURORE_VERSION_MINOR=1 -DAURORE_VERSION_PATCH=0 -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/aurore.dir/src/safety/interlock_controller.cpp.o -c /home/laptop/AuroreMkVII/src/safety/interlock_controller.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/safety/interlock_controller.cpp",
+  "output": "CMakeFiles/aurore.dir/src/safety/interlock_controller.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -DAURORE_VERSION=\\\"0.1.0\\\" -DAURORE_VERSION_MAJOR=0 -DAURORE_VERSION_MINOR=1 -DAURORE_VERSION_PATCH=0 -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/aurore.dir/src/common/telemetry_writer.cpp.o -c /home/laptop/AuroreMkVII/src/common/telemetry_writer.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/common/telemetry_writer.cpp",
+  "output": "CMakeFiles/aurore.dir/src/common/telemetry_writer.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -DAURORE_VERSION=\\\"0.1.0\\\" -DAURORE_VERSION_MAJOR=0 -DAURORE_VERSION_MINOR=1 -DAURORE_VERSION_PATCH=0 -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/aurore.dir/src/common/hud_socket.cpp.o -c /home/laptop/AuroreMkVII/src/common/hud_socket.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/common/hud_socket.cpp",
+  "output": "CMakeFiles/aurore.dir/src/common/hud_socket.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/ring_buffer_test.dir/tests/unit/ring_buffer_test.cpp.o -c /home/laptop/AuroreMkVII/tests/unit/ring_buffer_test.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/unit/ring_buffer_test.cpp",
+  "output": "CMakeFiles/ring_buffer_test.dir/tests/unit/ring_buffer_test.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/timing_test.dir/tests/unit/timing_test.cpp.o -c /home/laptop/AuroreMkVII/tests/unit/timing_test.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/unit/timing_test.cpp",
+  "output": "CMakeFiles/timing_test.dir/tests/unit/timing_test.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/safety_monitor_test.dir/tests/unit/safety_monitor_test.cpp.o -c /home/laptop/AuroreMkVII/tests/unit/safety_monitor_test.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/unit/safety_monitor_test.cpp",
+  "output": "CMakeFiles/safety_monitor_test.dir/tests/unit/safety_monitor_test.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/safety_monitor_fault_codes_test.dir/tests/unit/test_safety_monitor_fault_codes.cpp.o -c /home/laptop/AuroreMkVII/tests/unit/test_safety_monitor_fault_codes.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/unit/test_safety_monitor_fault_codes.cpp",
+  "output": "CMakeFiles/safety_monitor_fault_codes_test.dir/tests/unit/test_safety_monitor_fault_codes.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/state_machine_test.dir/tests/unit/state_machine_test.cpp.o -c /home/laptop/AuroreMkVII/tests/unit/state_machine_test.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/unit/state_machine_test.cpp",
+  "output": "CMakeFiles/state_machine_test.dir/tests/unit/state_machine_test.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/state_machine_test.dir/src/state_machine/state_machine.cpp.o -c /home/laptop/AuroreMkVII/src/state_machine/state_machine.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/state_machine/state_machine.cpp",
+  "output": "CMakeFiles/state_machine_test.dir/src/state_machine/state_machine.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/state_machine_transitions_test.dir/tests/unit/test_state_machine_transitions.cpp.o -c /home/laptop/AuroreMkVII/tests/unit/test_state_machine_transitions.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/unit/test_state_machine_transitions.cpp",
+  "output": "CMakeFiles/state_machine_transitions_test.dir/tests/unit/test_state_machine_transitions.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/state_machine_transitions_test.dir/src/state_machine/state_machine.cpp.o -c /home/laptop/AuroreMkVII/src/state_machine/state_machine.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/state_machine/state_machine.cpp",
+  "output": "CMakeFiles/state_machine_transitions_test.dir/src/state_machine/state_machine.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/main_thread_orchestration_test.dir/tests/unit/test_main_thread_orchestration.cpp.o -c /home/laptop/AuroreMkVII/tests/unit/test_main_thread_orchestration.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/unit/test_main_thread_orchestration.cpp",
+  "output": "CMakeFiles/main_thread_orchestration_test.dir/tests/unit/test_main_thread_orchestration.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/detector_test.dir/tests/unit/detector_test.cpp.o -c /home/laptop/AuroreMkVII/tests/unit/detector_test.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/unit/detector_test.cpp",
+  "output": "CMakeFiles/detector_test.dir/tests/unit/detector_test.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/detector_test.dir/src/vision/orb_detector.cpp.o -c /home/laptop/AuroreMkVII/src/vision/orb_detector.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/vision/orb_detector.cpp",
+  "output": "CMakeFiles/detector_test.dir/src/vision/orb_detector.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/tracker_test.dir/tests/unit/tracker_test.cpp.o -c /home/laptop/AuroreMkVII/tests/unit/tracker_test.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/unit/tracker_test.cpp",
+  "output": "CMakeFiles/tracker_test.dir/tests/unit/tracker_test.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/tracker_test.dir/src/tracking/csrt_tracker.cpp.o -c /home/laptop/AuroreMkVII/src/tracking/csrt_tracker.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/tracking/csrt_tracker.cpp",
+  "output": "CMakeFiles/tracker_test.dir/src/tracking/csrt_tracker.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/ballistics_test.dir/tests/unit/ballistics_test.cpp.o -c /home/laptop/AuroreMkVII/tests/unit/ballistics_test.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/unit/ballistics_test.cpp",
+  "output": "CMakeFiles/ballistics_test.dir/tests/unit/ballistics_test.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/ballistics_test.dir/src/actuation/ballistic_solver.cpp.o -c /home/laptop/AuroreMkVII/src/actuation/ballistic_solver.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/actuation/ballistic_solver.cpp",
+  "output": "CMakeFiles/ballistics_test.dir/src/actuation/ballistic_solver.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/fusion_hat_test.dir/tests/unit/fusion_hat_test.cpp.o -c /home/laptop/AuroreMkVII/tests/unit/fusion_hat_test.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/unit/fusion_hat_test.cpp",
+  "output": "CMakeFiles/fusion_hat_test.dir/tests/unit/fusion_hat_test.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/fusion_hat_test.dir/src/drivers/fusion_hat.cpp.o -c /home/laptop/AuroreMkVII/src/drivers/fusion_hat.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/drivers/fusion_hat.cpp",
+  "output": "CMakeFiles/fusion_hat_test.dir/src/drivers/fusion_hat.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/hud_socket_test.dir/tests/unit/hud_socket_test.cpp.o -c /home/laptop/AuroreMkVII/tests/unit/hud_socket_test.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/unit/hud_socket_test.cpp",
+  "output": "CMakeFiles/hud_socket_test.dir/tests/unit/hud_socket_test.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/hud_socket_test.dir/src/common/hud_socket.cpp.o -c /home/laptop/AuroreMkVII/src/common/hud_socket.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/common/hud_socket.cpp",
+  "output": "CMakeFiles/hud_socket_test.dir/src/common/hud_socket.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/hud_socket_test.dir/src/state_machine/state_machine.cpp.o -c /home/laptop/AuroreMkVII/src/state_machine/state_machine.cpp",
+  "file": "/home/laptop/AuroreMkVII/src/state_machine/state_machine.cpp",
+  "output": "CMakeFiles/hud_socket_test.dir/src/state_machine/state_machine.cpp.o"
+},
+{
+  "directory": "/home/laptop/AuroreMkVII/build-native",
+  "command": "/usr/bin/c++ -DAURORE_HOST_X86_64 -DAURORE_OPENCV_UNSECURE -DAURORE_REALTIME -I/home/laptop/AuroreMkVII/include -I/usr/include/opencv4 -I/usr/include/libcamera -I/home/laptop/AuroreMkVII/tests -O3 -DNDEBUG -std=c++17 -msse4.2 -mavx2 -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual -Wold-style-cast -Wunused -Woverloaded-virtual -Wnon-virtual-dtor -Wshadow -Wformat=2 -Wnull-dereference -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -o CMakeFiles/aurore_timing_tests.dir/tests/timing/wcet_measurement.cpp.o -c /home/laptop/AuroreMkVII/tests/timing/wcet_measurement.cpp",
+  "file": "/home/laptop/AuroreMkVII/tests/timing/wcet_measurement.cpp",
+  "output": "CMakeFiles/aurore_timing_tests.dir/tests/timing/wcet_measurement.cpp.o"
+}
+]

@@ -1,0 +1,116 @@
+Start testing: Mar 05 11:51 CET
+----------------------------------------------------------
+1/4 Testing: RingBufferTest
+1/4 Test: RingBufferTest
+Command: "/home/laptop/AuroreMkVII/build/ring_buffer_test"
+Directory: /home/laptop/AuroreMkVII/build
+"RingBufferTest" start time: Mar 05 11:51 CET
+Output:
+----------------------------------------------------------
+Running LockFreeRingBuffer tests...
+=====================================
+  PASS: test_ring_buffer_construction
+  PASS: test_ring_buffer_push_pop_single
+  PASS: test_ring_buffer_push_pop_multiple
+  PASS: test_ring_buffer_wraparound
+  PASS: test_ring_buffer_try_pop
+  PASS: test_ring_buffer_spsc_stress
+  PASS: test_ring_buffer_no_lost_elements
+  PASS: test_ring_buffer_capacity_one
+  PASS: test_ring_buffer_large_buffer
+  PASS: test_ring_buffer_struct_type
+  PASS: test_mpmc_ring_buffer_basic
+  PASS: test_mpmc_ring_buffer_concurrent
+
+=====================================
+Tests run:     12
+Tests passed:  12
+Tests failed:  0
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"RingBufferTest" end time: Mar 05 11:51 CET
+"RingBufferTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/4 Testing: TimingTest
+2/4 Test: TimingTest
+Command: "/home/laptop/AuroreMkVII/build/timing_test"
+Directory: /home/laptop/AuroreMkVII/build
+"TimingTest" start time: Mar 05 11:51 CET
+Output:
+----------------------------------------------------------
+Running Timing tests...
+=====================================
+  PASS: test_get_timestamp_basic
+  PASS: test_get_timestamp_monotonic
+  PASS: test_get_timestamp_safe
+  PASS: test_thread_timing_construction
+  PASS: test_thread_timing_periodic_wait
+  PASS: test_thread_timing_phase_offset
+    Jitter: mean=250247217ns, max_abs=250742637ns
+  FAIL: test_thread_timing_jitter_measurement - Assertion failed: std::abs(mean) < 1000000
+  PASS: test_thread_timing_deadline_miss_detection
+    Consecutive misses: 3
+  PASS: test_thread_timing_consecutive_misses
+  PASS: test_deadline_monitor_basic
+  PASS: test_deadline_monitor_exceeded
+  PASS: test_deadline_monitor_remaining
+  PASS: test_deadline_monitor_zero_remaining
+  PASS: test_frame_rate_calculator_basic
+  PASS: test_frame_rate_calculator_60hz
+  PASS: test_frame_rate_calculator_reset
+    Stress test: avg_jitter=250314692ns, max_jitter=251063146ns
+  FAIL: test_timing_stress_single_thread - Assertion failed: avg_jitter < 10000000
+    Concurrent test: total_misses=3
+  PASS: test_timing_concurrent_threads
+
+=====================================
+Tests run:     18
+Tests passed:  16
+Tests failed:  2
+<end of output>
+Test time =   0.46 sec
+----------------------------------------------------------
+Test Failed.
+"TimingTest" end time: Mar 05 11:51 CET
+"TimingTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/4 Testing: SafetyMonitorTest
+3/4 Test: SafetyMonitorTest
+Command: "/home/laptop/AuroreMkVII/build/safety_monitor_test"
+Directory: /home/laptop/AuroreMkVII/build
+"SafetyMonitorTest" start time: Mar 05 11:51 CET
+Output:
+----------------------------------------------------------
+Running SafetyMonitor tests...
+=====================================
+  PASS: test_safety_monitor_construction
+  PASS: test_safety_monitor_init
+  PASS: test_safety_monitor_start_stop
+<end of output>
+Test time =   0.15 sec
+----------------------------------------------------------
+Test Failed.
+"SafetyMonitorTest" end time: Mar 05 11:51 CET
+"SafetyMonitorTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/4 Testing: TimingIntegrationTest
+4/4 Test: TimingIntegrationTest
+Command: ""
+Directory: /home/laptop/AuroreMkVII/build
+"TimingIntegrationTest" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"TimingIntegrationTest" end time: Mar 05 11:51 CET
+"TimingIntegrationTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Mar 05 11:51 CET

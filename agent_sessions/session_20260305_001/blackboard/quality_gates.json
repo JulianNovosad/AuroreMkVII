@@ -1,0 +1,65 @@
+{
+  "gates": [
+    {
+      "gate_id": "gate_001",
+      "name": "diagnostics_complete",
+      "description": "Mk VI analysis and gap analysis complete",
+      "status": "passed",
+      "required_for": ["compliance", "implementation"]
+    },
+    {
+      "gate_id": "gate_002",
+      "name": "compliance_complete",
+      "description": "Requirements compliance verified",
+      "status": "failed",
+      "required_for": ["implementation"],
+      "failure_reason": "5 critical gaps identified: AM7-L2-HUD-004 (HUD socket missing), AM7-L2-VIS-008 (CSRT missing), AM7-L1-MODE-002 (state machine missing), AM7-L2-BALL-001 (ballistic engine missing), AM7-L2-ACT-001 (I2C interface missing)"
+    },
+    {
+      "gate_id": "gate_003",
+      "name": "tests_planned",
+      "description": "Test plan generated",
+      "status": "passed",
+      "required_for": ["implementation"]
+    },
+    {
+      "gate_id": "gate_004",
+      "name": "implementation_complete",
+      "description": "All code changes implemented",
+      "status": "pending",
+      "required_for": ["verification"]
+    },
+    {
+      "gate_id": "gate_005",
+      "name": "verification_complete",
+      "description": "Truthchecker PASS",
+      "status": "pending",
+      "required_for": ["session_complete"]
+    }
+  ],
+  "gate_history": [
+    {
+      "gate": "diagnostics_complete",
+      "transitioned_at": "2026-03-05T13:05:00Z",
+      "from": false,
+      "to": true,
+      "validated_by": "quality_gate"
+    },
+    {
+      "gate": "compliance_complete",
+      "transitioned_at": "2026-03-05T14:00:00Z",
+      "from": false,
+      "to": false,
+      "validated_by": "code-compliance-researcher",
+      "rationale": "Critical gaps block implementation phase"
+    },
+    {
+      "gate": "tests_planned",
+      "transitioned_at": "2026-03-05T14:30:08Z",
+      "from": false,
+      "to": true,
+      "validated_by": "test-coverage-architect",
+      "rationale": "Test plan with 47 tests (7 regression, 15 unit, 8 integration, 5 WCET, 3 jitter) generated successfully"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "gates": [
+    {
+      "gate_id": "gate_001",
+      "name": "diagnostics_complete",
+      "description": "Performance analysis completed",
+      "status": "passed",
+      "required_for": ["implementation"]
+    },
+    {
+      "gate_id": "gate_002",
+      "name": "performance_baseline_met",
+      "description": "WCET budget and SLA requirements met",
+      "status": "failed",
+      "required_for": ["implementation"],
+      "failure_reason": "Vision pipeline (15ms) exceeds 5ms WCET budget by 3×. Actuation path (3ms) exceeds 1.5ms budget by 2×. Heap allocations in RT path. Blocking I2C and sleep_for in RT paths."
+    }
+  ],
+  "gate_history": [
+    {
+      "gate": "diagnostics_complete",
+      "transitioned_at": "2026-03-07T16:05:00Z",
+      "from": false,
+      "to": true,
+      "validated_by": "performance-regression-profiler"
+    },
+    {
+      "gate": "performance_baseline_met",
+      "transitioned_at": "2026-03-07T16:05:00Z",
+      "from": false,
+      "to": false,
+      "validated_by": "performance-regression-profiler"
+    }
+  ]
+}

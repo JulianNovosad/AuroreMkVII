@@ -1,0 +1,14 @@
+# Target labels
+ ml_dtypes-populate
+# Source files and their labels
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ml_dtypes-subbuild/CMakeFiles/ml_dtypes-populate
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ml_dtypes-subbuild/CMakeFiles/ml_dtypes-populate.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ml_dtypes-subbuild/CMakeFiles/ml_dtypes-populate-complete.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ml_dtypes-subbuild/ml_dtypes-populate-prefix/src/ml_dtypes-populate-stamp/ml_dtypes-populate-build.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ml_dtypes-subbuild/ml_dtypes-populate-prefix/src/ml_dtypes-populate-stamp/ml_dtypes-populate-configure.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ml_dtypes-subbuild/ml_dtypes-populate-prefix/src/ml_dtypes-populate-stamp/ml_dtypes-populate-download.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ml_dtypes-subbuild/ml_dtypes-populate-prefix/src/ml_dtypes-populate-stamp/ml_dtypes-populate-install.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ml_dtypes-subbuild/ml_dtypes-populate-prefix/src/ml_dtypes-populate-stamp/ml_dtypes-populate-mkdir.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ml_dtypes-subbuild/ml_dtypes-populate-prefix/src/ml_dtypes-populate-stamp/ml_dtypes-populate-patch.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ml_dtypes-subbuild/ml_dtypes-populate-prefix/src/ml_dtypes-populate-stamp/ml_dtypes-populate-test.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/ml_dtypes-subbuild/ml_dtypes-populate-prefix/src/ml_dtypes-populate-stamp/ml_dtypes-populate-update.rule

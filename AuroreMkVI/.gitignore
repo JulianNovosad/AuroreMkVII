@@ -1,0 +1,16 @@
+# Build artifacts
+build/
+artifacts/
+bin/
+
+# Logs and telemetry
+logs/
+*.log
+*.csv
+
+# Temporary and swap files
+*.swp
+.DS_Store
+kernel/
+logs/
+backups/

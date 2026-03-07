@@ -1,0 +1,426 @@
+{
+  "agent": "documentation-drift-detector",
+  "version": 1,
+  "session_id": "session_20260307_drift",
+  "timestamp": "2026-03-07T10:37:00Z",
+  "documentation_analyzed": [
+    "README.md",
+    "QWEN.md",
+    "spec.md",
+    "AuroreMkVI/AGENTS.md",
+    "CMakeLists.txt",
+    "scripts/build-native.sh",
+    "scripts/build-rpi.sh",
+    "scripts/deploy-to-rpi.sh"
+  ],
+  "discrepancies": [
+    {
+      "discrepancy_id": "DRIFT_001",
+      "category": "high",
+      "type": "outdated_signature",
+      "documentation_location": {
+        "file": "README.md",
+        "line": 145,
+        "section": "Key Components - Safety Monitor"
+      },
+      "code_location": {
+        "file": "include/aurore/safety_monitor.hpp",
+        "line": 350,
+        "function": "WatchdogKick RAII guard"
+      },
+      "description": "README.md documents WatchdogKick as RAII guard for 60ms software watchdog, but the actual implementation uses kick_watchdog() method directly without RAII wrapper class",
+      "expected": "Documentation should show kick_watchdog() method call pattern",
+      "actual": "Documentation shows RAII WatchdogKick pattern that doesn't exist in code",
+      "suggested_update": "Update README.md example to show: monitor.kick_watchdog() instead of WatchdogKick RAII pattern",
+      "code_example_compiles": false,
+      "code_example_error": "WatchdogKick class not found in safety_monitor.hpp"
+    },
+    {
+      "discrepancy_id": "DRIFT_002",
+      "category": "high",
+      "type": "outdated_signature",
+      "documentation_location": {
+        "file": "README.md",
+        "line": 178,
+        "section": "Key Components - Camera Wrapper"
+      },
+      "code_location": {
+        "file": "include/aurore/camera_wrapper.hpp",
+        "line": 200,
+        "function": "capture_frame()"
+      },
+      "description": "README.md shows camera->try_capture_frame(frame) but the actual API in camera_wrapper.hpp has both capture_frame() and try_capture_frame() - documentation only shows one variant",
+      "expected": "Documentation should show both blocking and non-blocking capture variants",
+      "actual": "Documentation only shows try_capture_frame() without timeout parameter",
+      "suggested_update": "Add documentation for both capture_frame(frame, timeout_ms) and try_capture_frame(frame)",
+      "code_example_compiles": true,
+      "code_example_error": null
+    },
+    {
+      "discrepancy_id": "DRIFT_003",
+      "category": "critical",
+      "type": "broken_example",
+      "documentation_location": {
+        "file": "README.md",
+        "line": 230,
+        "section": "Testing - Unit Tests"
+      },
+      "code_location": {
+        "file": "CMakeLists.txt",
+        "line": 200,
+        "function": "CTest configuration"
+      },
+      "description": "README.md shows running tests via './aurore_tests' but CMakeLists.txt creates individual test executables (ring_buffer_test, timing_test, etc.) and uses ctest - no unified aurore_tests binary exists",
+      "expected": "Documentation should show 'ctest --output-on-failure' or list individual test binaries",
+      "actual": "Documentation references non-existent './aurore_tests' binary",
+      "suggested_update": "Update README.md to show: 'ctest --output-on-failure' or './ring_buffer_test && ./timing_test && ./safety_monitor_test'",
+      "code_example_compiles": false,
+      "code_example_error": "./aurore_tests: No such file or directory"
+    },
+    {
+      "discrepancy_id": "DRIFT_004",
+      "category": "medium",
+      "type": "architecture_mismatch",
+      "documentation_location": {
+        "file": "QWEN.md",
+        "line": 45,
+        "section": "Architecture - Data Flow"
+      },
+      "code_location": {
+        "file": "src/main.cpp",
+        "line": 180,
+        "function": "vision_pipeline thread"
+      },
+      "description": "QWEN.md shows data flow ending with 'safety_monitor (1kHz, watches all threads)' but safety_monitor.hpp shows per-stage monitoring with record_stage_latency() and record_frame_complete() that aren't used in main.cpp",
+      "expected": "Documentation should reflect that safety monitor uses update_vision_frame() and update_actuation_frame() for basic monitoring, with optional per-stage latency tracking",
+      "actual": "Documentation shows simplified data flow without per-stage monitoring hooks",
+      "suggested_update": "Update QWEN.md data flow to show per-stage latency recording: 'record_stage_latency(PipelineStage::VISION, latency_ns)'",
+      "code_example_compiles": true,
+      "code_example_error": null
+    },
+    {
+      "discrepancy_id": "DRIFT_005",
+      "category": "medium",
+      "type": "missing_doc",
+      "documentation_location": {
+        "file": "README.md",
+        "line": 1,
+        "section": "Key Components"
+      },
+      "code_location": {
+        "file": "include/aurore/telemetry_writer.hpp",
+        "line": 1,
+        "function": "TelemetryWriter"
+      },
+      "description": "README.md and QWEN.md mention TelemetryWriter in 'What Is Implemented' but provide no usage examples or API documentation",
+      "expected": "Documentation should include TelemetryWriter usage example similar to other components",
+      "actual": "TelemetryWriter is listed but not documented with examples",
+      "suggested_update": "Add TelemetryWriter section to README.md Key Components with usage example",
+      "code_example_compiles": null,
+      "code_example_error": null
+    },
+    {
+      "discrepancy_id": "DRIFT_006",
+      "category": "medium",
+      "type": "missing_doc",
+      "documentation_location": {
+        "file": "README.md",
+        "line": 1,
+        "section": "Key Components"
+      },
+      "code_location": {
+        "file": "include/aurore/state_machine.hpp",
+        "line": 1,
+        "function": "StateMachine"
+      },
+      "description": "State machine implementation exists (src/state_machine/state_machine.cpp) but is not documented in README.md despite being listed in QWEN.md as implemented",
+      "expected": "Documentation should include StateMachine usage example",
+      "actual": "StateMachine is implemented but undocumented in README.md",
+      "suggested_update": "Add StateMachine section to README.md showing state transitions: BOOT→IDLE→FREECAM→SEARCH→TRACKING→ARMED→FAULT",
+      "code_example_compiles": null,
+      "code_example_error": null
+    },
+    {
+      "discrepancy_id": "DRIFT_007",
+      "category": "low",
+      "type": "outdated_signature",
+      "documentation_location": {
+        "file": "QWEN.md",
+        "line": 52,
+        "section": "Core Primitives"
+      },
+      "code_location": {
+        "file": "include/aurore/tracker.hpp",
+        "line": 1,
+        "function": "KcfTracker"
+      },
+      "description": "QWEN.md mentions CSRT tracker in TODO section, but code actually implements KCF tracker (KcfTracker class in tracker.hpp) which is faster and WCET-compliant",
+      "expected": "Documentation should reflect KCF tracker implementation instead of CSRT",
+      "actual": "Documentation references CSRT but code uses KCF for 120Hz tracking",
+      "suggested_update": "Update QWEN.md to state: 'KCF tracker (1-2ms) implemented for 120Hz tracking, CSRT would be 10-20ms'",
+      "code_example_compiles": true,
+      "code_example_error": null
+    },
+    {
+      "discrepancy_id": "DRIFT_008",
+      "category": "high",
+      "type": "broken_example",
+      "documentation_location": {
+        "file": "README.md",
+        "line": 220,
+        "section": "WCET Measurement"
+      },
+      "code_location": {
+        "file": "scripts/wcet_analysis.sh",
+        "line": 1,
+        "function": "WCET analysis script"
+      },
+      "description": "README.md shows WCET results in './wcet_results/' but the script and CMakeLists.txt don't create this directory - results go to stdout or custom location",
+      "expected": "Documentation should specify actual output location or script should create documented directory",
+      "actual": "Documentation references non-standard output directory",
+      "suggested_update": "Either create wcet_results/ directory in script or update README.md to show actual output behavior",
+      "code_example_compiles": false,
+      "code_example_error": "Directory ./wcet_results/ not created by script"
+    },
+    {
+      "discrepancy_id": "DRIFT_009",
+      "category": "medium",
+      "type": "architecture_mismatch",
+      "documentation_location": {
+        "file": "QWEN.md",
+        "line": 60,
+        "section": "What Is Implemented vs. TODO"
+      },
+      "code_location": {
+        "file": "CMakeLists.txt",
+        "line": 150,
+        "function": "Source files"
+      },
+      "description": "QWEN.md lists src/vision/, src/tracking/, src/actuation/, src/state_machine/, src/drivers/fusion_hat_i2c.cpp as 'TODO stubs (commented out in CMakeLists.txt)' but CMakeLists.txt actually includes them as active sources",
+      "expected": "Documentation should reflect that these modules are now implemented and compiled",
+      "actual": "Documentation says TODO but code is implemented and built",
+      "suggested_update": "Update QWEN.md 'What Is Implemented' section to include: orb_detector, csrt_tracker (actually KCF), ballistic_solver, state_machine, fusion_hat_i2c, hud_socket, telemetry_writer",
+      "code_example_compiles": true,
+      "code_example_error": null
+    },
+    {
+      "discrepancy_id": "DRIFT_010",
+      "category": "medium",
+      "type": "outdated_signature",
+      "documentation_location": {
+        "file": "AuroreMkVI/AGENTS.md",
+        "line": 1,
+        "section": "Project Overview"
+      },
+      "code_location": {
+        "file": "README.md",
+        "line": 1,
+        "function": "N/A"
+      },
+      "description": "AuroreMkVI/AGENTS.md documents Mk VI (Edge TPU + TFLite) architecture which differs significantly from MkVII (libcamera + OpenCV + KCF tracker). This historical document may confuse developers about current architecture",
+      "expected": "AuroreMkVI/AGENTS.md should have clear deprecation notice",
+      "actual": "AGENTS.md presents Mk VI as reference without clear deprecation status",
+      "suggested_update": "Add prominent DEPRECATED notice to AuroreMkVI/AGENTS.md header stating Mk VII uses different architecture",
+      "code_example_compiles": null,
+      "code_example_error": null
+    },
+    {
+      "discrepancy_id": "DRIFT_011",
+      "category": "low",
+      "type": "missing_doc",
+      "documentation_location": {
+        "file": "README.md",
+        "line": 1,
+        "section": "Key Components"
+      },
+      "code_location": {
+        "file": "include/aurore/ballistic_solver.hpp",
+        "line": 1,
+        "function": "BallisticSolver"
+      },
+      "description": "BallisticSolver is implemented with kinetic and drop modes but not documented in README.md despite being a key component",
+      "expected": "Documentation should include BallisticSolver usage example",
+      "actual": "BallisticSolver is implemented but undocumented",
+      "suggested_update": "Add BallisticSolver section to README.md showing solve() API and EngagementMode selection",
+      "code_example_compiles": null,
+      "code_example_error": null
+    },
+    {
+      "discrepancy_id": "DRIFT_012",
+      "category": "low",
+      "type": "missing_doc",
+      "documentation_location": {
+        "file": "README.md",
+        "line": 1,
+        "section": "Key Components"
+      },
+      "code_location": {
+        "file": "include/aurore/fusion_hat.hpp",
+        "line": 1,
+        "function": "FusionHat"
+      },
+      "description": "FusionHat I2C driver is implemented but not documented in README.md despite being mentioned in TODO sections",
+      "expected": "Documentation should include FusionHat usage example",
+      "actual": "FusionHat is implemented but undocumented",
+      "suggested_update": "Add FusionHat section to README.md showing I2C initialization and PWM control API",
+      "code_example_compiles": null,
+      "code_example_error": null
+    }
+  ],
+  "broken_links": [],
+  "code_examples_validated": [
+    {
+      "example_id": "EX_001",
+      "source_file": "README.md",
+      "source_line": 145,
+      "language": "cpp",
+      "compiles": false,
+      "error": "WatchdogKick class not found",
+      "fix_suggested": "Replace RAII example with direct kick_watchdog() call"
+    },
+    {
+      "example_id": "EX_002",
+      "source_file": "README.md",
+      "source_line": 230,
+      "language": "bash",
+      "compiles": false,
+      "error": "./aurore_tests binary does not exist",
+      "fix_suggested": "Update to 'ctest --output-on-failure' or list individual test binaries"
+    },
+    {
+      "example_id": "EX_003",
+      "source_file": "README.md",
+      "source_line": 178,
+      "language": "cpp",
+      "compiles": true,
+      "error": null,
+      "fix_suggested": "Add both capture_frame() and try_capture_frame() examples"
+    }
+  ],
+  "missing_documentation": [
+    {
+      "feature": "TelemetryWriter - Binary telemetry logging",
+      "code_location": "include/aurore/telemetry_writer.hpp",
+      "added_in": "Initial MkVII implementation",
+      "documentation_gap": "No usage examples or API documentation in README.md"
+    },
+    {
+      "feature": "StateMachine - State machine with BOOT→IDLE→FREECAM→SEARCH→TRACKING→ARMED→FAULT",
+      "code_location": "include/aurore/state_machine.hpp",
+      "added_in": "Initial MkVII implementation",
+      "documentation_gap": "No state transition documentation or usage examples"
+    },
+    {
+      "feature": "BallisticSolver - Ballistic solution calculation with kinetic/drop modes",
+      "code_location": "include/aurore/ballistic_solver.hpp",
+      "added_in": "Initial MkVII implementation",
+      "documentation_gap": "No API documentation or engagement mode explanation"
+    },
+    {
+      "feature": "FusionHat - I2C gimbal controller with PWM output",
+      "code_location": "include/aurore/fusion_hat.hpp",
+      "added_in": "Initial MkVII implementation",
+      "documentation_gap": "No I2C setup or PWM control documentation"
+    },
+    {
+      "feature": "KcfTracker - KCF tracker (not CSRT as documented)",
+      "code_location": "include/aurore/tracker.hpp",
+      "added_in": "Initial MkVII implementation",
+      "documentation_gap": "Documentation references CSRT but implementation uses KCF for WCET compliance"
+    },
+    {
+      "feature": "Per-stage latency monitoring in SafetyMonitor",
+      "code_location": "include/aurore/safety_monitor.hpp",
+      "added_in": "Initial MkVII implementation",
+      "documentation_gap": "record_stage_latency() and PipelineStage enum not documented"
+    }
+  ],
+  "accurate_documentation": [
+    {
+      "section": "Thread Configuration Table",
+      "file": "README.md",
+      "status": "accurate",
+      "verified_at": "2026-03-07T10:37:00Z",
+      "notes": "Thread priorities, CPU affinity, and phase offsets match src/main.cpp"
+    },
+    {
+      "section": "Lock-Free Ring Buffer API",
+      "file": "README.md",
+      "status": "accurate",
+      "verified_at": "2026-03-07T10:37:00Z",
+      "notes": "push/pop API matches include/aurore/ring_buffer.hpp"
+    },
+    {
+      "section": "Timing Framework API",
+      "file": "README.md",
+      "status": "accurate",
+      "verified_at": "2026-03-07T10:37:00Z",
+      "notes": "ThreadTiming API matches include/aurore/timing.hpp"
+    },
+    {
+      "section": "System Specifications Table",
+      "file": "README.md",
+      "status": "accurate",
+      "verified_at": "2026-03-07T10:37:00Z",
+      "notes": "120Hz, 1536×864, 5ms WCET budget match spec.md requirements"
+    },
+    {
+      "section": "Build Commands",
+      "file": "README.md",
+      "status": "accurate",
+      "verified_at": "2026-03-07T10:37:00Z",
+      "notes": "build-native.sh and build-rpi.sh scripts match documented commands"
+    },
+    {
+      "section": "Real-Time Configuration",
+      "file": "README.md",
+      "status": "accurate",
+      "verified_at": "2026-03-07T10:37:00Z",
+      "notes": "Kernel boot parameters and CPU governor settings are correct"
+    }
+  ],
+  "overall_drift_status": "drift_detected",
+  "critical_drift_count": 1,
+  "high_drift_count": 3,
+  "medium_drift_count": 5,
+  "low_drift_count": 3,
+  "documentation_health": "needs_updates",
+  "recommendations": [
+    {
+      "priority": 1,
+      "severity": "critical",
+      "issue": "DRIFT_003: Non-existent test binary './aurore_tests' in documentation",
+      "fix": "Update README.md Testing section to use 'ctest --output-on-failure' or list individual test executables"
+    },
+    {
+      "priority": 2,
+      "severity": "high",
+      "issue": "DRIFT_001: WatchdogKick RAII pattern documented but not implemented",
+      "fix": "Update README.md Safety Monitor example to use kick_watchdog() method directly"
+    },
+    {
+      "priority": 3,
+      "severity": "high",
+      "issue": "DRIFT_009: QWEN.md lists implemented modules as TODO stubs",
+      "fix": "Update QWEN.md 'What Is Implemented' section to include orb_detector, KcfTracker, ballistic_solver, state_machine, fusion_hat_i2c"
+    },
+    {
+      "priority": 4,
+      "severity": "high",
+      "issue": "DRIFT_007: Documentation references CSRT tracker but code uses KCF",
+      "fix": "Update QWEN.md to document KCF tracker implementation and WCET rationale"
+    },
+    {
+      "priority": 5,
+      "severity": "medium",
+      "issue": "DRIFT_005, DRIFT_006, DRIFT_011, DRIFT_012: Missing documentation for implemented components",
+      "fix": "Add Key Components sections for TelemetryWriter, StateMachine, BallisticSolver, and FusionHat"
+    },
+    {
+      "priority": 6,
+      "severity": "medium",
+      "issue": "DRIFT_010: AuroreMkVI/AGENTS.md may confuse developers",
+      "fix": "Add DEPRECATED notice to AGENTS.md header clarifying Mk VII uses different architecture"
+    }
+  ]
+}

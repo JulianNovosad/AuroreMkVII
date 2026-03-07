@@ -1,0 +1,7 @@
+/home/pi/Aurore/deps/flatbuffers-build/CMakeFiles/flatbuffers.dir
+/home/pi/Aurore/deps/flatbuffers-build/CMakeFiles/edit_cache.dir
+/home/pi/Aurore/deps/flatbuffers-build/CMakeFiles/rebuild_cache.dir
+/home/pi/Aurore/deps/flatbuffers-build/CMakeFiles/list_install_components.dir
+/home/pi/Aurore/deps/flatbuffers-build/CMakeFiles/install.dir
+/home/pi/Aurore/deps/flatbuffers-build/CMakeFiles/install/local.dir
+/home/pi/Aurore/deps/flatbuffers-build/CMakeFiles/install/strip.dir

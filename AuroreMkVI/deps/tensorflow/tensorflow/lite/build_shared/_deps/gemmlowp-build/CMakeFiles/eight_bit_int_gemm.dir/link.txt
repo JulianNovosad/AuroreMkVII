@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/eight_bit_int_gemm.dir/link.d -shared -Wl,-soname,libeight_bit_int_gemm.so -o libeight_bit_int_gemm.so CMakeFiles/eight_bit_int_gemm.dir/home/pi/Aurore/deps/gemmlowp/eight_bit_int_gemm/eight_bit_int_gemm.cc.o

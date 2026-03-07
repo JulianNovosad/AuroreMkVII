@@ -1,0 +1,14 @@
+# Target labels
+ xnnpack-populate
+# Source files and their labels
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/xnnpack-subbuild/CMakeFiles/xnnpack-populate
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/xnnpack-subbuild/CMakeFiles/xnnpack-populate.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/xnnpack-subbuild/CMakeFiles/xnnpack-populate-complete.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/src/xnnpack-populate-stamp/xnnpack-populate-build.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/src/xnnpack-populate-stamp/xnnpack-populate-configure.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/src/xnnpack-populate-stamp/xnnpack-populate-download.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/src/xnnpack-populate-stamp/xnnpack-populate-install.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/src/xnnpack-populate-stamp/xnnpack-populate-mkdir.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/src/xnnpack-populate-stamp/xnnpack-populate-patch.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/src/xnnpack-populate-stamp/xnnpack-populate-test.rule
+/home/pi/Aurore/deps/tensorflow/tf_capi_build/src/xnnpack-populate-stamp/xnnpack-populate-update.rule

@@ -1,0 +1,60 @@
+{
+  "conductor_logic": {
+    "enabled": true,
+    "state_machine": {
+      "initial_state": "setup_pending",
+      "states": [
+        "setup_pending",
+        "product_definition",
+        "tech_stack_definition", 
+        "workflow_selection",
+        "track_generation",
+        "track_in_progress",
+        "track_completed",
+        "documentation_sync"
+      ],
+      "transitions": {
+        "setup_pending_to_product_definition": "conduct_setup_phase_1",
+        "product_definition_to_tech_stack_definition": "complete_product_guide",
+        "tech_stack_definition_to_workflow_selection": "define_tech_stack",
+        "workflow_selection_to_track_generation": "select_workflow",
+        "track_generation_to_track_in_progress": "select_and_start_track",
+        "track_in_progress_to_track_completed": "execute_task_workflow",
+        "track_completed_to_documentation_sync": "finalize_track"
+      }
+    },
+    "quality_gates": {
+      "validate_tool_calls": true,
+      "halt_on_failure": true,
+      "require_success_validation": true,
+      "test_coverage_threshold": 80,
+      "code_style_compliance": true
+    },
+    "surgical_debugging": {
+      "pre_build_validation": true,
+      "dependency_verification": true,
+      "static_analysis": true,
+      "environment_verification": true,
+      "incremental_validation": true
+    },
+    "workflow_adherence": {
+      "tdd_required": true,
+      "commit_after_tasks": true,
+      "git_notes_for_summaries": true,
+      "phase_completion_protocol": true
+    }
+  },
+  "operational_constraints": {
+    "strict_file_access": true,
+    "ignore_file_respect": true,
+    "token_efficiency": true,
+    "large_file_handling": true
+  },
+  "execution_protocols": {
+    "setup_check": "verify_core_context_exists",
+    "track_selection": "auto_select_next_incomplete",
+    "task_execution": "follow_workflow_procedures",
+    "status_updates": "maintain_tracks_registry",
+    "documentation_sync": "update_project_docs"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "session_id": "session_20260307_coverage",
+  "artifacts": [
+    {
+      "name": "test-coverage-architect_001.json",
+      "path": "artifacts/test-coverage-architect_001.json",
+      "agent": "test-coverage-architect",
+      "version": 1,
+      "timestamp": "2026-03-07T10:05:00Z",
+      "description": "Test coverage gap analysis and test plan"
+    },
+    {
+      "name": "generated_tests_001",
+      "path": "artifacts/generated_tests_001/",
+      "agent": "test-coverage-architect",
+      "version": 1,
+      "timestamp": "2026-03-07T10:10:00Z",
+      "description": "Generated test files directory"
+    },
+    {
+      "name": "test_main_thread_orchestration.cpp",
+      "path": "artifacts/generated_tests_001/test_main_thread_orchestration.cpp",
+      "agent": "test-coverage-architect",
+      "version": 1,
+      "timestamp": "2026-03-07T10:10:00Z",
+      "description": "Unit tests for main.cpp thread orchestration"
+    },
+    {
+      "name": "test_safety_monitor_fault_codes.cpp",
+      "path": "artifacts/generated_tests_001/test_safety_monitor_fault_codes.cpp",
+      "agent": "test-coverage-architect",
+      "version": 1,
+      "timestamp": "2026-03-07T10:10:00Z",
+      "description": "Unit tests for all SafetyMonitor fault code paths"
+    },
+    {
+      "name": "test_state_machine_transitions.cpp",
+      "path": "artifacts/generated_tests_001/test_state_machine_transitions.cpp",
+      "agent": "test-coverage-architect",
+      "version": 1,
+      "timestamp": "2026-03-07T10:10:00Z",
+      "description": "Unit tests for state machine transition edge cases"
+    }
+  ]
+}

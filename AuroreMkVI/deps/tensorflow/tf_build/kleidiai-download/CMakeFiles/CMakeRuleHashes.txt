@@ -1,0 +1,11 @@
+# Hashes of file build rules.
+904697325cafe76d4c555c2544474792 CMakeFiles/kleidiai
+894b294e1906ec64ee25fbb1cbf31356 CMakeFiles/kleidiai-complete
+62c5ecbfeae7133b75e99f778500c743 kleidiai-prefix/src/kleidiai-stamp/kleidiai-build
+1303c8281da56c158a1388fe89f16440 kleidiai-prefix/src/kleidiai-stamp/kleidiai-configure
+bf5e46ae0889426ef22945d2f026a50d kleidiai-prefix/src/kleidiai-stamp/kleidiai-download
+3a16798f1d250d5bffb18736e3d2b33b kleidiai-prefix/src/kleidiai-stamp/kleidiai-install
+27c90297fca0bb94f80817159a7816e8 kleidiai-prefix/src/kleidiai-stamp/kleidiai-mkdir
+8cea5c5465681ec7b055914e5dbd059c kleidiai-prefix/src/kleidiai-stamp/kleidiai-patch
+29127795139384d3170eb349d85b9925 kleidiai-prefix/src/kleidiai-stamp/kleidiai-test
+3ce630726d3153f4ed296cdb87f8144b kleidiai-prefix/src/kleidiai-stamp/kleidiai-update

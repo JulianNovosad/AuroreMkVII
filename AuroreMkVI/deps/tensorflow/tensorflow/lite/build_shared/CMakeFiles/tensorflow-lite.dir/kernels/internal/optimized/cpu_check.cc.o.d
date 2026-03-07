@@ -1,0 +1,29 @@
+CMakeFiles/tensorflow-lite.dir/kernels/internal/optimized/cpu_check.cc.o: \
+ /home/pi/Aurore/deps/tensorflow/tensorflow/lite/kernels/internal/optimized/cpu_check.cc \
+ /usr/aarch64-linux-gnu/include/stdc-predef.h \
+ /home/pi/Aurore/deps/tensorflow/tensorflow/lite/kernels/internal/optimized/cpu_check.h \
+ /home/pi/Aurore/deps/tensorflow/tensorflow/lite/kernels/internal/optimized/neon_check.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/arm_neon.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/stdint.h \
+ /usr/aarch64-linux-gnu/include/stdint.h \
+ /usr/aarch64-linux-gnu/include/bits/libc-header-start.h \
+ /usr/aarch64-linux-gnu/include/features.h \
+ /usr/aarch64-linux-gnu/include/features-time64.h \
+ /usr/aarch64-linux-gnu/include/bits/wordsize.h \
+ /usr/aarch64-linux-gnu/include/bits/timesize.h \
+ /usr/aarch64-linux-gnu/include/sys/cdefs.h \
+ /usr/aarch64-linux-gnu/include/bits/long-double.h \
+ /usr/aarch64-linux-gnu/include/gnu/stubs.h \
+ /usr/aarch64-linux-gnu/include/gnu/stubs-lp64.h \
+ /usr/aarch64-linux-gnu/include/bits/types.h \
+ /usr/aarch64-linux-gnu/include/bits/typesizes.h \
+ /usr/aarch64-linux-gnu/include/bits/time64.h \
+ /usr/aarch64-linux-gnu/include/bits/wchar.h \
+ /usr/aarch64-linux-gnu/include/bits/stdint-intn.h \
+ /usr/aarch64-linux-gnu/include/bits/stdint-uintn.h \
+ /usr/aarch64-linux-gnu/include/bits/stdint-least.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/arm_fp16.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/arm_bf16.h \
+ /usr/aarch64-linux-gnu/include/sys/auxv.h \
+ /usr/aarch64-linux-gnu/include/elf.h \
+ /usr/aarch64-linux-gnu/include/bits/hwcap.h

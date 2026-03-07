@@ -1,0 +1,12 @@
+prefix=/home/pi/Aurore/artifacts/xnnpack
+exec_prefix=/home/pi/Aurore/artifacts/xnnpack
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libXNNPACK
+Description: Library to detect essential performance optimization information about host CPU.
+Version: 
+URL: 
+Libs: -L${libdir} -lcpuinfo
+Cflags: -I${includedir}
+

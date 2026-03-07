@@ -1,0 +1,32 @@
+CMakeFiles/microkernels-prod.dir/src/qp8-f32-qb4w-gemm/qp8-f32-qb4w-gemm-minmax-1x8c16s2-aarch64-neondot.c.o: \
+ /home/pi/Aurore/deps/xnnpack/src/qp8-f32-qb4w-gemm/qp8-f32-qb4w-gemm-minmax-1x8c16s2-aarch64-neondot.c \
+ /usr/aarch64-linux-gnu/include/stdc-predef.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/stddef.h \
+ /home/pi/Aurore/deps/xnnpack/src/xnnpack/microparams.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/stdint.h \
+ /usr/aarch64-linux-gnu/include/stdint.h \
+ /usr/aarch64-linux-gnu/include/bits/libc-header-start.h \
+ /usr/aarch64-linux-gnu/include/features.h \
+ /usr/aarch64-linux-gnu/include/features-time64.h \
+ /usr/aarch64-linux-gnu/include/bits/wordsize.h \
+ /usr/aarch64-linux-gnu/include/bits/timesize.h \
+ /usr/aarch64-linux-gnu/include/sys/cdefs.h \
+ /usr/aarch64-linux-gnu/include/bits/long-double.h \
+ /usr/aarch64-linux-gnu/include/gnu/stubs.h \
+ /usr/aarch64-linux-gnu/include/gnu/stubs-lp64.h \
+ /usr/aarch64-linux-gnu/include/bits/types.h \
+ /usr/aarch64-linux-gnu/include/bits/typesizes.h \
+ /usr/aarch64-linux-gnu/include/bits/time64.h \
+ /usr/aarch64-linux-gnu/include/bits/wchar.h \
+ /usr/aarch64-linux-gnu/include/bits/stdint-intn.h \
+ /usr/aarch64-linux-gnu/include/bits/stdint-uintn.h \
+ /usr/aarch64-linux-gnu/include/bits/stdint-least.h \
+ /home/pi/Aurore/deps/xnnpack/include/xnnpack.h \
+ /usr/lib/gcc/aarch64-linux-gnu/12/include/stdbool.h \
+ /home/pi/Aurore/deps/xnnpack/build_shared/pthreadpool-source/include/pthreadpool.h \
+ /home/pi/Aurore/deps/xnnpack/src/xnnpack/common.h \
+ /home/pi/Aurore/deps/xnnpack/src/xnnpack/math.h \
+ /usr/aarch64-linux-gnu/include/assert.h \
+ /usr/aarch64-linux-gnu/include/string.h \
+ /home/pi/Aurore/deps/xnnpack/src/xnnpack/fp16.h \
+ /home/pi/Aurore/deps/kleidiai/kai/ukernels/matmul/matmul_clamp_f32_qai8dxp_qsi4c32p/kai_matmul_clamp_f32_qai8dxp1x8_qsi4c32p8x8_1x8x32_neon_dotprod.h

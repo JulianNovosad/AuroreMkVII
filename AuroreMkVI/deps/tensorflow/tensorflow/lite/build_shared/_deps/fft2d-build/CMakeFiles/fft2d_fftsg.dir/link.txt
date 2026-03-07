@@ -1,0 +1,1 @@
+/usr/bin/cc -fPIC -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/fft2d_fftsg.dir/link.d -shared -Wl,-soname,libfft2d_fftsg.so -o libfft2d_fftsg.so CMakeFiles/fft2d_fftsg.dir/__/__/fft2d/fftsg.c.o  -lm

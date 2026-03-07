@@ -1,0 +1,520 @@
+Start testing: Mar 08 00:10 CET
+----------------------------------------------------------
+1/13 Testing: RingBufferTest
+1/13 Test: RingBufferTest
+Command: "/home/laptop/AuroreMkVII/build-native/ring_buffer_test"
+Directory: /home/laptop/AuroreMkVII/build-native
+"RingBufferTest" start time: Mar 08 00:10 CET
+Output:
+----------------------------------------------------------
+Running LockFreeRingBuffer tests...
+=====================================
+  PASS: test_ring_buffer_construction
+  PASS: test_ring_buffer_push_pop_single
+  PASS: test_ring_buffer_push_pop_multiple
+  PASS: test_ring_buffer_wraparound
+  PASS: test_ring_buffer_try_pop
+  PASS: test_ring_buffer_spsc_stress
+  PASS: test_ring_buffer_no_lost_elements
+  PASS: test_ring_buffer_capacity_one
+  PASS: test_ring_buffer_large_buffer
+  PASS: test_ring_buffer_struct_type
+  PASS: test_mpmc_ring_buffer_basic
+  PASS: test_mpmc_ring_buffer_concurrent
+
+=====================================
+Tests run:     12
+Tests passed:  12
+Tests failed:  0
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"RingBufferTest" end time: Mar 08 00:10 CET
+"RingBufferTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/13 Testing: TimingTest
+2/13 Test: TimingTest
+Command: "/home/laptop/AuroreMkVII/build-native/timing_test"
+Directory: /home/laptop/AuroreMkVII/build-native
+"TimingTest" start time: Mar 08 00:10 CET
+Output:
+----------------------------------------------------------
+Running Timing tests...
+=====================================
+  PASS: test_get_timestamp_basic
+  PASS: test_get_timestamp_monotonic
+  PASS: test_get_timestamp_safe
+  PASS: test_thread_timing_construction
+  PASS: test_thread_timing_periodic_wait
+  PASS: test_thread_timing_phase_offset
+    Jitter: mean=144656ns, max_abs=416347ns
+  PASS: test_thread_timing_jitter_measurement
+  PASS: test_thread_timing_deadline_miss_detection
+    Consecutive misses: 3
+  PASS: test_thread_timing_consecutive_misses
+  PASS: test_deadline_monitor_basic
+  PASS: test_deadline_monitor_exceeded
+  PASS: test_deadline_monitor_remaining
+  PASS: test_deadline_monitor_zero_remaining
+  PASS: test_frame_rate_calculator_basic
+  PASS: test_frame_rate_calculator_60hz
+  PASS: test_frame_rate_calculator_reset
+    Stress test: avg_jitter=209257ns, max_jitter=1822813ns
+  PASS: test_timing_stress_single_thread
+    Concurrent test: total_misses=0
+  PASS: test_timing_concurrent_threads
+
+=====================================
+Tests run:     18
+Tests passed:  18
+Tests failed:  0
+<end of output>
+Test time =   0.45 sec
+----------------------------------------------------------
+Test Passed.
+"TimingTest" end time: Mar 08 00:10 CET
+"TimingTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/13 Testing: SafetyMonitorTest
+3/13 Test: SafetyMonitorTest
+Command: "/home/laptop/AuroreMkVII/build-native/safety_monitor_test"
+Directory: /home/laptop/AuroreMkVII/build-native
+"SafetyMonitorTest" start time: Mar 08 00:10 CET
+Output:
+----------------------------------------------------------
+Running SafetyMonitor tests...
+=====================================
+  PASS: test_safety_monitor_construction
+  PASS: test_safety_monitor_init
+  PASS: test_safety_monitor_start_stop
+  PASS: test_safety_monitor_vision_update
+  PASS: test_safety_monitor_actuation_update
+  PASS: test_safety_monitor_vision_latency_fault
+  PASS: test_safety_monitor_emergency_stop
+  PASS: test_safety_monitor_fault_clear
+  PASS: test_safety_monitor_safety_callback
+  PASS: test_safety_monitor_log_callback
+  PASS: test_fault_code_to_string
+  PASS: test_safety_monitor_rapid_updates
+  PASS: test_safety_monitor_concurrent_access
+  PASS: test_safety_event_structure
+  PASS: test_software_watchdog_construction
+  PASS: test_software_watchdog_init_starts_thread
+  PASS: test_software_watchdog_kick_prevents_timeout
+  PASS: test_software_watchdog_timeout_triggers_fault
+  PASS: test_software_watchdog_disabled
+  PASS: test_watchdog_kick_raii
+  PASS: test_watchdog_kick_raii_multiple
+  PASS: test_software_watchdog_config_defaults
+
+=====================================
+Tests run:     22
+Tests passed:  22
+Tests failed:  0
+<end of output>
+Test time =   0.57 sec
+----------------------------------------------------------
+Test Passed.
+"SafetyMonitorTest" end time: Mar 08 00:10 CET
+"SafetyMonitorTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/13 Testing: SafetyMonitorFaultCodesTest
+4/13 Test: SafetyMonitorFaultCodesTest
+Command: "/home/laptop/AuroreMkVII/build-native/safety_monitor_fault_codes_test"
+Directory: /home/laptop/AuroreMkVII/build-native
+"SafetyMonitorFaultCodesTest" start time: Mar 08 00:10 CET
+Output:
+----------------------------------------------------------
+Running SafetyMonitor Fault Code tests...
+=====================================
+  PASS: test_fault_code_none
+  PASS: test_fault_code_vision_stalled
+  PASS: test_fault_code_vision_latency_exceeded
+  PASS: test_fault_code_vision_buffer_overrun
+  PASS: test_fault_code_actuation_stalled
+  PASS: test_fault_code_actuation_latency_exceeded
+  PASS: test_fault_code_actuation_command_invalid
+  PASS: test_fault_code_frame_deadline_missed
+  PASS: test_fault_code_consecutive_deadline_misses
+  PASS: test_fault_code_timestamp_non_monotonic
+  PASS: test_fault_code_watchdog_feed_failed
+  PASS: test_fault_code_memory_lock_failed
+  PASS: test_fault_code_scheduling_policy_failed
+  PASS: test_fault_code_i2c_timeout
+  PASS: test_fault_code_i2c_nack
+  PASS: test_fault_code_camera_timeout
+  PASS: test_fault_code_safety_comparator_mismatch
+  PASS: test_fault_code_interlock_fault
+  PASS: test_fault_code_range_data_stale
+  PASS: test_fault_code_range_data_invalid
+  PASS: test_fault_code_emergency_stop_requested
+  PASS: test_fault_code_critical_temperature
+  PASS: test_fault_code_power_fault
+    All 23 fault codes verified: unique values, valid strings
+  PASS: test_fault_code_all_24_values
+    Fault code categories verified: 7 categories
+  PASS: test_fault_code_categories
+  PASS: test_pipeline_stage_enum
+  PASS: test_stage_latency_stats_construction
+  PASS: test_stage_latency_stats_record_latency
+  PASS: test_stage_latency_stats_stall_detection
+  PASS: test_stage_latency_stats_average
+  PASS: test_stage_latency_stats_reset
+  PASS: test_per_stage_monitor_config
+  PASS: test_safety_monitor_record_stage_latency
+  PASS: test_safety_monitor_stage_stall_detection
+  PASS: test_safety_monitor_recovery_callback
+    Health report generated: 322 bytes
+  PASS: test_safety_monitor_health_report_generation
+  PASS: test_safety_monitor_health_report_disabled
+  PASS: test_safety_monitor_frame_counting
+  PASS: test_safety_monitor_reset_stage_stats
+  PASS: test_safety_event_initialization
+  PASS: test_safety_event_population
+  PASS: test_safety_event_max_reason_length
+  PASS: test_watchdog_kick_raii_basic
+  PASS: test_watchdog_kick_raii_multiple_scopes
+  PASS: test_watchdog_kick_raii_nested
+  PASS: test_fault_severity_levels
+
+=====================================
+Tests run:     46
+Tests passed:  46
+Tests failed:  0
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"SafetyMonitorFaultCodesTest" end time: Mar 08 00:10 CET
+"SafetyMonitorFaultCodesTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/13 Testing: StateMachineTest
+5/13 Test: StateMachineTest
+Command: "/home/laptop/AuroreMkVII/build-native/state_machine_test"
+Directory: /home/laptop/AuroreMkVII/build-native
+"StateMachineTest" start time: Mar 08 00:10 CET
+Output:
+----------------------------------------------------------
+PASS: initial state is BOOT
+PASS: BOOT -> IDLE_SAFE on init complete
+PASS: IDLE_SAFE -> FREECAM on operator request
+PASS: IDLE_SAFE -> SEARCH on operator request
+PASS: SEARCH -> TRACKING on valid detection
+PASS: TRACKING -> SEARCH on lost lock
+PASS: TRACKING -> ARMED with all conditions
+PASS: ARMED -> TRACKING on timeout
+PASS: FAULT from any state on any fault
+PASS: FAULT forces interlock inhibit
+PASS: ARMED only from TRACKING (AM7-L3-MODE-009)
+PASS: SEARCH -> IDLE_SAFE on timeout
+
+All state machine tests passed.
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"StateMachineTest" end time: Mar 08 00:10 CET
+"StateMachineTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/13 Testing: StateMachineTransitionsTest
+6/13 Test: StateMachineTransitionsTest
+Command: "/home/laptop/AuroreMkVII/build-native/state_machine_transitions_test"
+Directory: /home/laptop/AuroreMkVII/build-native
+"StateMachineTransitionsTest" start time: Mar 08 00:10 CET
+Output:
+----------------------------------------------------------
+Running State Machine Transition tests...
+=====================================
+  PASS: test_fcs_state_enum_values
+  PASS: test_fcs_state_names
+  PASS: test_state_machine_initial_state
+  PASS: test_state_machine_construction
+  PASS: test_boot_state_transitions
+  PASS: test_boot_to_fault_on_fault
+  PASS: test_idle_safe_transitions_to_freecam
+  PASS: test_idle_safe_transitions_to_search
+  PASS: test_idle_safe_to_fault_on_fault
+  PASS: test_idle_safe_interlock_inhibit
+  PASS: test_freecam_transitions_to_idle_safe
+  PASS: test_freecam_transitions_to_search
+  PASS: test_freecam_to_fault_on_fault
+  PASS: test_freecam_interlock_inhibit
+  PASS: test_freecam_no_auto_lock
+  PASS: test_search_transitions_to_tracking
+  PASS: test_search_transitions_to_idle_safe_on_timeout
+  PASS: test_search_no_timeout_before_threshold
+  PASS: test_search_detection_below_confidence_threshold
+  PASS: test_search_to_fault_on_fault
+  PASS: test_search_gimbal_settling
+  PASS: test_tracking_transitions_to_search_on_lost_lock
+  PASS: test_tracking_transitions_to_armed_with_conditions
+  PASS: test_tracking_maintains_on_valid_tracker
+  PASS: test_tracking_to_fault_on_fault
+  PASS: test_tracking_redetection_below_threshold
+  PASS: test_armed_only_from_tracking
+  PASS: test_armed_requires_operator_authorization
+  PASS: test_armed_timeout_returns_to_tracking
+  PASS: test_armed_no_timeout_before_threshold
+  PASS: test_armed_to_fault_on_fault
+  PASS: test_armed_interlock_control
+  PASS: test_armed_fire_command
+  PASS: test_armed_fire_command_without_interlock
+    Tested 6 states x 8 faults = 48 combinations
+  PASS: test_fault_from_all_states
+  PASS: test_fault_state_latching
+  PASS: test_fault_interlock_inhibit
+  PASS: test_fault_no_automatic_recovery
+  PASS: test_fault_from_armed_latches
+    Transition table: 7 states, all transitions verified
+  PASS: test_transition_table_coverage
+  PASS: test_state_change_callback
+  PASS: test_has_valid_lock
+  PASS: test_has_operator_authorization
+  PASS: test_has_zero_faults
+  PASS: test_detection_structure
+  PASS: test_track_solution_structure
+  PASS: test_fire_control_solution_structure
+  PASS: test_rapid_state_transitions
+  PASS: test_concurrent_fault_injection
+  PASS: test_state_age_accumulation
+
+=====================================
+Tests run:     50
+Tests passed:  50
+Tests failed:  0
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"StateMachineTransitionsTest" end time: Mar 08 00:10 CET
+"StateMachineTransitionsTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/13 Testing: MainThreadOrchestrationTest
+7/13 Test: MainThreadOrchestrationTest
+Command: "/home/laptop/AuroreMkVII/build-native/main_thread_orchestration_test"
+Directory: /home/laptop/AuroreMkVII/build-native
+"MainThreadOrchestrationTest" start time: Mar 08 00:10 CET
+Output:
+----------------------------------------------------------
+Running Main Thread Orchestration tests...
+=====================================
+    Thread priorities: safety=99, actuation=95, vision=90, track=85
+  PASS: test_thread_priority_constants
+    CPU affinity: safety=CPU3, vision/track/actuation=CPU2
+  PASS: test_cpu_affinity_constants
+    120Hz period: 8333333ns, 1kHz period: 1000000ns
+    Phase offsets: vision=0ns, track=2000000ns, actuation=4000000ns
+  PASS: test_thread_timing_periods
+    RT thread configuration: failed (non-RT system)
+  PASS: test_configure_rt_thread_basic
+    Priorities tested: 0/4
+  PASS: test_configure_rt_thread_priority_ordering
+    CPU affinity set successfully
+  PASS: test_cpu_affinity_setting
+    Memory locked successfully
+  PASS: test_memory_lock_basic
+    Resource limits set: 64MB
+  PASS: test_resource_limits_basic
+    MAX_MEMLOCK_BYTES: 64MB
+  PASS: test_memory_lock_limit_constant
+    DMA buffers (4x): 6MB
+    Stack allocations: 1MB
+    Safety margin: 5MB
+    Total required: 12MB
+  PASS: test_memory_requirements_calculation
+    Atomic shutdown flag: OK
+  PASS: test_shutdown_flag_atomic
+    Shutdown sequence: 3 steps completed
+  PASS: test_shutdown_sequence_order
+    Thread join timeout: OK
+  PASS: test_thread_join_timeout
+    Cleanup order verified: 7 steps
+  PASS: test_shutdown_cleanup_order
+    Signal handler registration: OK
+  PASS: test_signal_handler_registration
+    SIGINT handler: OK
+  PASS: test_signal_handler_sigint
+    SIGTERM handler: OK
+  PASS: test_signal_handler_sigterm
+    Signal mask setup: OK
+  PASS: test_signal_mask_setup
+    Thread orchestration (dry-run): 4 threads started/completed
+  PASS: test_thread_orchestration_dry_run
+    Ring buffer integration: 100 frames produced/consumed
+  PASS: test_ring_buffer_integration
+    Safety monitor integration: OK
+  PASS: test_safety_monitor_integration
+    Vision deadline (3ms budget): 1ms elapsed
+  PASS: test_deadline_monitor_vision_budget
+    Track deadline (2ms budget): 1067μs elapsed
+  PASS: test_deadline_monitor_track_budget
+    Actuation deadline (1.5ms budget): 1069μs elapsed
+  PASS: test_deadline_monitor_actuation_budget
+
+=====================================
+Tests run:     24
+Tests passed:  24
+Tests failed:  0
+<end of output>
+Test time =   0.29 sec
+----------------------------------------------------------
+Test Passed.
+"MainThreadOrchestrationTest" end time: Mar 08 00:10 CET
+"MainThreadOrchestrationTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/13 Testing: DetectorTest
+8/13 Test: DetectorTest
+Command: "/home/laptop/AuroreMkVII/build-native/detector_test"
+Directory: /home/laptop/AuroreMkVII/build-native
+"DetectorTest" start time: Mar 08 00:10 CET
+Output:
+----------------------------------------------------------
+PASS: detector not ready without templates
+PASS: no detection on blank frame
+PASS: detect() returns a result on frame with embedded template
+
+All detector tests passed.
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"DetectorTest" end time: Mar 08 00:10 CET
+"DetectorTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/13 Testing: TrackerTest
+9/13 Test: TrackerTest
+Command: "/home/laptop/AuroreMkVII/build-native/tracker_test"
+Directory: /home/laptop/AuroreMkVII/build-native
+"TrackerTest" start time: Mar 08 00:10 CET
+Output:
+----------------------------------------------------------
+PASS: tracker invalid before init
+PASS: tracker valid after init
+PASS: tracker update on same frame produces valid solution
+PASS: NCC redetection score > 0.85 on same frame
+PASS: NCC redetection score < 0.85 on blank frame
+PASS: reset invalidates tracker
+
+All tracker tests passed.
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"TrackerTest" end time: Mar 08 00:10 CET
+"TrackerTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/13 Testing: BallisticsTest
+10/13 Test: BallisticsTest
+Command: "/home/laptop/AuroreMkVII/build-native/ballistics_test"
+Directory: /home/laptop/AuroreMkVII/build-native
+"BallisticsTest" start time: Mar 08 00:10 CET
+Output:
+----------------------------------------------------------
+PASS: kinetic mode tof < 10ms at 1m/700m/s
+PASS: drop mode finds upward arc for 1.5m/-0.5m target
+PASS: drop mode handles upward target gracefully
+PASS: monte carlo returns [0,1] result for 1
+PASS: KINETIC mode selected for shallow elevation
+PASS: DROP mode selected for top-down aspect
+
+All ballistics tests passed.
+<end of output>
+Test time =   1.48 sec
+----------------------------------------------------------
+Test Passed.
+"BallisticsTest" end time: Mar 08 00:10 CET
+"BallisticsTest" time elapsed: 00:00:01
+----------------------------------------------------------
+
+11/13 Testing: FusionHatTest
+11/13 Test: FusionHatTest
+Command: "/home/laptop/AuroreMkVII/build-native/fusion_hat_test"
+Directory: /home/laptop/AuroreMkVII/build-native
+"FusionHatTest" start time: Mar 08 00:10 CET
+Output:
+----------------------------------------------------------
+Fusion HAT+ Unit Tests
+======================
+Running test_fusion_hat_construction...
+  PASS
+Running test_fusion_hat_config_validation...
+  PASS
+Running test_angle_to_pulse_width_mapping...
+  PASS
+Running test_channel_range...
+  PASS
+Running test_is_connected_without_hardware...
+  Fusion HAT+ not connected
+  PASS
+Running test_disable_all_servos...
+  PASS
+Running test_error_counting...
+  PASS
+Running test_command_counting...
+  PASS
+Running test_servo_status_structure...
+  PASS
+
+======================
+Tests run: 9
+Tests passed: 9
+Tests failed: 0
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"FusionHatTest" end time: Mar 08 00:10 CET
+"FusionHatTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/13 Testing: HudSocketTest
+12/13 Test: HudSocketTest
+Command: "/home/laptop/AuroreMkVII/build-native/hud_socket_test"
+Directory: /home/laptop/AuroreMkVII/build-native
+"HudSocketTest" start time: Mar 08 00:10 CET
+Output:
+----------------------------------------------------------
+PASS: HUD socket starts and stops
+PASS: client can connect to HUD socket
+HudSocket: client connected (total: 1)
+PASS: HUD broadcast delivers state string
+HudSocket: client connected (total: 1)
+HudSocket: client connected (total: 2)
+HudSocket: max clients (2) exceeded, rejecting connection
+PASS: max clients limit enforced
+
+All HUD socket tests passed.
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"HudSocketTest" end time: Mar 08 00:10 CET
+"HudSocketTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/13 Testing: TimingIntegrationTest
+13/13 Test: TimingIntegrationTest
+Command: ""
+Directory: /home/laptop/AuroreMkVII/build-native
+"TimingIntegrationTest" start time: 
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"TimingIntegrationTest" end time: Mar 08 00:10 CET
+"TimingIntegrationTest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Mar 08 00:10 CET

@@ -1,0 +1,16 @@
+# Hashes of file build rules.
+d8bca28e5862965e3708ff8fa6a8ccf8 CMakeFiles/flatbuffers-flatc
+96b77c280e6e425029f286ac48ee7709 CMakeFiles/flatbuffers-flatc-complete
+a5be7035dbe1fc6b8f8ee06daf0e71c2 _deps/xnnpack-build/build_identifier.c
+f70123055a5a728b26e5a6a5fb442bf5 example_proto_generated/tensorflow/core/example/example.pb.h
+5548fa8968449013655e82e04854f5da example_proto_generated/tensorflow/core/example/feature.pb.h
+24aae3b14175c4358e551f9354baa7bc flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-build
+5021a6c24aafbc16f4fbcb02b026909c flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-configure
+cf3c5a127bde8b6feb5fa2674f731dd4 flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-download
+7c78f1a92d6d64e6933d62f7c52fb68a flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-install
+a83ff982ad9ca44a71ba55da71dccc28 flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-mkdir
+c018baf3716dad777926791c358f9a77 flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-patch
+0e839e6d7ee81ed9b37a7868a56cec32 flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-update
+e7e87c42b83b9a6f296ce41905c5fe03 tensorflow/lite/delegates/xnnpack/weight_cache_schema_generated.h
+0b58f7cc17f0e9f01b3da840b6b60d8e tensorflow/lite/profiling/proto/model_runtime_info.pb.cc
+831d2c4416fe1c8c4686e61e17b27e73 tensorflow/lite/profiling/proto/profiling_info.pb.cc

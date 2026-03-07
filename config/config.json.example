@@ -1,0 +1,118 @@
+{
+  "_comment": "Aurore MkVII Configuration File",
+  "_version": "0.1.0",
+  
+  "system": {
+    "frame_rate_hz": 120,
+    "control_loop_period_ms": 8.333,
+    "safety_monitor_period_ms": 1.0,
+    "use_preempt_rt": true,
+    "lock_memory": true,
+    "cpu_affinity": {
+      "vision_pipeline": 2,
+      "track_compute": 2,
+      "actuation_output": 2,
+      "safety_monitor": 3
+    },
+    "sched_priority": {
+      "vision_pipeline": 90,
+      "track_compute": 85,
+      "actuation_output": 95,
+      "safety_monitor": 99
+    }
+  },
+  
+  "camera": {
+    "width": 1536,
+    "height": 864,
+    "fps": 120,
+    "format": "RAW10",
+    "buffer_count": 4,
+    "exposure_us": 1000,
+    "gain": 1.0,
+    "timeout_ms": 20
+  },
+  
+  "gimbal": {
+    "elevation": {
+      "min_deg": -10.0,
+      "max_deg": 45.0,
+      "pulse_width_min_us": 1000,
+      "pulse_width_max_us": 2000,
+      "velocity_limit_dps": 60.0,
+      "acceleration_limit_dps2": 120.0
+    },
+    "azimuth": {
+      "min_deg": -90.0,
+      "max_deg": 90.0,
+      "pulse_width_min_us": 1000,
+      "pulse_width_max_us": 2000,
+      "velocity_limit_dps": 60.0,
+      "acceleration_limit_dps2": 120.0
+    },
+    "i2c": {
+      "bus": 1,
+      "address": 23,
+      "speed_khz": 400
+    }
+  },
+  
+  "interlock": {
+    "default_state": "inhibit",
+    "pulse_width_inhibit_us": 1000,
+    "pulse_width_enable_us": 2000,
+    "pulse_width_neutral_us": 1500,
+    "pwm_channel": 2
+  },
+  
+  "safety": {
+    "vision_deadline_ns": 20000000,
+    "actuation_deadline_ns": 2000000,
+    "frame_stall_threshold": 2,
+    "max_consecutive_misses": 3,
+    "watchdog": {
+      "enabled": true,
+      "type": "software",
+      "kick_interval_ms": 50,
+      "timeout_ms": 60
+    },
+    "faults": {
+      "camera_timeout_ms": 20,
+      "gimbal_timeout_ms": 20,
+      "range_data_stale_ms": 100,
+      "temperature_critical_c": 85
+    }
+  },
+  
+  "ballistics": {
+    "profiles": [
+      {
+        "id": 0,
+        "name": "Default",
+        "muzzle_velocity_mps": 900.0,
+        "ballistic_coefficient": 0.300,
+        "sight_height_mm": 50.0,
+        "zero_range_m": 100.0
+      }
+    ]
+  },
+  
+  "logging": {
+    "level": "info",
+    "buffer_size_kb": 64,
+    "persist": true,
+    "path": "/var/log/aurore/"
+  },
+  
+  "network": {
+    "operator_control": {
+      "socket_path": "/run/aurore/operator_control.sock",
+      "rate_limit_hz": 120,
+      "heartbeat_interval_ms": 500
+    },
+    "hud_telemetry": {
+      "socket_path": "/run/aurore/hud_telemetry.sock",
+      "update_rate_hz": 120
+    }
+  }
+}

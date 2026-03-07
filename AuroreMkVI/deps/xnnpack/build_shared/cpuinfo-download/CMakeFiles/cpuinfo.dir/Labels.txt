@@ -1,0 +1,14 @@
+# Target labels
+ cpuinfo
+# Source files and their labels
+/home/pi/Aurore/deps/xnnpack/build_shared/cpuinfo-download/CMakeFiles/cpuinfo
+/home/pi/Aurore/deps/xnnpack/build_shared/cpuinfo-download/CMakeFiles/cpuinfo.rule
+/home/pi/Aurore/deps/xnnpack/build_shared/cpuinfo-download/CMakeFiles/cpuinfo-complete.rule
+/home/pi/Aurore/deps/xnnpack/build_shared/cpuinfo-download/cpuinfo-prefix/src/cpuinfo-stamp/cpuinfo-build.rule
+/home/pi/Aurore/deps/xnnpack/build_shared/cpuinfo-download/cpuinfo-prefix/src/cpuinfo-stamp/cpuinfo-configure.rule
+/home/pi/Aurore/deps/xnnpack/build_shared/cpuinfo-download/cpuinfo-prefix/src/cpuinfo-stamp/cpuinfo-download.rule
+/home/pi/Aurore/deps/xnnpack/build_shared/cpuinfo-download/cpuinfo-prefix/src/cpuinfo-stamp/cpuinfo-install.rule
+/home/pi/Aurore/deps/xnnpack/build_shared/cpuinfo-download/cpuinfo-prefix/src/cpuinfo-stamp/cpuinfo-mkdir.rule
+/home/pi/Aurore/deps/xnnpack/build_shared/cpuinfo-download/cpuinfo-prefix/src/cpuinfo-stamp/cpuinfo-patch.rule
+/home/pi/Aurore/deps/xnnpack/build_shared/cpuinfo-download/cpuinfo-prefix/src/cpuinfo-stamp/cpuinfo-test.rule
+/home/pi/Aurore/deps/xnnpack/build_shared/cpuinfo-download/cpuinfo-prefix/src/cpuinfo-stamp/cpuinfo-update.rule

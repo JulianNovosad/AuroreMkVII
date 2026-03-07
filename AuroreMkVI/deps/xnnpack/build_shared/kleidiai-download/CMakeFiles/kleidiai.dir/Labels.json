@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/CMakeFiles/kleidiai"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/CMakeFiles/kleidiai.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/CMakeFiles/kleidiai-complete.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/kleidiai-prefix/src/kleidiai-stamp/kleidiai-build.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/kleidiai-prefix/src/kleidiai-stamp/kleidiai-configure.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/kleidiai-prefix/src/kleidiai-stamp/kleidiai-download.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/kleidiai-prefix/src/kleidiai-stamp/kleidiai-install.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/kleidiai-prefix/src/kleidiai-stamp/kleidiai-mkdir.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/kleidiai-prefix/src/kleidiai-stamp/kleidiai-patch.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/kleidiai-prefix/src/kleidiai-stamp/kleidiai-test.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/xnnpack/build_shared/kleidiai-download/kleidiai-prefix/src/kleidiai-stamp/kleidiai-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"kleidiai"
+		],
+		"name" : "kleidiai"
+	}
+}

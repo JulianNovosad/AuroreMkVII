@@ -1,0 +1,85 @@
+{
+    "application": {
+        "model_path": "aurore_mk6_50k_edgetpu.tflite",
+        "labels_path": "labelmap.pbtxt",
+        "camera_width": 1280,
+        "camera_height": 720,
+        "camera_fps": 120.0,
+        "camera_watchdog_timeout_seconds": 10,
+        "inference_worker_threads": 4,
+        "jpeg_quality": 90,
+        "detection_score_threshold": 0.5,
+        "tpu_stream": {
+            "width": 1536,
+            "height": 864,
+            "fps": 120,
+            "pixel_format": "BGR888"
+        },
+        "tpu_target": {
+            "width": 1280,
+            "height": 720
+        },
+        "enable_tpu_inference": false,
+        "enable_gpu_inference": true,
+        "enable_camera_simulation": false,
+        "log_path": "/home/pi/Aurore/logs",
+        "listen_address": "0.0.0.0",
+        "enable_visualization": true,
+        "visualization_width": 1280,
+        "visualization_height": 720,
+        "tracking": {
+            "target_class_id": 11,
+            "max_active_tracks": 1,
+            "track_iou_threshold": 0.3,
+            "track_missed_frames_threshold": 5,
+            "min_track_confidence": 0.6
+        },
+        "telemetry": {
+            "protocol": "TCP",
+            "pub_address": "tcp://*:6001"
+        },
+        "ballistics": {
+            "muzzle_velocity_mps": 850.0,
+            "bullet_mass_kg": 0.008,
+            "ballistic_coefficient_si": 0.25,
+            "sight_height_m": 0.08,
+            "zero_distance_m": 100.0,
+            "air_pressure_pa": 101325.0,
+            "temperature_c": 15.0,
+            "drag_model": "G1",
+            "drag_coefficient_reference": 0.25
+        },
+        "target": {
+            "width_m": 0.12,
+            "height_m": 0.12
+        },
+        "safety": {
+            "min_confidence_threshold": 0.1,
+            "max_position_variance": 0.75,
+            "servo_activate_confidence": 0.9,
+            "confidence_decay_factor": 0.1,
+            "distance_confidence_factor": 0.1,
+            "max_angular_error_degrees": 1.0,
+            "inner_fraction": 0.5
+        },
+        "servos": {
+            "x": {
+                "channel": 0,
+                "min": 0.5,
+                "max": 2.5,
+                "neutral": 1.5,
+                "range_deg": 180
+            },
+            "y": {
+                "channel": 1,
+                "min": 0.5,
+                "max": 2.5,
+                "neutral": 1.5,
+                "range_deg": 180
+            },
+            "frequency_hz": 50,
+            "bus": 1,
+            "address": 64
+        }
+    }
+}

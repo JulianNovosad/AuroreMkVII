@@ -1,0 +1,34 @@
+{
+  "gates": [
+    {
+      "gate_id": "gate_001",
+      "name": "diagnostics_complete",
+      "description": "Documentation drift analysis complete",
+      "status": "passed",
+      "required_for": ["implementation"]
+    },
+    {
+      "gate_id": "gate_002",
+      "name": "compliance_complete",
+      "description": "Documentation compliance verified",
+      "status": "passed",
+      "required_for": ["documentation_updates"]
+    }
+  ],
+  "gate_history": [
+    {
+      "gate": "diagnostics_complete",
+      "transitioned_at": "2026-03-07T10:37:00Z",
+      "from": false,
+      "to": true,
+      "validated_by": "documentation-drift-detector"
+    },
+    {
+      "gate": "compliance_complete",
+      "transitioned_at": "2026-03-07T10:37:00Z",
+      "from": false,
+      "to": true,
+      "validated_by": "documentation-drift-detector"
+    }
+  ]
+}

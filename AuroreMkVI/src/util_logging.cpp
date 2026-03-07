@@ -1,0 +1,530 @@
+// Verified headers: [util_logging.h, config_loader.h, iostream, filesystem, sstream...]
+// Verification timestamp: 2026-01-06 17:08:04
+/**
+ * @file util_logging.cpp
+ * @brief Implements a thread-safe, asynchronous logging utility for the application.
+ *
+ * This module provides a singleton Logger class that handles logging messages
+ * to both the console (stdout) and a file. It uses a separate writer thread
+ * to process log messages from a queue, minimizing the impact of logging
+ * operations on the main application threads. Logs are written in JSON format
+ * to a file with rotation capabilities.
+ */
+
+#include "util_logging.h"
+#include "config_loader.h" 
+#include <iostream>       // For std::cout, std::cerr
+#include <filesystem>     // C++17 for creating directories
+#include <sstream>        // For std::ostringstream
+#include <iomanip>        // For std::put_time
+#include <algorithm>      // For std::sort
+#include <cerrno>         // For errno
+#include <string>         // Explicitly include <string> for std::string
+#include "pipeline_structs.h"
+
+#include <sched.h>          // For CPU affinity
+
+
+#ifdef __linux__
+#include <sys/prctl.h> // For prctl(PR_SET_NAME)
+#endif
+
+// set_thread_name implementation
+
+
+void set_thread_name(const std::string& name) {
+#ifdef __linux__
+    // Only set if running on Linux and name fits PR_SET_NAME limit (16 chars including null terminator)
+    if (name.length() < 16) {
+        prctl(PR_SET_NAME, name.c_str(), 0, 0, 0);
+    }
+#else
+    // No-op on other platforms
+    (void)name; // Suppress unused parameter warning
+#endif // __linux__
+}
+
+void set_realtime_priority(std::thread& thread, int priority, int cpu_core) {
+#ifdef __linux__
+    sched_param sch;
+    int policy;
+    pthread_getschedparam(thread.native_handle(), &policy, &sch);
+    sch.sched_priority = priority;
+    if (pthread_setschedparam(thread.native_handle(), SCHED_FIFO, &sch) != 0) {
+        APP_LOG_WARNING("Failed to set SCHED_FIFO for thread: " + std::string(strerror(errno)));
+    }
+
+    if (cpu_core >= 0) {
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        CPU_SET(cpu_core, &cpuset);
+        if (pthread_setaffinity_np(thread.native_handle(), sizeof(cpu_set_t), &cpuset) != 0) {
+            APP_LOG_WARNING("Failed to set CPU affinity for thread to core " + std::to_string(cpu_core) + ": " + std::string(strerror(errno)));
+        }
+    }
+#else
+    (void)thread;
+    (void)priority;
+    (void)cpu_core;
+#endif
+}
+
+namespace fs = std::filesystem; ///< Alias for std::filesystem for brevity. 
+
+namespace aurore {
+namespace logging {
+
+using nlohmann::json; // Explicitly bring nlohmann::json into this namespace
+
+// Static members initialization
+std::unique_ptr<Logger> Logger::instance_;
+std::once_flag Logger::once_flag_;
+
+// CsvLogger static member initialization
+long long CsvLogger::start_time_epoch_ms_ = 0;
+uint64_t CsvLogger::start_time_monotonic_ms_ = 0;
+std::once_flag CsvLogger::start_time_init_flag_;
+
+
+// =============================================================================
+// CsvLogger Implementation (Unified Session Log)
+// =============================================================================
+
+CsvLogger::CsvLogger(const std::string& log_file_path)
+    : log_file_path_(log_file_path) {
+    
+    // Initialize program start times (once, thread-safe)
+    std::call_once(start_time_init_flag_, []() {
+        // Epoch time for produced_ts (system_clock)
+        start_time_epoch_ms_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        
+        // Monotonic time for call_ts (CLOCK_MONOTONIC_RAW)
+        struct timespec ts;
+        if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) == 0) {
+            start_time_monotonic_ms_ = (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+        } else {
+            // Fallback to steady_clock
+            auto now = std::chrono::steady_clock::now();
+            start_time_monotonic_ms_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch()).count();
+        }
+    });
+    
+    // Ensure parent directory exists (should be handled by Logger::init, but safety first)
+    fs::path p(log_file_path_);
+    if (!fs::exists(p.parent_path())) {
+        fs::create_directories(p.parent_path());
+    }
+
+    // Open in append mode
+    current_log_file_.open(log_file_path_, std::ios_base::out | std::ios_base::app);
+    if (!current_log_file_.is_open()) {
+        APP_LOG_ERROR("Failed to open Unified CSV log file: " + log_file_path_ + " - Reason: " + std::string(strerror(errno)));
+    } else {
+        // Write header if file is empty
+        if (fs::file_size(log_file_path_) == 0) {
+            write_header();
+        }
+    }
+}
+
+CsvLogger::~CsvLogger() {
+    APP_LOG_INFO("CsvLogger: Destructor called, flushing final buffer...");
+    flush_buffer_to_disk(); // Ensure data is saved before closing
+    std::lock_guard<std::recursive_mutex> lock(file_mutex_);
+    if (current_log_file_.is_open()) {
+        current_log_file_.close();
+    }
+}
+
+void CsvLogger::write_header() {
+    std::lock_guard<std::recursive_mutex> lock(file_mutex_);
+    if (current_log_file_.is_open()) {
+        // Unified "Wide Row" Header
+        current_log_file_ << "produced_ts_epoch_ms,call_ts_epoch_ms,module,event,thread_id,"
+                          << "cam_frame_id,cam_exposure_ms,cam_isp_latency_ms,cam_buffer_usage_percent,"
+                          << "image_proc_ms,"
+                          << "tpu_inference_ms,tpu_temp_c,tpu_model_score,tpu_class_id,"
+                          << "logic_target_dist_m,logic_ballistic_drop_m,logic_windage_m,logic_servo_x_cmd,logic_servo_y_cmd,logic_solution_time_ms,"
+                          << "enc_process_ms,enc_bitrate_mbps,enc_queue_depth,"
+                          << "sys_cpu_temp_c,sys_cpu_usage_pct,sys_ram_usage_pct,sys_voltage_v\n";
+        current_log_file_.flush();
+    }
+}
+
+void CsvLogger::write_entry(const CsvLogEntry& entry) {
+    {
+        std::lock_guard<std::mutex> lock(buffer_mutex_);
+        buffer_.push_back(entry);
+        entries_written_.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
+void CsvLogger::flush_buffer_to_disk() {
+    std::lock_guard<std::mutex> buffer_lock(buffer_mutex_);
+    if (buffer_.empty()) {
+        return;
+    }
+
+    size_t count = buffer_.size();
+    
+    std::lock_guard<std::recursive_mutex> file_lock(file_mutex_);
+    if (!current_log_file_.is_open()) {
+        // Try to re-open
+        current_log_file_.open(log_file_path_, std::ios_base::out | std::ios_base::app);
+        if (!current_log_file_.is_open()) {
+            APP_LOG_ERROR("Failed to reopen CSV log file. Entries dropped.");
+            buffer_.clear();
+            return;
+        }
+    }
+
+    for (const auto& e : buffer_) {
+        // Convert timestamps to relative milliseconds from program start
+        // produced_ts comes from system_clock (epoch), so subtract epoch start
+        long long relative_produced_ts = e.produced_ts_epoch_ms - start_time_epoch_ms_;
+        // call_ts comes from CLOCK_MONOTONIC_RAW, so subtract monotonic start
+        long long relative_call_ts = e.call_ts_epoch_ms - static_cast<long long>(start_time_monotonic_ms_);
+        
+        // Ensure non-negative (in case of clock issues or entries from before start time was set)
+        if (relative_produced_ts < 0) relative_produced_ts = 0;
+        if (relative_call_ts < 0) relative_call_ts = 0;
+        
+        // Format: Common (Always present)
+        current_log_file_ << relative_produced_ts << ","
+                          << relative_call_ts << ","
+                          << e.module.data() << ","
+                          << e.event.data() << ","
+                          << e.thread_id << ",";
+        
+        // Format: Camera
+        if (e.cam_frame_id != -1) { current_log_file_ << e.cam_frame_id << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.cam_exposure_ms != -1.0f) { current_log_file_ << e.cam_exposure_ms << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.cam_isp_latency_ms != -1.0f) { current_log_file_ << e.cam_isp_latency_ms << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.cam_buffer_usage_percent != -1.0f) { current_log_file_ << e.cam_buffer_usage_percent << ","; } else { current_log_file_ << "NaN,"; }
+
+        // Format: ImageProcessor
+        if (e.image_proc_ms != -1.0f) { current_log_file_ << e.image_proc_ms << ","; } else { current_log_file_ << "NaN,"; }
+
+        // Format: TPU
+        if (e.tpu_inference_ms != -1.0f) { current_log_file_ << e.tpu_inference_ms << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.tpu_temp_c != -1.0f) { current_log_file_ << e.tpu_temp_c << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.tpu_model_score != -1.0f) { current_log_file_ << e.tpu_model_score << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.tpu_class_id != -1) { current_log_file_ << e.tpu_class_id << ","; } else { current_log_file_ << "NaN,"; }
+
+        // Format: Logic
+        if (e.logic_target_dist_m != -1.0f) { current_log_file_ << e.logic_target_dist_m << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.logic_ballistic_drop_m != -1.0f) { current_log_file_ << e.logic_ballistic_drop_m << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.logic_windage_m != -1.0f) { current_log_file_ << e.logic_windage_m << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.logic_servo_x_cmd != -1.0f) { current_log_file_ << e.logic_servo_x_cmd << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.logic_servo_y_cmd != -1.0f) { current_log_file_ << e.logic_servo_y_cmd << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.logic_solution_time_ms != -1.0f) { current_log_file_ << e.logic_solution_time_ms << ","; } else { current_log_file_ << "NaN,"; }
+
+        // Format: Encoder
+        if (e.enc_process_ms != -1.0f) { current_log_file_ << e.enc_process_ms << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.enc_bitrate_mbps != -1.0f) { current_log_file_ << e.enc_bitrate_mbps << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.enc_queue_depth != -1) { current_log_file_ << e.enc_queue_depth << ","; } else { current_log_file_ << "NaN,"; }
+
+        // Format: System
+        if (e.sys_cpu_temp_c != -1.0f) { current_log_file_ << e.sys_cpu_temp_c << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.sys_cpu_usage_pct != -1.0f) { current_log_file_ << e.sys_cpu_usage_pct << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.sys_ram_usage_pct != -1.0f) { current_log_file_ << e.sys_ram_usage_pct << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.sys_voltage_v != -1.0f) { current_log_file_ << e.sys_voltage_v; } else { current_log_file_ << "NaN"; }
+        
+        current_log_file_ << "\n";
+    }
+    
+    current_log_file_.flush();
+    entries_flushed_.fetch_add(count, std::memory_order_relaxed);
+    buffer_.clear();
+}
+
+// =============================================================================
+// Logger Implementation
+// =============================================================================
+
+// Definition for the public default constructor
+Logger::Logger()
+    : base_log_dir_("."), log_file_prefix_("dummy_log"), running_(false), initialized_(false), last_rotation_time_(std::chrono::system_clock::now()), max_standard_log_files_(1) {
+}
+
+void Logger::init(const std::string& log_file_prefix, const std::string& base_log_dir, const ConfigLoader* config_loader) {
+    std::call_once(once_flag_, [&]() {
+        instance_.reset(new Logger(log_file_prefix, base_log_dir, config_loader));
+    });
+}
+
+Logger& Logger::getInstance() {
+    if (!instance_) {
+        // Initialize with default values if not already initialized
+        init("default", "logs", nullptr);
+    }
+    // If it's still not initialized, throw an exception
+    if (!instance_) {
+        throw std::runtime_error("Logger failed to initialize");
+    }
+    return *instance_.get();
+}
+
+Logger::Logger(const std::string& log_file_prefix, const std::string& base_log_dir, const ConfigLoader* config_loader)
+    : base_log_dir_(base_log_dir), log_file_prefix_(log_file_prefix), running_(false), initialized_(false), last_rotation_time_(std::chrono::system_clock::now()), max_standard_log_files_(3) {
+    
+    // Bootstrap phase: Use std::cout/stderr instead of APP_LOG_* to avoid deadlock
+    // The writer thread isn't running yet, so we can't use the logging system
+    
+    // 1. Ensure Base Directory Exists
+    if (!fs::exists(base_log_dir_)) {
+        fs::create_directories(base_log_dir_);
+    }
+    
+    // 2. Prune Old Sessions
+    prune_session_directories();
+
+    // 3. Create New Session Directory
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    std::tm* now_tm = std::localtime(&now_c);
+    std::ostringstream oss;
+    oss << "session_" << std::put_time(now_tm, "%Y%m%d_%H%M%S");
+    std::string session_name = oss.str();
+    
+    fs::path session_path = fs::path(base_log_dir_) / session_name;
+    fs::create_directories(session_path);
+    current_session_dir_ = session_path.string();
+    std::cout << "[BOOTSTRAP] Logger: Created session directory: " << current_session_dir_ << std::endl;
+
+    // 4. Initialize Standard Log in Session Dir
+    fs::path std_log_path = session_path / (log_file_prefix_ + ".json");
+    standard_log_file_.open(std_log_path.string(), std::ios_base::out | std::ios_base::trunc);
+    if (!standard_log_file_.is_open()) {
+        std::cerr << "[BOOTSTRAP] Logger ERROR: Failed to open standard log file: " << std_log_path.string() << std::endl;
+    }
+
+    // 5. Write Metadata Sidecar
+    if (config_loader) {
+        write_metadata_json(config_loader);
+    } else {
+        std::cerr << "[BOOTSTRAP] Logger WARNING: No ConfigLoader provided. Skipping metadata.json generation." << std::endl;
+    }
+
+    // 6. Initialize Unified CSV Logger
+    fs::path unified_csv_path = session_path / "unified.csv";
+    unified_logger_ = std::make_unique<CsvLogger>(unified_csv_path.string());
+    std::cout << "[BOOTSTRAP] Logger: Initialized in directory: " << current_session_dir_ << std::endl;
+}
+
+Logger::~Logger() {
+    stop_writer_thread(); 
+    if (standard_log_file_.is_open()) {
+        standard_log_file_.close(); 
+    }
+}
+
+void Logger::start_writer_thread() {
+    if (!running_.exchange(true)) { 
+        // Bootstrap phase: Create threads without using the logging system
+        // to avoid potential deadlock during initialization
+        standard_writer_thread_ = std::thread(&Logger::writer_thread_func, this);
+        log_flusher_thread_ = std::thread(&Logger::log_flusher_thread_func, this);
+        
+        // Flush bootstrap logs to the queue now that threads are running
+        {
+            std::lock_guard<std::mutex> lock(bootstrap_mutex_);
+            for (const auto& msg : bootstrap_logs_) {
+                log_queue_.push(LogEntry{std::chrono::system_clock::now(), "BOOTSTRAP", msg.c_str()});
+            }
+            bootstrap_logs_.clear();
+        }
+        
+        // Mark as initialized - now APP_LOG_* macros will work properly
+        initialized_.store(true, std::memory_order_release);
+        
+        // Give threads a moment to process bootstrap logs
+        // This avoids race condition where logs might be queued before threads
+        // are ready to process them
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+void Logger::stop_writer_thread() {
+    // CRITICAL: Flush buffer BEFORE signaling threads to stop
+    // This ensures all buffered telemetry data is written to disk
+    if (unified_logger_) {
+        unified_logger_->flush_buffer_to_disk();
+    }
+    
+    if (running_.exchange(false)) {  // Signal threads to stop
+        if (standard_writer_thread_.joinable()) {
+            standard_writer_thread_.join(); 
+        }
+        if (log_flusher_thread_.joinable()) {
+            log_flusher_thread_.join(); 
+        }
+        // Final flush after threads exit (belt and suspenders)
+        if (unified_logger_) {
+            unified_logger_->flush_buffer_to_disk();
+        }
+    }
+}
+
+void Logger::log(const std::string& level, const std::string& message) {
+    // Also print to stdout for immediate feedback during debugging
+    std::cout << "[" << level << "] " << message << std::endl;
+
+    if (!initialized_.load(std::memory_order_acquire)) {
+        // Bootstrap mode: store in memory buffer until writer thread starts
+        std::lock_guard<std::mutex> lock(bootstrap_mutex_);
+        bootstrap_logs_.push_back("[" + level + "] " + message);
+        return;
+    }
+    log_queue_.push(std::move(LogEntry{std::chrono::system_clock::now(), level.c_str(), message.c_str()})); 
+}
+
+void Logger::log_json(const std::string& key, const std::string& value) {
+    std::string json_message = "{\"" + key + "\": " + value + "}";
+    log_queue_.push(std::move(LogEntry{std::chrono::system_clock::now(), "JSON", json_message.c_str()})); 
+}
+
+void Logger::log_csv(const CsvLogEntry& entry) {
+    if (unified_logger_) {
+        unified_logger_->write_entry(entry);
+    }
+}
+
+void Logger::init_with_config(const ConfigLoader* config_loader) {
+    if (!initialized_.load(std::memory_order_acquire)) {
+        initialized_.store(true, std::memory_order_release);
+    }
+    // Re-write metadata.json with the actual config
+    if (config_loader) {
+        write_metadata_json(config_loader);
+    } else {
+        std::cerr << "[BOOTSTRAP] Logger WARNING: ConfigLoader not provided during re-initialization. metadata.json may be incomplete." << std::endl;
+    }
+}
+
+
+void Logger::writer_thread_func() {
+    set_thread_name("StdLogWriter");
+    // APP_LOG_INFO("Logger: Standard writer thread started."); // Can't log here, infinite recursion potentially if buffer full?
+    // Actually safe to log to queue, but let's avoid noise.
+
+    LogEntry entry; 
+    while (running_.load(std::memory_order_acquire)) { 
+        if (log_queue_.pop(entry)) { 
+            if (standard_log_file_.is_open()) {
+                standard_log_file_ << "{\"timestamp\":\"" << get_current_iso_time() << "\", \"level\":\"" << entry.level.data() << "\", \"message\":\"" << entry.message.data() << "\"}" << std::endl;
+            }
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+    while (log_queue_.pop(entry)) {
+        if (standard_log_file_.is_open()) {
+            standard_log_file_ << "{\"timestamp\":\"" << get_current_iso_time() << "\", \"level\":\"" << entry.level.data() << "\", \"message\":\"" << entry.message.data() << "\"}" << std::endl;
+        }
+    }
+}
+
+void Logger::rotate_standard_log_file() {
+    // Session based rotation logic handles this mostly, but if we wanted to split large standard logs within a session:
+    // Implemented simplistic version here or assume session is short enough.
+    // For now, no-op or simple close/reopen if needed.
+    // Current requirement: 3 latest run folders. The logic is in the constructor.
+}
+
+std::string Logger::get_current_iso_time() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    std::tm* now_tm = std::gmtime(&now_c); 
+    std::ostringstream oss;
+    oss << std::put_time(now_tm, "%Y-%m-%dT%H:%M:%SZ");
+    return oss.str();
+}
+
+long long Logger::get_raw_monotonic_time_ns() {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) == -1) {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+    return static_cast<long long>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+}
+
+void Logger::log_flusher_thread_func() {
+    set_thread_name("CsvFlusher");
+    while (running_.load(std::memory_order_acquire)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000)); 
+        if (unified_logger_) {
+            unified_logger_->flush_buffer_to_disk();
+        }
+    }
+    if (unified_logger_) {
+        unified_logger_->flush_buffer_to_disk();
+    }
+}
+
+void Logger::prune_session_directories() {
+    std::vector<fs::path> sessions;
+    try {
+        for (const auto& entry : fs::directory_iterator(base_log_dir_)) {
+            if (entry.is_directory() && entry.path().filename().string().find("session_") == 0) {
+                sessions.push_back(entry.path());
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        // Don't use APP_LOG here to avoid recursive logger initialization
+        std::cerr << "Logger: Error iterating log dir for pruning: " << e.what() << std::endl;
+        return; // Exit early on error to avoid hanging
+    }
+
+    std::sort(sessions.begin(), sessions.end()); // Lexicographical sort works for YYYYMMDD_HHMMSS
+
+    // Keep latest 2 (so we can add 1 more to make 3)
+    // Actually mandate says: "maintain exactly the 3 latest run folders... pruning the oldest on startup"
+    // So if we have 3, delete 1. If we have 10, delete 8.
+    // We want to end up with 3 *after* creation. So delete until we have 2.
+    
+    while (sessions.size() >= 3) {
+        // Don't use APP_LOG here to avoid recursive logger initialization
+        std::cout << "Logger: Pruning old session: " << sessions.front().string() << std::endl;
+        try {
+            fs::remove_all(sessions.front());
+        } catch (const fs::filesystem_error& e) {
+            std::cerr << "Logger: Error pruning session: " << e.what() << std::endl;
+            break; // Stop pruning on error to avoid hanging
+        }
+        sessions.erase(sessions.begin());
+    }
+}
+
+void Logger::write_metadata_json(const ConfigLoader* config) {
+    if (!config) return; 
+    
+    fs::path meta_path = fs::path(current_session_dir_) / "metadata.json";
+    std::ofstream meta_file(meta_path);
+    if (meta_file.is_open()) {
+        nlohmann::json meta;
+        
+        // System Info
+        meta["compile_timestamp"] = __DATE__ " " __TIME__;
+        // meta["git_hash"] = GIT_HASH; // Needs build system support, optional
+        
+        // Configuration
+        meta["config"] = config->get_json_config();
+        
+        // Specific Ballistics Context ("Diameter of the Sun")
+        meta["ballistics"]["muzzle_velocity_mps"] = config->get_muzzle_velocity_mps();
+        meta["ballistics"]["ballistic_coefficient"] = config->get_ballistic_coefficient_si();
+        meta["ballistics"]["zero_distance_m"] = config->get_zero_distance_m();
+        meta["ballistics"]["sight_height_m"] = config->get_sight_height_m();
+        meta["ballistics"]["env_temp_c"] = config->get_temperature_c();
+        meta["ballistics"]["env_pressure_pa"] = config->get_air_pressure_pa();
+
+        meta_file << meta.dump(4);
+    } else {
+        APP_LOG_ERROR("Logger: Failed to write metadata.json");
+    }
+}
+}
+}

@@ -1,0 +1,1 @@
+/usr/bin/cc -fPIC -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/fft2d_alloc.dir/link.d -shared -Wl,-soname,libfft2d_alloc.so -o libfft2d_alloc.so CMakeFiles/fft2d_alloc.dir/__/__/fft2d/alloc.c.o

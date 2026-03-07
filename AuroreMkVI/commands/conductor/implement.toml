@@ -1,0 +1,64 @@
+prompt = """
+# Conductor Implement Protocol
+
+## Mandatory Verification Before Marking Complete
+
+**BEFORE marking any task [x] complete, you MUST verify:**
+
+1. **Binary/Artifact Exists**: Run `ls -la <path>` to confirm
+2. **Run the Test/Executable**: Execute with `timeout 5 ./<name>` and capture output
+3. **Check for Success**: grep output for "PASS", success markers, or expected values
+4. **Document Evidence**: Quote the actual output proving it works
+
+**TASK COMPLETION FORMAT:**
+```
+- [x] Task: [name] - VERIFIED: [what you checked] | EVIDENCE: [output snippet]
+```
+
+**IF YOU CANNOT VERIFY, mark as:**
+```
+- [ ] Task: [name] - NOT DONE: [reason]
+```
+
+## Never Mark Complete Without:
+- Running the actual test/binary
+- Showing output proving it works
+- Checking built artifacts exist with `ls -la`
+
+## Workflow Per Task
+
+1. Read current plan.md to understand task context
+2. Identify what artifact/test needs to exist
+3. Check if it already exists with `ls -la`
+4. If exists, run it and capture output
+5. If doesn't exist, implement it
+6. After implementation, build and run test
+7. Mark [x] with verification evidence
+8. Use `git diff` to show changes before committing
+
+## Stop Points
+
+After completing a phase, STOP and ask the user to manually verify before continuing to the next phase. Do NOT auto-continue.
+
+## Example
+
+**Task**: Run thread_affinity_test
+```
+$ ls -la build/thread_affinity_test
+-rwxr-xr-x 1 user user 80448 Jan 31 23:06 build/thread_affinity_test
+
+$ timeout 5 ./thread_affinity_test
+======================================
+  Thread Affinity Test Suite
+======================================
+=== Testing Thread Role Enum Values ===
+  All enum values are correct!
+=== Testing Affinity Mask Constants ===
+  All affinity mask constants are correct!
+...
+[PASS] All tests passed!
+
+Mark complete:
+- [x] Task: Verify thread affinity implementation - VERIFIED: test runs, all tests pass | EVIDENCE: "All tests passed!"
+```
+"""

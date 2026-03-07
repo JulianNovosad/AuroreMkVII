@@ -1,0 +1,1 @@
+/usr/bin/cc -fPIC -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/fft2d_shrtdct.dir/link.d -shared -Wl,-soname,libfft2d_shrtdct.so -o libfft2d_shrtdct.so CMakeFiles/fft2d_shrtdct.dir/__/__/fft2d/shrtdct.c.o

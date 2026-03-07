@@ -1,0 +1,86 @@
+{
+  "session_id": "session_20260306_001",
+  "artifacts": [
+    {
+      "name": "verification_report_2026-03-07.md",
+      "path": "docs/reports/2026-03-07-verification.md",
+      "agent": "general-purpose",
+      "version": 1,
+      "timestamp": "2026-03-07T15:00:00Z",
+      "description": "Full verification report: tests + spec compliance audit",
+      "checksum_sha256": "2ad559a098c5e9b315ef01af7f6868d47b11f4fa7eebd930c57646bf5542a12c"
+    },
+    {
+      "name": "state_machine_compliance_audit.json",
+      "path": "agent_sessions/session_20260306_001/blackboard/artifacts/state_machine_audit.json",
+      "agent": "code-compliance-researcher",
+      "version": 1,
+      "timestamp": "2026-03-07T14:45:00Z",
+      "description": "State machine compliance: 2 PASS, 5 PARTIAL, 13 GAP (10%)"
+    },
+    {
+      "name": "vision_detection_compliance_audit.json",
+      "path": "agent_sessions/session_20260306_001/blackboard/artifacts/vision_audit.json",
+      "agent": "code-compliance-researcher",
+      "version": 1,
+      "timestamp": "2026-03-07T14:45:00Z",
+      "description": "Vision/Detection compliance: 3 PASS, 4 PARTIAL, 6 GAP (23%)"
+    },
+    {
+      "name": "tracking_compliance_audit.json",
+      "path": "agent_sessions/session_20260306_001/blackboard/artifacts/tracking_audit.json",
+      "agent": "code-compliance-researcher",
+      "version": 1,
+      "timestamp": "2026-03-07T14:45:00Z",
+      "description": "Tracking compliance: 10 PASS, 3 PARTIAL, 7 GAP (50%)"
+    },
+    {
+      "name": "actuation_gimbal_compliance_audit.json",
+      "path": "agent_sessions/session_20260306_001/blackboard/artifacts/actuation_audit.json",
+      "agent": "code-compliance-researcher",
+      "version": 1,
+      "timestamp": "2026-03-07T14:45:00Z",
+      "description": "Actuation/Gimbal compliance: 0 PASS, 3 PARTIAL, 3 GAP (0%)"
+    },
+    {
+      "name": "ballistics_compliance_audit.json",
+      "path": "agent_sessions/session_20260306_001/blackboard/artifacts/ballistics_audit.json",
+      "agent": "code-compliance-researcher",
+      "version": 1,
+      "timestamp": "2026-03-07T14:45:00Z",
+      "description": "Ballistics compliance: 1 PASS, 2 PARTIAL, 1 GAP (25%)"
+    },
+    {
+      "name": "hud_telemetry_compliance_audit.json",
+      "path": "agent_sessions/session_20260306_001/blackboard/artifacts/hud_telemetry_audit.json",
+      "agent": "code-compliance-researcher",
+      "version": 1,
+      "timestamp": "2026-03-07T14:45:00Z",
+      "description": "HUD/Telemetry compliance: 6 PASS, 4 PARTIAL, 6 GAP (37%)"
+    },
+    {
+      "name": "core_safety_rt_compliance_audit.json",
+      "path": "agent_sessions/session_20260306_001/blackboard/artifacts/core_safety_audit.json",
+      "agent": "cpp-integration-validator",
+      "version": 1,
+      "timestamp": "2026-03-07T14:45:00Z",
+      "description": "Core/Safety/RT compliance: 5 PASS, 5 PARTIAL, 15 GAP (20%)"
+    },
+    {
+      "name": "documentation_drift_analysis.json",
+      "path": "agent_sessions/session_20260306_001/blackboard/artifacts/drift_audit.json",
+      "agent": "documentation-drift-detector",
+      "version": 1,
+      "timestamp": "2026-03-07T14:50:00Z",
+      "description": "Documentation drift: 4 findings (1 critical)"
+    },
+    {
+      "name": "wcet_analysis.json",
+      "path": "agent_sessions/session_20260306_001/blackboard/artifacts/wcet_analysis.json",
+      "agent": "performance-regression-profiler",
+      "version": 1,
+      "timestamp": "2026-03-07T14:55:00Z",
+      "description": "WCET analysis: 8 violations, 3 threads over budget"
+    }
+  ]
+}

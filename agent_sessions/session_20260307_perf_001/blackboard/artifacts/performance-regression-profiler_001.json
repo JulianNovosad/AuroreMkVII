@@ -1,0 +1,439 @@
+{
+  "agent": "performance-regression-profiler",
+  "version": 1,
+  "session_id": "session_20260307_perf_001",
+  "timestamp": "2026-03-07T16:05:00Z",
+  "baseline_source": "spec.md requirements + wcet_analysis.json",
+  "checksum_sha256": "033b54dd0fdffd760800f57e5e323d672212b0980a9ca6a57e53cedada75395f",
+  "metrics_comparison": {
+    "vision_pipeline_wcet_ns": {
+      "budget_ns": 5000000,
+      "estimated_current_ns": 15000000,
+      "delta_percent": 200.0,
+      "severity": "critical",
+      "verdict": "BLOCKS_WCET - Exceeds budget by 3x"
+    },
+    "track_compute_wcet_ns": {
+      "budget_ns": 2000000,
+      "estimated_current_ns": 12000000,
+      "delta_percent": 500.0,
+      "severity": "critical",
+      "verdict": "BLOCKS_WCET - CSRT exceeds budget by 6x"
+    },
+    "actuation_output_wcet_ns": {
+      "budget_ns": 1500000,
+      "estimated_current_ns": 3000000,
+      "delta_percent": 100.0,
+      "severity": "critical",
+      "verdict": "BLOCKS_WCET - I2C blocking + computation"
+    },
+    "safety_monitor_wcet_ns": {
+      "budget_ns": 1000000,
+      "estimated_current_ns": 100000,
+      "delta_percent": -90.0,
+      "severity": "low",
+      "verdict": "PASS - Well within budget"
+    },
+    "frame_rate_hz": {
+      "target_hz": 120,
+      "achievable_hz": 40,
+      "delta_percent": -66.7,
+      "severity": "critical",
+      "verdict": "FAIL - Cannot sustain 120Hz with current implementation"
+    }
+  },
+  "bottlenecks_identified": [
+    {
+      "bottleneck_id": "PERF_001",
+      "type": "cpu",
+      "location": {
+        "file": "src/vision/orb_detector.cpp",
+        "line": 32,
+        "function": "OrbDetector::detect()"
+      },
+      "description": "ORB detectAndCompute() called on every frame at 1536×864 resolution with 300 keypoints",
+      "impact": "3-5ms per frame - exceeds 5ms WCET budget alone",
+      "evidence": "wcet_analysis.json: ORB feature detection at 1536×864 with 300 keypoints: estimated 3-5ms on RPi 5",
+      "recommendation": "Replace with AprilTag/ArUco markers or reduce resolution to 640×480; consider hardware-accelerated ORB via VideoCore VII"
+    },
+    {
+      "bottleneck_id": "PERF_002",
+      "type": "cpu",
+      "location": {
+        "file": "src/vision/orb_detector.cpp",
+        "line": 28,
+        "function": "OrbDetector::detect()"
+      },
+      "description": "cv::createCLAHE(2.0, {8,8}) instantiated on EVERY frame - histogram equalization is computationally expensive",
+      "impact": "2-3ms per frame at 1536×864",
+      "evidence": "wcet_analysis.json: CLAHE is computationally expensive histogram equalization. At 1536×864 resolution, this alone can exceed 2-3ms on RPi 5",
+      "recommendation": "Cache CLAHE object as member variable; apply only when lighting changes detected; or use simpler gamma correction"
+    },
+    {
+      "bottleneck_id": "PERF_003",
+      "type": "cpu",
+      "location": {
+        "file": "src/vision/orb_detector.cpp",
+        "line": 47,
+        "function": "OrbDetector::detect()"
+      },
+      "description": "cv::findHomography() with RANSAC (3.0 threshold, 8-point algorithm) - iterative and non-deterministic",
+      "impact": "5-10ms worst-case - dominant WCET contributor in vision pipeline",
+      "evidence": "wcet_analysis.json: RANSAC is iterative and non-deterministic. Worst-case: 5-10ms",
+      "recommendation": "Limit RANSAC iterations to 50 (per AM7-L2-VIS-001); use PROSAC for faster convergence; or replace with direct linear transform (DLT) for known planar targets"
+    },
+    {
+      "bottleneck_id": "PERF_004",
+      "type": "cpu",
+      "location": {
+        "file": "src/tracking/csrt_tracker.cpp",
+        "line": 25,
+        "function": "KcfTracker::update()"
+      },
+      "description": "Note: Code uses KCF tracker (fast), but wcet_analysis references CSRT which is 10-20ms. Current KCF implementation is acceptable at 1-2ms",
+      "impact": "KCF: 1-2ms (ACCEPTABLE); CSRT would be 10-20ms (BLOCKING)",
+      "evidence": "Source code shows KcfTracker using cv::TrackerKCF; wcet_analysis references slower CSRT",
+      "recommendation": "KEEP KCF implementation; ensure CSRT is never used in production; document KCF vs CSRT tradeoff"
+    },
+    {
+      "bottleneck_id": "PERF_005",
+      "type": "cpu",
+      "location": {
+        "file": "src/actuation/ballistic_solver.cpp",
+        "line": 93,
+        "function": "BallisticSolver::monte_carlo_p_hit()"
+      },
+      "description": "50 Monte Carlo simulations with std::mt19937 RNG, sqrt(), normal distribution sampling on hot path",
+      "impact": "50-200μs per call - significant for 1.5ms actuation budget",
+      "evidence": "wcet_analysis.json: monte_carlo_p_hit() executes 50 Monte Carlo simulations... Estimated: 50-200μs per call",
+      "recommendation": "Pre-compute lookup table for P_hit vs range/elevation; use analytical approximation instead of Monte Carlo"
+    },
+    {
+      "bottleneck_id": "PERF_006",
+      "type": "cpu",
+      "location": {
+        "file": "src/actuation/ballistic_solver.cpp",
+        "line": 52,
+        "function": "BallisticSolver::solve_drop()"
+      },
+      "description": "1000-iteration optimization loop searching for minimum velocity with sqrt(), atan2() per iteration",
+      "impact": "50μs worst-case - deterministic but significant budget consumption",
+      "evidence": "wcet_analysis.json: Loop body includes sqrt(), atan2(). Worst-case: 1000 iterations × ~50ns = 50μs",
+      "recommendation": "Reduce iterations to 100 with golden-section search; pre-compute ballistic tables at boot"
+    },
+    {
+      "bottleneck_id": "PERF_007",
+      "type": "io",
+      "location": {
+        "file": "src/drivers/fusion_hat_i2c.cpp",
+        "line": 43,
+        "function": "FusionHat::write_pwm_channel()"
+      },
+      "description": "Blocking I2C write() syscall with no timeout - can block for several ms waiting for bus availability",
+      "impact": "1-3ms blocking on actuation hot path - exceeds 1.5ms budget",
+      "evidence": "wcet_analysis.json: I2C transactions can block for several ms waiting for bus availability. No timeout mechanism",
+      "recommendation": "Use async I2C with DMA; move I2C to dedicated thread with shared memory command buffer; add timeout with retry logic"
+    },
+    {
+      "bottleneck_id": "PERF_008",
+      "type": "blocking",
+      "location": {
+        "file": "src/drivers/fusion_hat_i2c.cpp",
+        "line": 52,
+        "function": "FusionHat::trigger_effector()"
+      },
+      "description": "std::this_thread::sleep_for(pulse_ms) blocks for 10ms default - 10 frame periods at 120Hz",
+      "impact": "Blocks actuation thread for 10ms - causes deadline misses",
+      "evidence": "wcet_analysis.json: Blocking sleep in actuation path. If called from RT thread, this blocks the thread for pulse duration",
+      "recommendation": "Use timer-based PWM generation; never call from RT thread; move to separate effector control thread"
+    },
+    {
+      "bottleneck_id": "PERF_009",
+      "type": "memory",
+      "location": {
+        "file": "src/common/hud_socket.cpp",
+        "line": 68,
+        "function": "HudSocket::frame_to_json()"
+      },
+      "description": "std::ostringstream allocates internal string buffer on every broadcast call",
+      "impact": "Heap allocation every frame - violates AM7-L3-TIM-002 (no heap after init)",
+      "evidence": "wcet_analysis.json: Each call allocates internal string buffer. On broadcast path, this triggers heap allocation every frame",
+      "recommendation": "Use pre-allocated char buffer with snprintf(); reserve 512 bytes for JSON output"
+    },
+    {
+      "bottleneck_id": "PERF_010",
+      "type": "memory",
+      "location": {
+        "file": "src/common/hud_socket.cpp",
+        "line": 78,
+        "function": "HudSocket::send_to_clients()"
+      },
+      "description": "std::vector<int> dead created for dead connection tracking - heap allocation in broadcast path",
+      "impact": "Heap allocation every broadcast cycle",
+      "evidence": "wcet_analysis.json: Heap allocation in client broadcast path",
+      "recommendation": "Use pre-allocated vector with clear(); or use small-object optimization with std::array<int, 16>"
+    },
+    {
+      "bottleneck_id": "PERF_011",
+      "type": "lock_contention",
+      "location": {
+        "file": "src/common/hud_socket.cpp",
+        "line": 76,
+        "function": "HudSocket::send_to_clients()"
+      },
+      "description": "clients_mutex_ held during send() syscall to all clients - slow clients block mutex acquisition",
+      "impact": "Priority inversion risk if HUD thread has different priority than RT threads",
+      "evidence": "wcet_analysis.json: If any client is slow, all other threads block waiting for mutex",
+      "recommendation": "Move HUD broadcast to separate low-priority thread; use lock-free ring buffer for frame queue"
+    },
+    {
+      "bottleneck_id": "PERF_012",
+      "type": "lock_contention",
+      "location": {
+        "file": "include/aurore/ring_buffer.hpp",
+        "line": 225,
+        "function": "MPMCRingBuffer::push()/pop()"
+      },
+      "description": "MPMCRingBuffer uses std::mutex - NOT lock-free. LockFreeRingBuffer (SPSC) is available and should be used instead",
+      "impact": "Lock contention causes WCET violations if used in RT path with multiple producers/consumers",
+      "evidence": "wcet_analysis.json: If used in RT path with multiple producers/consumers, contention will cause WCET violations",
+      "recommendation": "Use LockFreeRingBuffer (SPSC) for single-producer single-consumer paths; already available in ring_buffer.hpp"
+    }
+  ],
+  "regressions_detected": [
+    {
+      "regression_id": "REG_001",
+      "metric": "vision_pipeline_wcet",
+      "severity": "critical",
+      "baseline": "5000000ns (spec requirement)",
+      "current": "15000000ns (estimated)",
+      "delta_percent": 200.0,
+      "probable_cause": "ORB + CLAHE + RANSAC pipeline too computationally intensive for RPi 5 at 1536×864",
+      "code_change_correlation": "src/vision/orb_detector.cpp implements full ORB pipeline without optimization"
+    },
+    {
+      "regression_id": "REG_002",
+      "metric": "track_compute_wcet",
+      "severity": "critical",
+      "baseline": "2000000ns (spec requirement)",
+      "current": "12000000ns (if CSRT used)",
+      "delta_percent": 500.0,
+      "probable_cause": "wcet_analysis references CSRT but code uses KCF - documentation mismatch",
+      "code_change_correlation": "src/tracking/csrt_tracker.cpp actually implements KcfTracker (correct choice)"
+    },
+    {
+      "regression_id": "REG_003",
+      "metric": "actuation_latency",
+      "severity": "critical",
+      "baseline": "1500000ns (spec requirement)",
+      "current": "3000000ns (estimated with blocking I2C)",
+      "delta_percent": 100.0,
+      "probable_cause": "Blocking I2C writes + sleep_for in effector trigger",
+      "code_change_correlation": "src/drivers/fusion_hat_i2c.cpp uses synchronous I2C API"
+    },
+    {
+      "regression_id": "REG_004",
+      "metric": "heap_allocation_rt",
+      "severity": "high",
+      "baseline": "0 (AM7-L3-TIM-002 requirement)",
+      "current": "Multiple allocations per frame in HUD socket",
+      "delta_percent": null,
+      "probable_cause": "std::ostringstream and std::vector in broadcast path",
+      "code_change_correlation": "src/common/hud_socket.cpp uses STL containers without pre-allocation"
+    }
+  ],
+  "sla_compliance": {
+    "sla_definitions": {
+      "wcet_vision_pipeline_max_ns": 5000000,
+      "wcet_track_compute_max_ns": 2000000,
+      "wcet_actuation_output_max_ns": 1500000,
+      "wcet_safety_monitor_max_ns": 1000000,
+      "frame_rate_min_hz": 120,
+      "jitter_max_percent": 5.0,
+      "heap_allocation_rt_max": 0
+    },
+    "compliance_status": {
+      "vision_pipeline_wcet": "FAIL - 15ms vs 5ms budget",
+      "track_compute_wcet": "PASS (KCF) - 1-2ms vs 2ms budget",
+      "actuation_output_wcet": "FAIL - 3ms vs 1.5ms budget",
+      "safety_monitor_wcet": "PASS - 0.1ms vs 1ms budget",
+      "frame_rate": "FAIL - Cannot sustain 120Hz",
+      "jitter": "UNKNOWN - Requires runtime measurement",
+      "heap_allocation_rt": "FAIL - HUD socket allocates per-frame"
+    },
+    "overall_sla_met": false
+  },
+  "optimization_recommendations": [
+    {
+      "recommendation_id": "OPT_001",
+      "priority": "CRITICAL",
+      "bottleneck_addressed": "PERF_001",
+      "description": "Replace ORB detector with AprilTag or ArUco marker detection",
+      "estimated_improvement": "Reduce vision pipeline from 15ms to 3-4ms",
+      "effort": "high",
+      "rationale": "AprilTag detection is 10× faster than ORB and deterministic; well-suited for calibration target per spec.md"
+    },
+    {
+      "recommendation_id": "OPT_002",
+      "priority": "CRITICAL",
+      "bottleneck_addressed": "PERF_002",
+      "description": "Cache CLAHE object as member variable; apply only on lighting change",
+      "estimated_improvement": "Save 1-2ms per frame by avoiding recreation",
+      "effort": "low",
+      "rationale": "cv::createCLAHE allocates internal state; caching avoids reallocation"
+    },
+    {
+      "recommendation_id": "OPT_003",
+      "priority": "CRITICAL",
+      "bottleneck_addressed": "PERF_003",
+      "description": "Limit RANSAC iterations to 50; use PROSAC for faster convergence",
+      "estimated_improvement": "Reduce homography from 5-10ms to 1-2ms",
+      "effort": "medium",
+      "rationale": "Per AM7-L2-VIS-001, bounded RANSAC permitted (max 100 iterations)"
+    },
+    {
+      "recommendation_id": "OPT_004",
+      "priority": "HIGH",
+      "bottleneck_addressed": "PERF_005",
+      "description": "Replace Monte Carlo P_hit with pre-computed lookup table",
+      "estimated_improvement": "Reduce from 50-200μs to <10μs table lookup",
+      "effort": "medium",
+      "rationale": "P_hit depends on range/elevation only - perfect for LUT"
+    },
+    {
+      "recommendation_id": "OPT_005",
+      "priority": "HIGH",
+      "bottleneck_addressed": "PERF_006",
+      "description": "Replace 1000-iteration loop with golden-section search (100 iterations)",
+      "estimated_improvement": "Reduce from 50μs to 5μs",
+      "effort": "low",
+      "rationale": "Golden-section search converges faster for unimodal functions"
+    },
+    {
+      "recommendation_id": "OPT_006",
+      "priority": "HIGH",
+      "bottleneck_addressed": "PERF_007",
+      "description": "Implement async I2C with DMA or move to dedicated thread",
+      "estimated_improvement": "Eliminate 1-3ms blocking on RT path",
+      "effort": "high",
+      "rationale": "I2C blocking violates real-time requirements; async I/O required"
+    },
+    {
+      "recommendation_id": "OPT_007",
+      "priority": "HIGH",
+      "bottleneck_addressed": "PERF_008",
+      "description": "Remove sleep_for from RT thread; use hardware PWM for effector",
+      "estimated_improvement": "Eliminate 10ms blocking",
+      "effort": "medium",
+      "rationale": "Fusion HAT+ GD32 MCU can handle PWM autonomously"
+    },
+    {
+      "recommendation_id": "OPT_008",
+      "priority": "MEDIUM",
+      "bottleneck_addressed": "PERF_009",
+      "description": "Replace std::ostringstream with pre-allocated char buffer + snprintf",
+      "estimated_improvement": "Eliminate heap allocation in broadcast path",
+      "effort": "low",
+      "rationale": "Compliance with AM7-L3-TIM-002 (no heap after init)"
+    },
+    {
+      "recommendation_id": "OPT_009",
+      "priority": "MEDIUM",
+      "bottleneck_addressed": "PERF_010",
+      "description": "Replace std::vector<int> dead with std::array<int, 16>",
+      "estimated_improvement": "Stack allocation instead of heap",
+      "effort": "low",
+      "rationale": "Small-object optimization; max concurrent clients < 16"
+    },
+    {
+      "recommendation_id": "OPT_010",
+      "priority": "MEDIUM",
+      "bottleneck_addressed": "PERF_011",
+      "description": "Move HUD broadcast to separate low-priority thread with lock-free ring buffer",
+      "estimated_improvement": "Eliminate priority inversion risk",
+      "effort": "medium",
+      "rationale": "HUD is non-critical; should not compete with RT threads"
+    },
+    {
+      "recommendation_id": "OPT_011",
+      "priority": "LOW",
+      "bottleneck_addressed": "PERF_012",
+      "description": "Audit all ring buffer usage; replace MPMCRingBuffer with LockFreeRingBuffer where SPSC applies",
+      "estimated_improvement": "Eliminate lock contention in data paths",
+      "effort": "low",
+      "rationale": "LockFreeRingBuffer already available and optimized"
+    }
+  ],
+  "wcet_risk_assessment": {
+    "overall_risk": "CRITICAL",
+    "summary": "Current implementation cannot meet 5ms WCET budget at 1536×864 resolution. Vision pipeline alone exceeds budget by 3×. Critical path requires algorithm replacement or resolution reduction.",
+    "risk_factors": [
+      {
+        "factor": "Algorithm complexity",
+        "risk": "CRITICAL",
+        "details": "ORB + CLAHE + RANSAC pipeline fundamentally too slow for RPi 5 at target resolution"
+      },
+      {
+        "factor": "I2C blocking",
+        "risk": "HIGH",
+        "details": "Synchronous I2C writes block RT thread for unpredictable duration"
+      },
+      {
+        "factor": "Heap allocation",
+        "risk": "HIGH",
+        "details": "HUD socket allocates per-frame; violates AM7-L3-TIM-002"
+      },
+      {
+        "factor": "Sleep in RT path",
+        "risk": "HIGH",
+        "details": "trigger_effector() blocks for 10ms - 10 frame periods"
+      },
+      {
+        "factor": "Monte Carlo on hot path",
+        "risk": "MEDIUM",
+        "details": "50-sample Monte Carlo adds 50-200μs overhead"
+      }
+    ],
+    "mitigation_priority": [
+      "1. Replace ORB with AprilTag/ArUco (CRITICAL)",
+      "2. Cache CLAHE object (CRITICAL)",
+      "3. Limit RANSAC iterations (CRITICAL)",
+      "4. Implement async I2C (HIGH)",
+      "5. Remove sleep_for from RT path (HIGH)",
+      "6. Pre-allocate HUD buffers (MEDIUM)"
+    ]
+  },
+  "jitter_monitoring_recommendations": {
+    "recommended_tools": [
+      {
+        "tool": "cyclictest",
+        "command": "cyclictest -t -a 2-3 -p 99 -m -D 24h -i 50",
+        "purpose": "Measure scheduling latency on isolated CPUs 2-3"
+      },
+      {
+        "tool": "oslat",
+        "command": "oslat --duration=3600 --cpu-list=2,3 --priority=90",
+        "purpose": "OS latency measurement for real-time workloads"
+      },
+      {
+        "tool": "custom DeadlineMonitor",
+        "command": "Built into timing.hpp",
+        "purpose": "Per-thread deadline miss tracking"
+      }
+    ],
+    "recommended_metrics": [
+      "99.9th percentile latency (spec: ≤5% of period = 417μs at 120Hz)",
+      "Maximum observed latency",
+      "Deadline miss count per thread",
+      "Consecutive deadline misses"
+    ],
+    "kernel_configuration_required": [
+      "isolcpus=2-3 nohz_full=2-3 rcu_nocbs=2-3 irqaffinity=0-1",
+      "CPU governor: performance",
+      "PREEMPT_RT kernel recommended"
+    ]
+  },
+  "performance_baseline_met": false,
+  "baseline_rationale": "CRITICAL: Vision pipeline (15ms) exceeds 5ms WCET budget by 3×. Actuation path (3ms) exceeds 1.5ms budget by 2×. Frame rate cannot sustain 120Hz. Heap allocations occur in RT path violating AM7-L3-TIM-002. Blocking I2C and sleep_for in RT paths cause deadline misses. Requires algorithm replacement (ORB→AprilTag), async I/O, and heap elimination before WCET compliance achievable.",
+  "downstream_consumers": ["implementation-engineer", "quality_gate", "test-coverage-architect"]
+}

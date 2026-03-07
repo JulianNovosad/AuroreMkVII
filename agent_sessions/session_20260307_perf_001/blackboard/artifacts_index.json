@@ -1,0 +1,14 @@
+{
+  "session_id": "session_20260307_perf_001",
+  "artifacts": [
+    {
+      "name": "performance-regression-profiler_001.json",
+      "path": "artifacts/performance-regression-profiler_001.json",
+      "agent": "performance-regression-profiler",
+      "version": 1,
+      "timestamp": "2026-03-07T16:05:00Z",
+      "description": "Performance baseline analysis, bottleneck identification, and optimization recommendations",
+      "checksum_sha256": "033b54dd0fdffd760800f57e5e323d672212b0980a9ca6a57e53cedada75395f"
+    }
+  ]
+}

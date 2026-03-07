@@ -1,0 +1,844 @@
+#include "gles_overlay.h"
+#include "util_logging.h"
+#include <cmath>
+#include <cstring>
+#include <algorithm>
+
+// Fragment shader for overlay composition
+static const char* fragment_shader_source = R"(
+#version 310 es
+precision mediump float;
+
+in vec2 TexCoord_vs;
+out vec4 FragColor;
+
+uniform sampler2D cameraTexture;  // Camera feed texture
+
+// Structure for detection boxes
+struct DetectionBox {
+    vec4 rect;      // x, y, width, height in normalized coordinates (0.0-1.0)
+    vec4 color;     // RGBA color
+    int valid;      // Whether this overlay is valid
+};
+
+// Structure for ballistic points
+struct BallisticPoint {
+    vec4 impact_point_and_radius;  // x, y, radius, unused in normalized coordinates
+    vec4 color;                    // RGBA color
+    int valid;                     // Whether this overlay is valid
+};
+
+// Maximum number of items to render
+#define MAX_DETECTION_BOXES 10
+#define MAX_BALLISTIC_POINTS 1
+
+// Uniforms for overlay data
+uniform int numBoxes;
+uniform DetectionBox detectionBoxes[MAX_DETECTION_BOXES];
+uniform BallisticPoint ballisticPoints[MAX_BALLISTIC_POINTS];
+
+// Function to draw a rectangle border
+float draw_rectangle_border(vec2 coord, vec4 rect) {
+    // rect = vec4(x, y, width, height) in normalized coordinates
+    float left = rect.x;
+    float top = rect.y;
+    float right = left + rect.z;
+    float bottom = top + rect.w;
+    
+    // Check if current fragment is within the rectangle
+    bool in_rect = (coord.x >= left && coord.x <= right && 
+                    coord.y >= top && coord.y <= bottom);
+    
+    // Create border effect - only draw border, not fill
+    float border_thickness = 0.005; // Border thickness in normalized coordinates
+    bool near_edge = (abs(coord.x - left) < border_thickness || abs(coord.x - right) < border_thickness || 
+                      abs(coord.y - top) < border_thickness || abs(coord.y - bottom) < border_thickness);
+    
+    return in_rect && near_edge ? 1.0 : 0.0;
+}
+
+// Function to draw a circle border
+float draw_circle_border(vec2 coord, vec4 center_and_radius) {
+    // center_and_radius = vec4(x, y, radius, unused)
+    vec2 center = center_and_radius.xy;
+    float radius = center_and_radius.z;
+    
+    float distance = distance(coord, center);
+    
+    // Draw circle border
+    float border_thickness = 0.005; // Border thickness in normalized coordinates
+    float edge_lower = radius - border_thickness;
+    float edge_upper = radius + border_thickness;
+    
+    return (distance >= edge_lower && distance <= edge_upper) ? 1.0 : 0.0;
+}
+
+void main() {
+    // Sample the camera feed
+    vec4 camera_color = texture(cameraTexture, TexCoord_vs);
+    
+    // Start with camera color
+    vec4 final_color = camera_color;
+    
+    // Process detection boxes
+    for (int i = 0; i < numBoxes && i < MAX_DETECTION_BOXES; i++) {
+        if (detectionBoxes[i].valid != 0) {
+            float box_alpha = draw_rectangle_border(TexCoord_vs, detectionBoxes[i].rect);
+            if (box_alpha > 0.0) {
+                // Blend overlay color with camera color
+                final_color = mix(final_color, detectionBoxes[i].color, detectionBoxes[i].color.a * box_alpha);
+            }
+        }
+    }
+    
+    // Process ballistic points
+    for (int i = 0; i < MAX_BALLISTIC_POINTS; i++) {
+        if (ballisticPoints[i].valid != 0) {
+            float circle_alpha = draw_circle_border(TexCoord_vs, ballisticPoints[i].impact_point_and_radius);
+            if (circle_alpha > 0.0) {
+                // Blend ballistic point color with current color
+                final_color = mix(final_color, ballisticPoints[i].color, ballisticPoints[i].color.a * circle_alpha);
+            }
+        }
+    }
+    
+    FragColor = final_color;
+}
+)";
+
+// Vertex shader
+static const char* vertex_shader_source = R"(
+#version 310 es
+layout (location = 0) in vec2 Position;
+layout (location = 1) in vec2 TexCoord;
+
+out vec2 TexCoord_vs;
+
+void main() {
+    gl_Position = vec4(Position, 0.0, 1.0);
+    TexCoord_vs = TexCoord;
+}
+)";
+
+GlesOverlay::GlesOverlay(int width, int height)
+    : width_(width), height_(height), tpu_temperature_(0.0f),
+      egl_display_(EGL_NO_DISPLAY), egl_context_(EGL_NO_CONTEXT), egl_surface_(EGL_NO_SURFACE),
+      gbm_device_(nullptr), gbm_surface_(nullptr),
+      program_(0), vertex_shader_(0), fragment_shader_(0),
+      vao_(0), vbo_(0), ebo_(0),
+      camera_texture_(0), overlay_texture_(0), framebuffer_(0), color_renderbuffer_(0),
+      input_dma_buf_fd_(-1), output_dma_buf_fd_(-1), dma_buf_size_(0),
+      output_gem_handle_(0),
+      pos_attr_(-1), tex_coord_attr_(-1),
+      frame_id_(0), initialized_(false),
+      total_frames_(0), failed_renders_(0) {
+
+    last_render_time_ = std::chrono::steady_clock::now();
+}
+
+GlesOverlay::~GlesOverlay() {
+    destroy_resources();
+}
+
+bool GlesOverlay::initialize(int drm_fd) {
+    APP_LOG_INFO("Initializing GlesOverlay with OpenGL ES...");
+    
+    // Create GBM device from DRM FD
+    gbm_device_ = gbm_create_device(drm_fd);
+    if (!gbm_device_) {
+        APP_LOG_ERROR("Failed to create GBM device from DRM FD");
+        return false;
+    }
+    
+    // Initialize EGL
+    if (!create_egl_context()) {
+        APP_LOG_ERROR("Failed to create EGL context");
+        return false;
+    }
+    
+    // Create GBM surface
+    if (!create_gbm_surface()) {
+        APP_LOG_ERROR("Failed to create GBM surface");
+        return false;
+    }
+    
+    // Create OpenGL ES resources
+    if (!create_opengl_resources()) {
+        APP_LOG_ERROR("Failed to create OpenGL ES resources");
+        return false;
+    }
+    
+    initialized_ = true;
+    APP_LOG_INFO("GlesOverlay initialized successfully with OpenGL ES");
+    return true;
+}
+
+bool GlesOverlay::create_egl_context() {
+    // Initialize EGL
+    egl_display_ = eglGetPlatformDisplay(EGL_PLATFORM_GBM_KHR, gbm_device_, nullptr);
+    if (egl_display_ == EGL_NO_DISPLAY) {
+        APP_LOG_ERROR("Failed to get EGL display");
+        return false;
+    }
+    
+    EGLint major, minor;
+    if (!eglInitialize(egl_display_, &major, &minor)) {
+        APP_LOG_ERROR("Failed to initialize EGL");
+        return false;
+    }
+    
+    // Choose config
+    EGLint config_attribs[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_NONE
+    };
+    
+    EGLint num_configs;
+    if (!eglChooseConfig(egl_display_, config_attribs, &egl_config_, 1, &num_configs) || num_configs == 0) {
+        APP_LOG_ERROR("Failed to choose EGL config");
+        return false;
+    }
+    
+    // Create context
+    EGLint context_attribs[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 3,
+        EGL_NONE
+    };
+    
+    egl_context_ = eglCreateContext(egl_display_, egl_config_, EGL_NO_CONTEXT, context_attribs);
+    if (egl_context_ == EGL_NO_CONTEXT) {
+        APP_LOG_ERROR("Failed to create EGL context");
+        return false;
+    }
+    
+    return true;
+}
+
+bool GlesOverlay::create_gbm_surface() {
+    gbm_surface_ = gbm_surface_create(gbm_device_, width_, height_, 
+                                      GBM_FORMAT_ARGB8888, 
+                                      GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
+    if (!gbm_surface_) {
+        APP_LOG_ERROR("Failed to create GBM surface");
+        return false;
+    }
+    
+    // Create EGL surface
+    egl_surface_ = eglCreateWindowSurface(egl_display_, egl_config_, 
+                                          (EGLNativeWindowType)gbm_surface_, nullptr);
+    if (egl_surface_ == EGL_NO_SURFACE) {
+        APP_LOG_ERROR("Failed to create EGL surface");
+        return false;
+    }
+    
+    return true;
+}
+
+bool GlesOverlay::create_opengl_resources() {
+    // Make context current
+    if (!eglMakeCurrent(egl_display_, egl_surface_, egl_surface_, egl_context_)) {
+        APP_LOG_ERROR("Failed to make EGL context current");
+        return false;
+    }
+    
+    // Create shader program
+    if (!create_shader_program()) {
+        APP_LOG_ERROR("Failed to create shader program");
+        return false;
+    }
+    
+    // Create vertex buffer
+    if (!create_vertex_buffer()) {
+        APP_LOG_ERROR("Failed to create vertex buffer");
+        return false;
+    }
+    
+    // Create textures
+    if (!create_textures()) {
+        APP_LOG_ERROR("Failed to create textures");
+        return false;
+    }
+    
+    // Create framebuffer
+    if (!create_framebuffer()) {
+        APP_LOG_ERROR("Failed to create framebuffer");
+        return false;
+    }
+    
+    return true;
+}
+
+bool GlesOverlay::create_shader_program() {
+    // Create vertex shader
+    vertex_shader_ = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertex_shader_, 1, &vertex_shader_source, nullptr);
+    glCompileShader(vertex_shader_);
+    
+    GLint success;
+    glGetShaderiv(vertex_shader_, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char info_log[512];
+        glGetShaderInfoLog(vertex_shader_, 512, nullptr, info_log);
+        APP_LOG_ERROR("Vertex shader compilation failed: " + std::string(info_log));
+        return false;
+    }
+    
+    // Create fragment shader
+    fragment_shader_ = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragment_shader_, 1, &fragment_shader_source, nullptr);
+    glCompileShader(fragment_shader_);
+    
+    glGetShaderiv(fragment_shader_, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char info_log[512];
+        glGetShaderInfoLog(fragment_shader_, 512, nullptr, info_log);
+        APP_LOG_ERROR("Fragment shader compilation failed: " + std::string(info_log));
+        return false;
+    }
+    
+    // Create program
+    program_ = glCreateProgram();
+    glAttachShader(program_, vertex_shader_);
+    glAttachShader(program_, fragment_shader_);
+    glLinkProgram(program_);
+    
+    glGetProgramiv(program_, GL_LINK_STATUS, &success);
+    if (!success) {
+        char info_log[512];
+        glGetProgramInfoLog(program_, 512, nullptr, info_log);
+        APP_LOG_ERROR("Shader program linking failed: " + std::string(info_log));
+        return false;
+    }
+    
+    // Get attribute and uniform locations
+    pos_attr_ = glGetAttribLocation(program_, "Position");
+    tex_coord_attr_ = glGetAttribLocation(program_, "TexCoord");
+    overlay_data_uniform_ = glGetUniformLocation(program_, "overlayData");
+    
+    glDetachShader(program_, vertex_shader_);
+    glDetachShader(program_, fragment_shader_);
+    
+    return true;
+}
+
+bool GlesOverlay::create_vertex_buffer() {
+    // Define vertices for a full-screen quad
+    float vertices[] = {
+        // positions   // texture coords
+        -1.0f, -1.0f,  0.0f, 0.0f,  // bottom left
+         1.0f, -1.0f,  1.0f, 0.0f,  // bottom right
+         1.0f,  1.0f,  1.0f, 1.0f,  // top right
+        -1.0f,  1.0f,  0.0f, 1.0f   // top left 
+    };
+    
+    uint32_t indices[] = {
+        0, 1, 2,  // first triangle
+        2, 3, 0   // second triangle
+    };
+    
+    // Create VAO
+    glGenVertexArrays(1, &vao_);
+    glGenBuffers(1, &vbo_);
+    glGenBuffers(1, &ebo_);
+    
+    glBindVertexArray(vao_);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+    
+    // Position attribute
+    glVertexAttribPointer(pos_attr_, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(pos_attr_);
+    
+    // Texture coord attribute
+    glVertexAttribPointer(tex_coord_attr_, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(tex_coord_attr_);
+    
+    glBindVertexArray(0);
+    
+    return true;
+}
+
+bool GlesOverlay::create_textures() {
+    // Create camera texture
+    glGenTextures(1, &camera_texture_);
+    glBindTexture(GL_TEXTURE_2D, camera_texture_);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    
+    return true;
+}
+
+bool GlesOverlay::create_framebuffer() {
+    glGenFramebuffers(1, &framebuffer_);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+
+    // Create a renderbuffer for the color attachment instead of using a texture
+    glGenRenderbuffers(1, &color_renderbuffer_);
+    glBindRenderbuffer(GL_RENDERBUFFER, color_renderbuffer_);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width_, height_);
+    
+    // Attach the renderbuffer to the framebuffer
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, color_renderbuffer_);
+
+    // Check if framebuffer is complete
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        APP_LOG_ERROR("Framebuffer is not complete");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        return false;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    return true;
+}
+
+void GlesOverlay::destroy_resources() {
+    if (initialized_) {
+        eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+
+        if (program_) {
+            glDeleteProgram(program_);
+            program_ = 0;
+        }
+        if (vertex_shader_) {
+            glDeleteShader(vertex_shader_);
+            vertex_shader_ = 0;
+        }
+        if (fragment_shader_) {
+            glDeleteShader(fragment_shader_);
+            fragment_shader_ = 0;
+        }
+        if (vao_) {
+            glDeleteVertexArrays(1, &vao_);
+            vao_ = 0;
+        }
+        if (vbo_) {
+            glDeleteBuffers(1, &vbo_);
+            vbo_ = 0;
+        }
+        if (ebo_) {
+            glDeleteBuffers(1, &ebo_);
+            ebo_ = 0;
+        }
+        if (camera_texture_) {
+            glDeleteTextures(1, &camera_texture_);
+            camera_texture_ = 0;
+        }
+        if (framebuffer_) {
+            glDeleteFramebuffers(1, &framebuffer_);
+            framebuffer_ = 0;
+        }
+        if (color_renderbuffer_) {
+            glDeleteRenderbuffers(1, &color_renderbuffer_);
+            color_renderbuffer_ = 0;
+        }
+
+        if (egl_context_ != EGL_NO_CONTEXT) {
+            eglDestroyContext(egl_display_, egl_context_);
+            egl_context_ = EGL_NO_CONTEXT;
+        }
+        if (egl_surface_ != EGL_NO_SURFACE) {
+            eglDestroySurface(egl_display_, egl_surface_);
+            egl_surface_ = EGL_NO_SURFACE;
+        }
+        if (egl_display_ != EGL_NO_DISPLAY) {
+            eglTerminate(egl_display_);
+            egl_display_ = EGL_NO_DISPLAY;
+        }
+
+        if (gbm_surface_) {
+            gbm_surface_destroy(gbm_surface_);
+            gbm_surface_ = nullptr;
+        }
+        if (gbm_device_) {
+            gbm_device_destroy(gbm_device_);
+            gbm_device_ = nullptr;
+        }
+
+        if (output_dma_buf_fd_ >= 0) {
+            close(output_dma_buf_fd_);
+            output_dma_buf_fd_ = -1;
+        }
+
+        initialized_ = false;
+    }
+}
+
+bool GlesOverlay::import_dma_buf_as_texture(int dma_buf_fd, size_t size, uint32_t width, uint32_t height, GLuint* out_texture) {
+    // For Raspberry Pi, we need to use EGLImage to import the DMA-BUF as an OpenGL texture
+    // This is the proper way to handle DMA-BUF import for hardware acceleration
+    
+    // Create an EGLImage from the DMA-BUF
+    EGLint attribs[] = {
+        EGL_WIDTH, static_cast<EGLint>(width),
+        EGL_HEIGHT, static_cast<EGLint>(height),
+        EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_ABGR8888,  // Assuming ABGR8888 format
+        EGL_DMA_BUF_PLANE0_FD_EXT, dma_buf_fd,
+        EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0,
+        EGL_DMA_BUF_PLANE0_PITCH_EXT, static_cast<EGLint>(width * 4), // Assuming 4 bytes per pixel
+        EGL_NONE
+    };
+
+    // Create the EGLImage
+    EGLImageKHR egl_image = eglCreateImageKHR(
+        egl_display_,
+        EGL_NO_CONTEXT,
+        EGL_LINUX_DMA_BUF_EXT,
+        reinterpret_cast<EGLClientBuffer>(0),
+        attribs
+    );
+
+    if (egl_image == EGL_NO_IMAGE_KHR) {
+        APP_LOG_ERROR("Failed to create EGLImage from DMA-BUF");
+        
+        // Fallback: Create an empty texture but log the issue
+        glBindTexture(GL_TEXTURE_2D, camera_texture_);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        
+        // Create a placeholder texture with a subtle pattern to distinguish from pure black
+        std::vector<uint8_t> placeholder_data(width * height * 4);
+        for (size_t i = 0; i < width * height; ++i) {
+            placeholder_data[i * 4 + 0] = 30;  // B
+            placeholder_data[i * 4 + 1] = 30;  // G  
+            placeholder_data[i * 4 + 2] = 30;  // R
+            placeholder_data[i * 4 + 3] = 255; // A
+        }
+        
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, placeholder_data.data());
+        
+        *out_texture = camera_texture_;
+        return false; // Return false to indicate failure but continue with placeholder
+    }
+
+    // Bind the camera texture
+    glBindTexture(GL_TEXTURE_2D, camera_texture_);
+
+    // Use the EGLImage to populate the texture
+    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, egl_image);
+
+    // Set texture parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    *out_texture = camera_texture_;
+    
+    // Clean up the EGLImage (the texture keeps a reference)
+    eglDestroyImageKHR(egl_display_, egl_image);
+    
+    return true;
+}
+
+void GlesOverlay::render(int camera_dma_buf_fd, size_t dma_buf_size, uint32_t frame_id, const OverlayData& overlay_data) {
+    if (!initialized_) {
+        APP_LOG_ERROR("GlesOverlay not initialized");
+        return;
+    }
+
+    // Make sure context is current
+    if (!eglMakeCurrent(egl_display_, egl_surface_, egl_surface_, egl_context_)) {
+        APP_LOG_ERROR("Failed to make context current for rendering");
+        failed_renders_++;
+        return;
+    }
+
+    // Import camera feed as texture from DMA-BUF
+    GLuint camera_tex;
+    bool import_success = import_dma_buf_as_texture(camera_dma_buf_fd, dma_buf_size, width_, height_, &camera_tex);
+    if (!import_success) {
+        APP_LOG_WARNING("Failed to import camera DMA-BUF as texture, using fallback");
+        // Continue anyway since the import function creates a placeholder
+    }
+    
+    // Use the GBM surface for rendering (direct display output)
+    // This will render directly to the GBM surface which can be presented to display
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); // Use default framebuffer (our GBM surface)
+    glViewport(0, 0, width_, height_);
+    
+    // Use our shader program
+    glUseProgram(program_);
+    
+    // Set overlay data uniforms first (before binding texture to avoid interference)
+    // Set number of detection boxes
+    int num_boxes_loc = glGetUniformLocation(program_, "numBoxes");
+    if (num_boxes_loc != -1) {
+        glUniform1i(num_boxes_loc, static_cast<GLint>(overlay_data.detections.size()));
+    }
+    
+    // Set detection boxes
+    for (size_t i = 0; i < overlay_data.detections.size() && i < 10; ++i) {
+        const auto& detection = overlay_data.detections[i];
+        
+        std::string box_prefix = "detectionBoxes[" + std::to_string(i) + "]";
+        
+        // Set rectangle (x, y, width, height in normalized coordinates)
+        int rect_loc = glGetUniformLocation(program_, (box_prefix + ".rect").c_str());
+        if (rect_loc != -1) {
+            float rect[4] = {detection.xmin, detection.ymin, 
+                            detection.xmax - detection.xmin, 
+                            detection.ymax - detection.ymin};
+            glUniform4fv(rect_loc, 1, rect);
+        }
+        
+        // Set color (red for detections)
+        int color_loc = glGetUniformLocation(program_, (box_prefix + ".color").c_str());
+        if (color_loc != -1) {
+            float color[4] = {1.0f, 0.0f, 0.0f, 1.0f}; // Red with full opacity
+            glUniform4fv(color_loc, 1, color);
+        }
+        
+        // Set valid flag
+        int valid_loc = glGetUniformLocation(program_, (box_prefix + ".valid").c_str());
+        if (valid_loc != -1) {
+            glUniform1i(valid_loc, 1);
+        }
+    }
+    
+    // Set ballistic points
+    if (overlay_data.ballistic_point.is_valid) {
+        int bp_loc = glGetUniformLocation(program_, "ballisticPoints[0].impact_point_and_radius");
+        if (bp_loc != -1) {
+            // Convert pixel coordinates to normalized device coordinates
+            float norm_x = overlay_data.ballistic_point.impact_px_x / static_cast<float>(width_);
+            float norm_y = overlay_data.ballistic_point.impact_px_y / static_cast<float>(height_);
+            float norm_radius = overlay_data.ballistic_point.safety_cone_radius_px / static_cast<float>(width_);
+            
+            float point_data[4] = {norm_x, norm_y, norm_radius, 0.0f};
+            glUniform4fv(bp_loc, 1, point_data);
+        }
+        
+        int bp_color_loc = glGetUniformLocation(program_, "ballisticPoints[0].color");
+        if (bp_color_loc != -1) {
+            float color[4] = {0.0f, 1.0f, 0.0f, 0.8f}; // Green with 80% opacity
+            glUniform4fv(bp_color_loc, 1, color);
+        }
+        
+        int bp_valid_loc = glGetUniformLocation(program_, "ballisticPoints[0].valid");
+        if (bp_valid_loc != -1) {
+            glUniform1i(bp_valid_loc, 1);
+        }
+    }
+    
+    // Bind camera texture to texture unit 0
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, camera_texture_);
+    glUniform1i(glGetUniformLocation(program_, "cameraTexture"), 0);
+    
+    // Clear the framebuffer
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    
+    // Draw the full-screen quad
+    glBindVertexArray(vao_);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+    
+    // Get the current buffer object from the GBM surface
+    gbm_bo* bo = gbm_surface_lock_front_buffer(gbm_surface_);
+    if (bo) {
+        // Export the buffer as a DMA-BUF file descriptor
+        int dma_buf_fd = gbm_bo_get_fd(bo);
+        if (dma_buf_fd >= 0) {
+            // Store the buffer object so we can release it later when the display is done with it
+            // For now, we'll store it temporarily and the application will handle the release
+            // by calling a method after the display has used the buffer
+            output_dma_buf_fd_ = dma_buf_fd;
+            gbm_bo_ = bo;  // Store the buffer object for later release
+        } else {
+            APP_LOG_ERROR("Failed to get DMA-BUF FD from GBM buffer object");
+            gbm_surface_release_buffer(gbm_surface_, bo);
+            output_dma_buf_fd_ = -1;
+        }
+    } else {
+        APP_LOG_ERROR("Failed to lock GBM surface buffer for DMA-BUF export");
+        output_dma_buf_fd_ = -1;
+    }
+    
+    frame_id_ = frame_id;
+    total_frames_++;
+    
+    // Close the input DMA-BUF file descriptor as it's no longer needed
+    if (camera_dma_buf_fd >= 0) {
+        close(camera_dma_buf_fd);
+    }
+}
+
+
+
+void GlesOverlay::render_from_cpu_data(const uint8_t* cpu_frame_data, uint32_t width, uint32_t height, uint32_t frame_id, const OverlayData& overlay_data) {
+    if (!initialized_) {
+        APP_LOG_ERROR("GlesOverlay not initialized");
+        return;
+    }
+    
+    // Make sure context is current
+    if (!eglMakeCurrent(egl_display_, egl_surface_, egl_surface_, egl_context_)) {
+        APP_LOG_ERROR("Failed to make context current for rendering");
+        failed_renders_++;
+        return;
+    }
+    
+    // Upload CPU frame data to camera texture
+    glBindTexture(GL_TEXTURE_2D, camera_texture_);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // Ensure proper alignment for RGB data
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, cpu_frame_data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    // Use the GBM surface for rendering (direct display output)
+    // This will render directly to the GBM surface which can be presented to display
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); // Use default framebuffer (our GBM surface)
+    glViewport(0, 0, width_, height_);
+    
+    // Use our shader program
+    glUseProgram(program_);
+    
+    // Set overlay data uniforms first (before binding texture to avoid interference)
+    // Set number of detection boxes
+    int num_boxes_loc = glGetUniformLocation(program_, "numBoxes");
+    if (num_boxes_loc != -1) {
+        glUniform1i(num_boxes_loc, static_cast<GLint>(overlay_data.detections.size()));
+    }
+    
+    // Set detection boxes
+    for (size_t i = 0; i < overlay_data.detections.size() && i < 10; ++i) {
+        const auto& detection = overlay_data.detections[i];
+        
+        std::string box_prefix = "detectionBoxes[" + std::to_string(i) + "]";
+        
+        // Set rectangle (x, y, width, height in normalized coordinates)
+        int rect_loc = glGetUniformLocation(program_, (box_prefix + ".rect").c_str());
+        if (rect_loc != -1) {
+            float rect[4] = {detection.xmin, detection.ymin, 
+                            detection.xmax - detection.xmin, 
+                            detection.ymax - detection.ymin};
+            glUniform4fv(rect_loc, 1, rect);
+        }
+        
+        // Set color (red for detections)
+        int color_loc = glGetUniformLocation(program_, (box_prefix + ".color").c_str());
+        if (color_loc != -1) {
+            float color[4] = {1.0f, 0.0f, 0.0f, 1.0f}; // Red with full opacity
+            glUniform4fv(color_loc, 1, color);
+        }
+        
+        // Set valid flag
+        int valid_loc = glGetUniformLocation(program_, (box_prefix + ".valid").c_str());
+        if (valid_loc != -1) {
+            glUniform1i(valid_loc, 1);
+        }
+    }
+    
+    // Set ballistic points
+    if (overlay_data.ballistic_point.is_valid) {
+        int bp_loc = glGetUniformLocation(program_, "ballisticPoints[0].impact_point_and_radius");
+        if (bp_loc != -1) {
+            // Convert pixel coordinates to normalized device coordinates
+            float norm_x = overlay_data.ballistic_point.impact_px_x / static_cast<float>(width_);
+            float norm_y = overlay_data.ballistic_point.impact_px_y / static_cast<float>(height_);
+            float norm_radius = overlay_data.ballistic_point.safety_cone_radius_px / static_cast<float>(width_);
+            
+            float point_data[4] = {norm_x, norm_y, norm_radius, 0.0f};
+            glUniform4fv(bp_loc, 1, point_data);
+        }
+        
+        int bp_color_loc = glGetUniformLocation(program_, "ballisticPoints[0].color");
+        if (bp_color_loc != -1) {
+            float color[4] = {0.0f, 1.0f, 0.0f, 0.8f}; // Green with 80% opacity
+            glUniform4fv(bp_color_loc, 1, color);
+        }
+        
+        int bp_valid_loc = glGetUniformLocation(program_, "ballisticPoints[0].valid");
+        if (bp_valid_loc != -1) {
+            glUniform1i(bp_valid_loc, 1);
+        }
+    }
+    
+    // Bind camera texture to texture unit 0
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, camera_texture_);
+    glUniform1i(glGetUniformLocation(program_, "cameraTexture"), 0);
+    
+    // Clear the framebuffer
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    
+    // Draw the full-screen quad
+    glBindVertexArray(vao_);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+    
+    // Get the current buffer object from the GBM surface
+    gbm_bo* bo = gbm_surface_lock_front_buffer(gbm_surface_);
+    if (bo) {
+        // Export the buffer as a DMA-BUF file descriptor
+        int dma_buf_fd = gbm_bo_get_fd(bo);
+        if (dma_buf_fd >= 0) {
+            // Store the buffer object so we can release it later when the display is done with it
+            // For now, we'll store it temporarily and the application will handle the release
+            // by calling a method after the display has used the buffer
+            output_dma_buf_fd_ = dma_buf_fd;
+            gbm_bo_ = bo;  // Store the buffer object for later release
+        } else {
+            APP_LOG_ERROR("Failed to get DMA-BUF FD from GBM buffer object");
+            gbm_surface_release_buffer(gbm_surface_, bo);
+            output_dma_buf_fd_ = -1;
+        }
+    } else {
+        APP_LOG_ERROR("Failed to lock GBM surface buffer for DMA-BUF export");
+        output_dma_buf_fd_ = -1;
+    }
+    
+    frame_id_ = frame_id;
+    total_frames_++;
+    
+    // Close the input DMA-BUF file descriptor as it's no longer needed
+    if (camera_dma_buf_fd >= 0) {
+        close(camera_dma_buf_fd);
+    }
+}
+
+void GlesOverlay::draw_detection_boxes(const std::vector<BoundingBoxOverlay>& detections) {
+    // This would be called from within the render function to draw detection boxes
+    // Implementation is handled in the shader for efficiency
+}
+
+int GlesOverlay::get_rendered_dma_buf_fd() {
+    // Return the DMA-BUF FD and handle buffer release
+    int fd_to_return = output_dma_buf_fd_;
+    
+    // Reset the output FD so we don't return the same one twice
+    output_dma_buf_fd_ = -1;
+    
+    return fd_to_return;
+}
+
+void GlesOverlay::release_buffer_object() {
+    // Release the buffer object that was locked for the DMA-BUF export
+    if (gbm_bo_ && gbm_surface_) {
+        gbm_surface_release_buffer(gbm_surface_, gbm_bo_);
+        gbm_bo_ = nullptr;  // Clear the reference to the buffer object
+    }
+}
+
+void GlesOverlay::draw_ballistic_point(const OverlayBallisticPoint& ballistic_point) {
+    // This would be called from within the render function to draw ballistic points
+    // Implementation is handled in the shader for efficiency
+}

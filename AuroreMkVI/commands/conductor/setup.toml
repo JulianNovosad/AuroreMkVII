@@ -1,0 +1,119 @@
+description = "Initialize Conductor in a project (new or existing)"
+prompt = """
+# Conductor Setup Protocol
+
+## Purpose
+Initialize the Conductor framework in a project, creating the necessary directory structure and core files.
+
+## Preconditions
+- Working directory is the project root
+- User has confirmed intent to set up Conductor
+
+## Steps
+
+### 1. Verify Project Context
+1.1. Check if `conductor/` already exists:
+   - If exists and contains `product.md`, `workflow.md`, `tracks.md` → Conductor is already set up
+   - If partial or missing files → ask user to confirm overwrite or partial setup
+
+1.2. Identify project type (language, framework, build system) for template selection
+
+### 2. Create Directory Structure
+Create if not present:
+```
+conductor/
+├── code_styleguides/
+│   └── [language-specific guides - see templates/code_styleguides/]
+├── templates/
+│   └── workflow.md
+├── tracks/
+│   └── (empty, for active tracks)
+└── archive/
+    └── (empty, for completed tracks)
+```
+
+### 3. Create Core Files
+
+#### 3.1 product.md
+Create with:
+- Project name and one-line description
+- 3-5 key product goals
+- Target users/audience
+- Success metrics
+
+#### 3.2 product-guidelines.md
+Create with:
+- UX principles
+- Brand guidelines (colors, typography, tone)
+- Design patterns to follow/avoid
+
+#### 3.3 tech-stack.md
+Create with:
+- Primary language(s) and version
+- Framework(s) and version
+- Key dependencies
+- Build tool and commands
+- Testing framework
+
+#### 3.4 workflow.md
+Create with:
+- Branch naming convention
+- Commit message format
+- Pull request requirements
+- Code review process
+- Deployment pipeline
+
+#### 3.5 tracks.md
+Create with header only:
+```markdown
+# Tracks
+
+## Active Tracks
+- (none)
+
+## Completed Tracks
+- (none)
+```
+
+#### 3.6 setup_state.json
+Create with:
+```json
+{
+  "initialized": true,
+  "initialized_at": "<ISO timestamp>",
+  "version": "1.0.0"
+}
+```
+
+#### 3.7 code_styleguides/
+Populate from `templates/code_styleguides/` if available, or create minimal guides for project languages
+
+#### 3.8 templates/workflow.md
+Copy of `workflow.md` for reference
+
+### 4. Create commands/ Structure
+Create `commands/conductor/` with:
+- `setup.toml` (this file)
+- `newTrack.toml`
+- `implement.toml`
+- `status.toml`
+- `revert.toml`
+
+### 5. Initialize Git (if applicable)
+5.1. Check if `.git/` exists
+5.2. Create `.gitignore` entry if not present: `conductor/tracks/*/`
+5.3. Do NOT commit automatically - user must approve
+
+## Output
+Report to user:
+- Files created/modified
+- Next steps (how to create first track)
+- Any questions/clarifications needed
+
+## Acceptance Criteria
+- [ ] `conductor/` exists with all core files
+- [ ] `commands/conductor/` exists with 5 .toml files
+- [ ] `templates/` exists with workflow.md
+- [ ] Git not modified (user must commit)
+- [ ] User can invoke `/conductor:newTrack`
+"""

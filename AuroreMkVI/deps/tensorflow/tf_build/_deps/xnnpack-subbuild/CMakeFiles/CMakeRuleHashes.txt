@@ -1,0 +1,11 @@
+# Hashes of file build rules.
+8581b37e114b26ff3ea55af748545590 /home/pi/Aurore/deps/tensorflow/tf_build/src/xnnpack-populate-stamp/xnnpack-populate-build
+921aee97adfe7cd9fcef5c7e9980c8e0 /home/pi/Aurore/deps/tensorflow/tf_build/src/xnnpack-populate-stamp/xnnpack-populate-configure
+08a63521f89905cf585d61a47e8d74bb /home/pi/Aurore/deps/tensorflow/tf_build/src/xnnpack-populate-stamp/xnnpack-populate-download
+4e59924a995507959c51abc3c5fd57d1 /home/pi/Aurore/deps/tensorflow/tf_build/src/xnnpack-populate-stamp/xnnpack-populate-install
+ebfc32e2d83b07e02c21d9b9555089c2 /home/pi/Aurore/deps/tensorflow/tf_build/src/xnnpack-populate-stamp/xnnpack-populate-mkdir
+f6fbe9912053f0ce7db6a0fd031ab97e /home/pi/Aurore/deps/tensorflow/tf_build/src/xnnpack-populate-stamp/xnnpack-populate-patch
+b963e443bef5870a8fa0b1f3b9b496d0 /home/pi/Aurore/deps/tensorflow/tf_build/src/xnnpack-populate-stamp/xnnpack-populate-test
+e2d11a374c9ea84e1db7ae223d75aa5e /home/pi/Aurore/deps/tensorflow/tf_build/src/xnnpack-populate-stamp/xnnpack-populate-update
+9b63fa08e290d4db5b10f669755c41aa CMakeFiles/xnnpack-populate
+c19983dcc29d288e40f1ecb015f03e1d CMakeFiles/xnnpack-populate-complete

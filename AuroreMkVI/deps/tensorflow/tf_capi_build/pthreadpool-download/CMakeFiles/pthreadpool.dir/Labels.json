@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/pthreadpool-download/CMakeFiles/pthreadpool"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/pthreadpool-download/CMakeFiles/pthreadpool.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/pthreadpool-download/CMakeFiles/pthreadpool-complete.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/pthreadpool-download/pthreadpool-prefix/src/pthreadpool-stamp/pthreadpool-build.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/pthreadpool-download/pthreadpool-prefix/src/pthreadpool-stamp/pthreadpool-configure.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/pthreadpool-download/pthreadpool-prefix/src/pthreadpool-stamp/pthreadpool-download.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/pthreadpool-download/pthreadpool-prefix/src/pthreadpool-stamp/pthreadpool-install.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/pthreadpool-download/pthreadpool-prefix/src/pthreadpool-stamp/pthreadpool-mkdir.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/pthreadpool-download/pthreadpool-prefix/src/pthreadpool-stamp/pthreadpool-patch.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/pthreadpool-download/pthreadpool-prefix/src/pthreadpool-stamp/pthreadpool-test.rule"
+		},
+		{
+			"file" : "/home/pi/Aurore/deps/tensorflow/tf_capi_build/pthreadpool-download/pthreadpool-prefix/src/pthreadpool-stamp/pthreadpool-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"pthreadpool"
+		],
+		"name" : "pthreadpool"
+	}
+}

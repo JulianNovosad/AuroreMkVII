@@ -1,0 +1,13 @@
+# Target labels
+ flatbuffers-flatc
+# Source files and their labels
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/CMakeFiles/flatbuffers-flatc
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/CMakeFiles/flatbuffers-flatc.rule
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/CMakeFiles/flatbuffers-flatc-complete.rule
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-build.rule
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-configure.rule
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-download.rule
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-install.rule
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-mkdir.rule
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-patch.rule
+/home/pi/Aurore/deps/tensorflow/tensorflow/lite/build_shared/flatbuffers-flatc/src/flatbuffers-flatc-stamp/flatbuffers-flatc-update.rule

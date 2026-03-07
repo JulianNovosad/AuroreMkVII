@@ -1,0 +1,12 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=url
+command=/usr/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/pi/Aurore/deps/tensorflow/tf_capi_build/kleidiai-download/kleidiai-prefix/src/kleidiai-stamp/download-kleidiai.cmake;COMMAND;/usr/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/pi/Aurore/deps/tensorflow/tf_capi_build/kleidiai-download/kleidiai-prefix/src/kleidiai-stamp/verify-kleidiai.cmake;COMMAND;/usr/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/pi/Aurore/deps/tensorflow/tf_capi_build/kleidiai-download/kleidiai-prefix/src/kleidiai-stamp/extract-kleidiai.cmake
+source_dir=/home/pi/Aurore/deps/tensorflow/tf_capi_build/kleidiai-source
+work_dir=/home/pi/Aurore/deps/tensorflow/tf_capi_build
+url(s)=https://gitlab.arm.com/kleidi/kleidiai/-/archive/847ebd19d0192528659b0a0fa2c6057eed674c6a/kleidiai-847ebd19d0192528659b0a0fa2c6057eed674c6a.zip
+hash=SHA256=f3ea4fce53f3b31076958dbff229f0048dae15bf454929673c78292a56279d52
+      no_extract=
+

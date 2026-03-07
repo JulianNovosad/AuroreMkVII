@@ -1,0 +1,14 @@
+RingBufferTest 12 0.00212802
+TimingTest 10 0.0452236
+SafetyMonitorTest 12 0.0478569
+StateMachineTest 13 0.00070733
+DetectorTest 12 0.00776274
+TrackerTest 12 0.00652364
+BallisticsTest 12 0.12355
+FusionHatTest 11 0.00061894
+HudSocketTest 11 0.00879784
+TimingIntegrationTest 0 0
+SafetyMonitorFaultCodesTest 9 0.00149726
+StateMachineTransitionsTest 10 0.000843489
+MainThreadOrchestrationTest 8 0.0363358
+---

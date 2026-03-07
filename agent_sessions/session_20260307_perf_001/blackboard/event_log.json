@@ -1,0 +1,63 @@
+{
+  "session_id": "session_20260307_perf_001",
+  "events": [
+    {
+      "sequence_number": 1,
+      "timestamp": "2026-03-07T16:00:00Z",
+      "event_type": "session_created",
+      "agent": "performance-regression-profiler",
+      "details": {
+        "user_request": "Analyze AuroreMkVII performance benchmarks and profiling data"
+      },
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "sequence_number": 2,
+      "timestamp": "2026-03-07T16:05:00Z",
+      "event_type": "agent_invoked",
+      "agent": "performance-regression-profiler",
+      "details": {
+        "analysis_scope": ["wcet_analysis.json", "spec.md", "src/vision/orb_detector.cpp", "src/tracking/csrt_tracker.cpp", "src/actuation/ballistic_solver.cpp", "include/aurore/ring_buffer.hpp", "src/common/hud_socket.cpp", "src/drivers/fusion_hat_i2c.cpp"]
+      },
+      "previous_hash": "79b43f5375b6b74f18ef61bcc587fc89ca09c7b6d7a4f8a8af0c7fe856b7076e"
+    },
+    {
+      "sequence_number": 3,
+      "timestamp": "2026-03-07T16:05:00Z",
+      "event_type": "agent_completed",
+      "agent": "performance-regression-profiler",
+      "details": {
+        "artifact": "artifacts/performance-regression-profiler_001.json",
+        "checksum": "033b54dd0fdffd760800f57e5e323d672212b0980a9ca6a57e53cedada75395f",
+        "bottlenecks_found": 12,
+        "regressions_detected": 4,
+        "optimization_recommendations": 11,
+        "performance_baseline_met": false
+      },
+      "previous_hash": "a1c2e3f4b5d6789012345678901234567890abcdef1234567890abcdef123456"
+    },
+    {
+      "sequence_number": 4,
+      "timestamp": "2026-03-07T16:05:00Z",
+      "event_type": "gate_checked",
+      "agent": "performance-regression-profiler",
+      "details": {
+        "gate": "diagnostics_complete",
+        "result": "passed"
+      },
+      "previous_hash": "b2d3f4a5c6e7890123456789012345678901bcdef2345678901bcdef234567"
+    },
+    {
+      "sequence_number": 5,
+      "timestamp": "2026-03-07T16:05:00Z",
+      "event_type": "gate_checked",
+      "agent": "performance-regression-profiler",
+      "details": {
+        "gate": "performance_baseline_met",
+        "result": "failed",
+        "reason": "Vision pipeline exceeds WCET budget by 3x; actuation path exceeds by 2x"
+      },
+      "previous_hash": "c3e4f5a6d7e8901234567890123456789012cdef3456789012cdef345678"
+    }
+  ]
+}

@@ -1,0 +1,871 @@
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineSystem.cmake:205 (message)"
+      - "CMakeLists.txt:17 (project)"
+    message: |
+      The system is: Linux - 6.12.62+rpt-rpi-v8 - aarch64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:17 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler: /usr/bin/cc 
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "a.out"
+      
+      The C compiler identification is GNU, found in:
+        /home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/3.31.6/CompilerIdC/a.out
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:17 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: /usr/bin/c++ 
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "a.out"
+      
+      The CXX compiler identification is GNU, found in:
+        /home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/3.31.6/CompilerIdCXX/a.out
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:74 (try_compile)"
+      - "/usr/share/cmake-3.31/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:17 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-SfoMib"
+      binary: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-SfoMib"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-SfoMib'
+        
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_e7618/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_e7618.dir/build.make CMakeFiles/cmTC_e7618.dir/build
+        gmake[1]: Entering directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-SfoMib'
+        Building C object CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o
+        /usr/bin/cc   -v -o CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o -c /usr/share/cmake-3.31/Modules/CMakeCCompilerABI.c
+        Using built-in specs.
+        COLLECT_GCC=/usr/bin/cc
+        Target: aarch64-linux-gnu
+        Configured with: ../src/configure -v --with-pkgversion='Debian 12.4.0-5' --with-bugurl=file:///usr/share/doc/gcc-12/README.Bugs --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++,m2 --prefix=/usr --with-gcc-major-version-only --program-suffix=-12 --program-prefix=aarch64-linux-gnu- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-libquadmath --disable-libquadmath-support --enable-plugin --enable-default-pie --with-system-zlib --enable-libphobos-checking=release --with-target-system-zlib=auto --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release --build=aarch64-linux-gnu --host=aarch64-linux-gnu --target=aarch64-linux-gnu
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 12.4.0 (Debian 12.4.0-5) 
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o' '-c' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'CMakeFiles/cmTC_e7618.dir/'
+         /usr/lib/gcc/aarch64-linux-gnu/12/cc1 -quiet -v -imultiarch aarch64-linux-gnu /usr/share/cmake-3.31/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_e7618.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mlittle-endian -mabi=lp64 -version -fasynchronous-unwind-tables -o /tmp/cc1yUHWV.s
+        GNU C17 (Debian 12.4.0-5) version 12.4.0 (aarch64-linux-gnu)
+        	compiled by GNU C version 12.4.0, GMP version 6.3.0, MPFR version 4.2.1, MPC version 1.3.1, isl version isl-0.27-GMP
+        
+        warning: MPFR header version 4.2.1 differs from library version 4.2.2.
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        ignoring nonexistent directory "/usr/local/include/aarch64-linux-gnu"
+        ignoring nonexistent directory "/usr/lib/gcc/aarch64-linux-gnu/12/include-fixed"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         /usr/lib/gcc/aarch64-linux-gnu/12/include
+         /usr/local/include
+         /usr/aarch64-linux-gnu/include
+         /usr/include/aarch64-linux-gnu
+         /usr/include
+        End of search list.
+        GNU C17 (Debian 12.4.0-5) version 12.4.0 (aarch64-linux-gnu)
+        	compiled by GNU C version 12.4.0, GMP version 6.3.0, MPFR version 4.2.1, MPC version 1.3.1, isl version isl-0.27-GMP
+        
+        warning: MPFR header version 4.2.1 differs from library version 4.2.2.
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        Compiler executable checksum: 8b82a65600b9f3788f56edaa34f07d5c
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o' '-c' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'CMakeFiles/cmTC_e7618.dir/'
+         as -v -EL -mabi=lp64 -o CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o /tmp/cc1yUHWV.s
+        GNU assembler version 2.44 (aarch64-linux-gnu) using BFD version (GNU Binutils for Debian) 2.44
+        COMPILER_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/
+        LIBRARY_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib/:/lib/aarch64-linux-gnu/:/lib/../lib/:/usr/lib/aarch64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../:/lib/:/usr/lib/
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o' '-c' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.'
+        Linking C executable cmTC_e7618
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_e7618.dir/link.txt --verbose=1
+        Using built-in specs.
+        COLLECT_GCC=/usr/bin/cc
+        COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper
+        Target: aarch64-linux-gnu
+        Configured with: ../src/configure -v --with-pkgversion='Debian 12.4.0-5' --with-bugurl=file:///usr/share/doc/gcc-12/README.Bugs --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++,m2 --prefix=/usr --with-gcc-major-version-only --program-suffix=-12 --program-prefix=aarch64-linux-gnu- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-libquadmath --disable-libquadmath-support --enable-plugin --enable-default-pie --with-system-zlib --enable-libphobos-checking=release --with-target-system-zlib=auto --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release --build=aarch64-linux-gnu --host=aarch64-linux-gnu --target=aarch64-linux-gnu
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 12.4.0 (Debian 12.4.0-5) 
+        COMPILER_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/
+        LIBRARY_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib/:/lib/aarch64-linux-gnu/:/lib/../lib/:/usr/lib/aarch64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../:/lib/:/usr/lib/
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_e7618' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'cmTC_e7618.'
+         /usr/lib/gcc/aarch64-linux-gnu/12/collect2 -plugin /usr/lib/gcc/aarch64-linux-gnu/12/liblto_plugin.so -plugin-opt=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper -plugin-opt=-fresolution=/tmp/ccH8inRf.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --build-id --eh-frame-hdr --hash-style=gnu --as-needed -dynamic-linker /lib/ld-linux-aarch64.so.1 -X -EL -maarch64linux --fix-cortex-a53-843419 -pie -o cmTC_e7618 /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o /usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o -L/usr/lib/gcc/aarch64-linux-gnu/12 -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib -L/lib/aarch64-linux-gnu -L/lib/../lib -L/usr/lib/aarch64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../.. -v CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o
+        collect2 version 12.4.0
+        /usr/bin/ld -plugin /usr/lib/gcc/aarch64-linux-gnu/12/liblto_plugin.so -plugin-opt=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper -plugin-opt=-fresolution=/tmp/ccH8inRf.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --build-id --eh-frame-hdr --hash-style=gnu --as-needed -dynamic-linker /lib/ld-linux-aarch64.so.1 -X -EL -maarch64linux --fix-cortex-a53-843419 -pie -o cmTC_e7618 /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o /usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o -L/usr/lib/gcc/aarch64-linux-gnu/12 -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib -L/lib/aarch64-linux-gnu -L/lib/../lib -L/usr/lib/aarch64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../.. -v CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o
+        GNU ld (GNU Binutils for Debian) 2.44
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_e7618' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'cmTC_e7618.'
+        /usr/bin/cc  -v -Wl,-v CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o -o cmTC_e7618
+        gmake[1]: Leaving directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-SfoMib'
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:182 (message)"
+      - "/usr/share/cmake-3.31/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:17 (project)"
+    message: |
+      Parsed C implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [/usr/lib/gcc/aarch64-linux-gnu/12/include]
+          add: [/usr/local/include]
+          add: [/usr/aarch64-linux-gnu/include]
+          add: [/usr/include/aarch64-linux-gnu]
+          add: [/usr/include]
+        end of search list found
+        collapse include dir [/usr/lib/gcc/aarch64-linux-gnu/12/include] ==> [/usr/lib/gcc/aarch64-linux-gnu/12/include]
+        collapse include dir [/usr/local/include] ==> [/usr/local/include]
+        collapse include dir [/usr/aarch64-linux-gnu/include] ==> [/usr/aarch64-linux-gnu/include]
+        collapse include dir [/usr/include/aarch64-linux-gnu] ==> [/usr/include/aarch64-linux-gnu]
+        collapse include dir [/usr/include] ==> [/usr/include]
+        implicit include dirs: [/usr/lib/gcc/aarch64-linux-gnu/12/include;/usr/local/include;/usr/aarch64-linux-gnu/include;/usr/include/aarch64-linux-gnu;/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:218 (message)"
+      - "/usr/share/cmake-3.31/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:17 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(\\.[a-z]+)?))("|,| |$)]
+        ignore line: [Change Dir: '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-SfoMib']
+        ignore line: []
+        ignore line: [Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_e7618/fast]
+        ignore line: [/usr/bin/gmake  -f CMakeFiles/cmTC_e7618.dir/build.make CMakeFiles/cmTC_e7618.dir/build]
+        ignore line: [gmake[1]: Entering directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-SfoMib']
+        ignore line: [Building C object CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o]
+        ignore line: [/usr/bin/cc   -v -o CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o -c /usr/share/cmake-3.31/Modules/CMakeCCompilerABI.c]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=/usr/bin/cc]
+        ignore line: [Target: aarch64-linux-gnu]
+        ignore line: [Configured with: ../src/configure -v --with-pkgversion='Debian 12.4.0-5' --with-bugurl=file:///usr/share/doc/gcc-12/README.Bugs --enable-languages=c ada c++ go d fortran objc obj-c++ m2 --prefix=/usr --with-gcc-major-version-only --program-suffix=-12 --program-prefix=aarch64-linux-gnu- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-libquadmath --disable-libquadmath-support --enable-plugin --enable-default-pie --with-system-zlib --enable-libphobos-checking=release --with-target-system-zlib=auto --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release --build=aarch64-linux-gnu --host=aarch64-linux-gnu --target=aarch64-linux-gnu]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 12.4.0 (Debian 12.4.0-5) ]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o' '-c' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'CMakeFiles/cmTC_e7618.dir/']
+        ignore line: [ /usr/lib/gcc/aarch64-linux-gnu/12/cc1 -quiet -v -imultiarch aarch64-linux-gnu /usr/share/cmake-3.31/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_e7618.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mlittle-endian -mabi=lp64 -version -fasynchronous-unwind-tables -o /tmp/cc1yUHWV.s]
+        ignore line: [GNU C17 (Debian 12.4.0-5) version 12.4.0 (aarch64-linux-gnu)]
+        ignore line: [	compiled by GNU C version 12.4.0  GMP version 6.3.0  MPFR version 4.2.1  MPC version 1.3.1  isl version isl-0.27-GMP]
+        ignore line: []
+        ignore line: [warning: MPFR header version 4.2.1 differs from library version 4.2.2.]
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [ignoring nonexistent directory "/usr/local/include/aarch64-linux-gnu"]
+        ignore line: [ignoring nonexistent directory "/usr/lib/gcc/aarch64-linux-gnu/12/include-fixed"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ /usr/lib/gcc/aarch64-linux-gnu/12/include]
+        ignore line: [ /usr/local/include]
+        ignore line: [ /usr/aarch64-linux-gnu/include]
+        ignore line: [ /usr/include/aarch64-linux-gnu]
+        ignore line: [ /usr/include]
+        ignore line: [End of search list.]
+        ignore line: [GNU C17 (Debian 12.4.0-5) version 12.4.0 (aarch64-linux-gnu)]
+        ignore line: [	compiled by GNU C version 12.4.0  GMP version 6.3.0  MPFR version 4.2.1  MPC version 1.3.1  isl version isl-0.27-GMP]
+        ignore line: []
+        ignore line: [warning: MPFR header version 4.2.1 differs from library version 4.2.2.]
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [Compiler executable checksum: 8b82a65600b9f3788f56edaa34f07d5c]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o' '-c' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'CMakeFiles/cmTC_e7618.dir/']
+        ignore line: [ as -v -EL -mabi=lp64 -o CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o /tmp/cc1yUHWV.s]
+        ignore line: [GNU assembler version 2.44 (aarch64-linux-gnu) using BFD version (GNU Binutils for Debian) 2.44]
+        ignore line: [COMPILER_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/]
+        ignore line: [LIBRARY_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib/:/lib/aarch64-linux-gnu/:/lib/../lib/:/usr/lib/aarch64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../:/lib/:/usr/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o' '-c' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.']
+        ignore line: [Linking C executable cmTC_e7618]
+        ignore line: [/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_e7618.dir/link.txt --verbose=1]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=/usr/bin/cc]
+        ignore line: [COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper]
+        ignore line: [Target: aarch64-linux-gnu]
+        ignore line: [Configured with: ../src/configure -v --with-pkgversion='Debian 12.4.0-5' --with-bugurl=file:///usr/share/doc/gcc-12/README.Bugs --enable-languages=c ada c++ go d fortran objc obj-c++ m2 --prefix=/usr --with-gcc-major-version-only --program-suffix=-12 --program-prefix=aarch64-linux-gnu- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-libquadmath --disable-libquadmath-support --enable-plugin --enable-default-pie --with-system-zlib --enable-libphobos-checking=release --with-target-system-zlib=auto --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release --build=aarch64-linux-gnu --host=aarch64-linux-gnu --target=aarch64-linux-gnu]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 12.4.0 (Debian 12.4.0-5) ]
+        ignore line: [COMPILER_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/]
+        ignore line: [LIBRARY_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib/:/lib/aarch64-linux-gnu/:/lib/../lib/:/usr/lib/aarch64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../:/lib/:/usr/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_e7618' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'cmTC_e7618.']
+        link line: [ /usr/lib/gcc/aarch64-linux-gnu/12/collect2 -plugin /usr/lib/gcc/aarch64-linux-gnu/12/liblto_plugin.so -plugin-opt=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper -plugin-opt=-fresolution=/tmp/ccH8inRf.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --build-id --eh-frame-hdr --hash-style=gnu --as-needed -dynamic-linker /lib/ld-linux-aarch64.so.1 -X -EL -maarch64linux --fix-cortex-a53-843419 -pie -o cmTC_e7618 /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o /usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o -L/usr/lib/gcc/aarch64-linux-gnu/12 -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib -L/lib/aarch64-linux-gnu -L/lib/../lib -L/usr/lib/aarch64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../.. -v CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o]
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/collect2] ==> ignore
+          arg [-plugin] ==> ignore
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/liblto_plugin.so] ==> ignore
+          arg [-plugin-opt=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper] ==> ignore
+          arg [-plugin-opt=-fresolution=/tmp/ccH8inRf.res] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [-plugin-opt=-pass-through=-lc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [--build-id] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [--hash-style=gnu] ==> ignore
+          arg [--as-needed] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib/ld-linux-aarch64.so.1] ==> ignore
+          arg [-X] ==> ignore
+          arg [-EL] ==> ignore
+          arg [-maarch64linux] ==> ignore
+          arg [--fix-cortex-a53-843419] ==> ignore
+          arg [-pie] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_e7618] ==> ignore
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o] ==> obj [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o]
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o] ==> obj [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o]
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o] ==> obj [/usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o]
+          arg [-L/usr/lib/gcc/aarch64-linux-gnu/12] ==> dir [/usr/lib/gcc/aarch64-linux-gnu/12]
+          arg [-L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib] ==> dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib]
+          arg [-L/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu] ==> dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu]
+          arg [-L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib] ==> dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib]
+          arg [-L/lib/aarch64-linux-gnu] ==> dir [/lib/aarch64-linux-gnu]
+          arg [-L/lib/../lib] ==> dir [/lib/../lib]
+          arg [-L/usr/lib/aarch64-linux-gnu] ==> dir [/usr/lib/aarch64-linux-gnu]
+          arg [-L/usr/lib/../lib] ==> dir [/usr/lib/../lib]
+          arg [-L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib] ==> dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib]
+          arg [-L/usr/lib/gcc/aarch64-linux-gnu/12/../../..] ==> dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../..]
+          arg [-v] ==> ignore
+          arg [CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o] ==> ignore
+          arg [-lgcc] ==> lib [gcc]
+          arg [--push-state] ==> ignore
+          arg [--as-needed] ==> ignore
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [--pop-state] ==> ignore
+          arg [-lc] ==> lib [c]
+          arg [-lgcc] ==> lib [gcc]
+          arg [--push-state] ==> ignore
+          arg [--as-needed] ==> ignore
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [--pop-state] ==> ignore
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o] ==> obj [/usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o]
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o] ==> obj [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o]
+        ignore line: [collect2 version 12.4.0]
+        ignore line: [/usr/bin/ld -plugin /usr/lib/gcc/aarch64-linux-gnu/12/liblto_plugin.so -plugin-opt=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper -plugin-opt=-fresolution=/tmp/ccH8inRf.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --build-id --eh-frame-hdr --hash-style=gnu --as-needed -dynamic-linker /lib/ld-linux-aarch64.so.1 -X -EL -maarch64linux --fix-cortex-a53-843419 -pie -o cmTC_e7618 /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o /usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o -L/usr/lib/gcc/aarch64-linux-gnu/12 -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib -L/lib/aarch64-linux-gnu -L/lib/../lib -L/usr/lib/aarch64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../.. -v CMakeFiles/cmTC_e7618.dir/CMakeCCompilerABI.c.o -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o]
+        linker tool for 'C': /usr/bin/ld
+        collapse obj [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o] ==> [/usr/aarch64-linux-gnu/lib/Scrt1.o]
+        collapse obj [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o] ==> [/usr/aarch64-linux-gnu/lib/crti.o]
+        collapse obj [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o] ==> [/usr/aarch64-linux-gnu/lib/crtn.o]
+        collapse library dir [/usr/lib/gcc/aarch64-linux-gnu/12] ==> [/usr/lib/gcc/aarch64-linux-gnu/12]
+        collapse library dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib] ==> [/usr/aarch64-linux-gnu/lib]
+        collapse library dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu] ==> [/usr/lib/aarch64-linux-gnu]
+        collapse library dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib] ==> [/usr/lib]
+        collapse library dir [/lib/aarch64-linux-gnu] ==> [/lib/aarch64-linux-gnu]
+        collapse library dir [/lib/../lib] ==> [/lib]
+        collapse library dir [/usr/lib/aarch64-linux-gnu] ==> [/usr/lib/aarch64-linux-gnu]
+        collapse library dir [/usr/lib/../lib] ==> [/usr/lib]
+        collapse library dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib] ==> [/usr/aarch64-linux-gnu/lib]
+        collapse library dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../..] ==> [/usr/lib]
+        implicit libs: [gcc;gcc_s;c;gcc;gcc_s]
+        implicit objs: [/usr/aarch64-linux-gnu/lib/Scrt1.o;/usr/aarch64-linux-gnu/lib/crti.o;/usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o;/usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o;/usr/aarch64-linux-gnu/lib/crtn.o]
+        implicit dirs: [/usr/lib/gcc/aarch64-linux-gnu/12;/usr/aarch64-linux-gnu/lib;/usr/lib/aarch64-linux-gnu;/usr/lib;/lib/aarch64-linux-gnu;/lib]
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/Internal/CMakeDetermineLinkerId.cmake:40 (message)"
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:255 (cmake_determine_linker_id)"
+      - "/usr/share/cmake-3.31/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:17 (project)"
+    message: |
+      Running the C compiler's linker: "/usr/bin/ld" "-v"
+      GNU ld (GNU Binutils for Debian) 2.44
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:74 (try_compile)"
+      - "/usr/share/cmake-3.31/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:17 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-5rPyc4"
+      binary: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-5rPyc4"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_CXX_SCAN_FOR_MODULES: "OFF"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-5rPyc4'
+        
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_c9981/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_c9981.dir/build.make CMakeFiles/cmTC_c9981.dir/build
+        gmake[1]: Entering directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-5rPyc4'
+        Building CXX object CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o
+        /usr/bin/c++   -v -o CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o -c /usr/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp
+        Using built-in specs.
+        COLLECT_GCC=/usr/bin/c++
+        Target: aarch64-linux-gnu
+        Configured with: ../src/configure -v --with-pkgversion='Debian 12.4.0-5' --with-bugurl=file:///usr/share/doc/gcc-12/README.Bugs --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++,m2 --prefix=/usr --with-gcc-major-version-only --program-suffix=-12 --program-prefix=aarch64-linux-gnu- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-libquadmath --disable-libquadmath-support --enable-plugin --enable-default-pie --with-system-zlib --enable-libphobos-checking=release --with-target-system-zlib=auto --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release --build=aarch64-linux-gnu --host=aarch64-linux-gnu --target=aarch64-linux-gnu
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 12.4.0 (Debian 12.4.0-5) 
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'CMakeFiles/cmTC_c9981.dir/'
+         /usr/lib/gcc/aarch64-linux-gnu/12/cc1plus -quiet -v -imultiarch aarch64-linux-gnu -D_GNU_SOURCE /usr/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_c9981.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mlittle-endian -mabi=lp64 -version -fasynchronous-unwind-tables -o /tmp/ccXUt6Si.s
+        GNU C++17 (Debian 12.4.0-5) version 12.4.0 (aarch64-linux-gnu)
+        	compiled by GNU C version 12.4.0, GMP version 6.3.0, MPFR version 4.2.1, MPC version 1.3.1, isl version isl-0.27-GMP
+        
+        warning: MPFR header version 4.2.1 differs from library version 4.2.2.
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        ignoring duplicate directory "/usr/include/aarch64-linux-gnu/c++/12"
+        ignoring nonexistent directory "/usr/local/include/aarch64-linux-gnu"
+        ignoring nonexistent directory "/usr/lib/gcc/aarch64-linux-gnu/12/include-fixed"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         /usr/include/c++/12
+         /usr/include/aarch64-linux-gnu/c++/12
+         /usr/include/c++/12/backward
+         /usr/lib/gcc/aarch64-linux-gnu/12/include
+         /usr/local/include
+         /usr/aarch64-linux-gnu/include
+         /usr/include/aarch64-linux-gnu
+         /usr/include
+        End of search list.
+        GNU C++17 (Debian 12.4.0-5) version 12.4.0 (aarch64-linux-gnu)
+        	compiled by GNU C version 12.4.0, GMP version 6.3.0, MPFR version 4.2.1, MPC version 1.3.1, isl version isl-0.27-GMP
+        
+        warning: MPFR header version 4.2.1 differs from library version 4.2.2.
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        Compiler executable checksum: 694a6555f9ac17e4175a8775a9316861
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'CMakeFiles/cmTC_c9981.dir/'
+         as -v -EL -mabi=lp64 -o CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o /tmp/ccXUt6Si.s
+        GNU assembler version 2.44 (aarch64-linux-gnu) using BFD version (GNU Binutils for Debian) 2.44
+        COMPILER_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/
+        LIBRARY_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib/:/lib/aarch64-linux-gnu/:/lib/../lib/:/usr/lib/aarch64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../:/lib/:/usr/lib/
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.'
+        Linking CXX executable cmTC_c9981
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_c9981.dir/link.txt --verbose=1
+        Using built-in specs.
+        COLLECT_GCC=/usr/bin/c++
+        COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper
+        Target: aarch64-linux-gnu
+        Configured with: ../src/configure -v --with-pkgversion='Debian 12.4.0-5' --with-bugurl=file:///usr/share/doc/gcc-12/README.Bugs --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++,m2 --prefix=/usr --with-gcc-major-version-only --program-suffix=-12 --program-prefix=aarch64-linux-gnu- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-libquadmath --disable-libquadmath-support --enable-plugin --enable-default-pie --with-system-zlib --enable-libphobos-checking=release --with-target-system-zlib=auto --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release --build=aarch64-linux-gnu --host=aarch64-linux-gnu --target=aarch64-linux-gnu
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 12.4.0 (Debian 12.4.0-5) 
+        COMPILER_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/
+        LIBRARY_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib/:/lib/aarch64-linux-gnu/:/lib/../lib/:/usr/lib/aarch64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../:/lib/:/usr/lib/
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_c9981' '-shared-libgcc' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'cmTC_c9981.'
+         /usr/lib/gcc/aarch64-linux-gnu/12/collect2 -plugin /usr/lib/gcc/aarch64-linux-gnu/12/liblto_plugin.so -plugin-opt=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper -plugin-opt=-fresolution=/tmp/cc0jYUma.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --build-id --eh-frame-hdr --hash-style=gnu --as-needed -dynamic-linker /lib/ld-linux-aarch64.so.1 -X -EL -maarch64linux --fix-cortex-a53-843419 -pie -o cmTC_c9981 /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o /usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o -L/usr/lib/gcc/aarch64-linux-gnu/12 -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib -L/lib/aarch64-linux-gnu -L/lib/../lib -L/usr/lib/aarch64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../.. -v CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o
+        collect2 version 12.4.0
+        /usr/bin/ld -plugin /usr/lib/gcc/aarch64-linux-gnu/12/liblto_plugin.so -plugin-opt=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper -plugin-opt=-fresolution=/tmp/cc0jYUma.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --build-id --eh-frame-hdr --hash-style=gnu --as-needed -dynamic-linker /lib/ld-linux-aarch64.so.1 -X -EL -maarch64linux --fix-cortex-a53-843419 -pie -o cmTC_c9981 /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o /usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o -L/usr/lib/gcc/aarch64-linux-gnu/12 -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib -L/lib/aarch64-linux-gnu -L/lib/../lib -L/usr/lib/aarch64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../.. -v CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o
+        GNU ld (GNU Binutils for Debian) 2.44
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_c9981' '-shared-libgcc' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'cmTC_c9981.'
+        /usr/bin/c++  -v -Wl,-v CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_c9981
+        gmake[1]: Leaving directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-5rPyc4'
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:182 (message)"
+      - "/usr/share/cmake-3.31/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:17 (project)"
+    message: |
+      Parsed CXX implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [/usr/include/c++/12]
+          add: [/usr/include/aarch64-linux-gnu/c++/12]
+          add: [/usr/include/c++/12/backward]
+          add: [/usr/lib/gcc/aarch64-linux-gnu/12/include]
+          add: [/usr/local/include]
+          add: [/usr/aarch64-linux-gnu/include]
+          add: [/usr/include/aarch64-linux-gnu]
+          add: [/usr/include]
+        end of search list found
+        collapse include dir [/usr/include/c++/12] ==> [/usr/include/c++/12]
+        collapse include dir [/usr/include/aarch64-linux-gnu/c++/12] ==> [/usr/include/aarch64-linux-gnu/c++/12]
+        collapse include dir [/usr/include/c++/12/backward] ==> [/usr/include/c++/12/backward]
+        collapse include dir [/usr/lib/gcc/aarch64-linux-gnu/12/include] ==> [/usr/lib/gcc/aarch64-linux-gnu/12/include]
+        collapse include dir [/usr/local/include] ==> [/usr/local/include]
+        collapse include dir [/usr/aarch64-linux-gnu/include] ==> [/usr/aarch64-linux-gnu/include]
+        collapse include dir [/usr/include/aarch64-linux-gnu] ==> [/usr/include/aarch64-linux-gnu]
+        collapse include dir [/usr/include] ==> [/usr/include]
+        implicit include dirs: [/usr/include/c++/12;/usr/include/aarch64-linux-gnu/c++/12;/usr/include/c++/12/backward;/usr/lib/gcc/aarch64-linux-gnu/12/include;/usr/local/include;/usr/aarch64-linux-gnu/include;/usr/include/aarch64-linux-gnu;/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:218 (message)"
+      - "/usr/share/cmake-3.31/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:17 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(\\.[a-z]+)?))("|,| |$)]
+        ignore line: [Change Dir: '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-5rPyc4']
+        ignore line: []
+        ignore line: [Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_c9981/fast]
+        ignore line: [/usr/bin/gmake  -f CMakeFiles/cmTC_c9981.dir/build.make CMakeFiles/cmTC_c9981.dir/build]
+        ignore line: [gmake[1]: Entering directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-5rPyc4']
+        ignore line: [Building CXX object CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o]
+        ignore line: [/usr/bin/c++   -v -o CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o -c /usr/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=/usr/bin/c++]
+        ignore line: [Target: aarch64-linux-gnu]
+        ignore line: [Configured with: ../src/configure -v --with-pkgversion='Debian 12.4.0-5' --with-bugurl=file:///usr/share/doc/gcc-12/README.Bugs --enable-languages=c ada c++ go d fortran objc obj-c++ m2 --prefix=/usr --with-gcc-major-version-only --program-suffix=-12 --program-prefix=aarch64-linux-gnu- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-libquadmath --disable-libquadmath-support --enable-plugin --enable-default-pie --with-system-zlib --enable-libphobos-checking=release --with-target-system-zlib=auto --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release --build=aarch64-linux-gnu --host=aarch64-linux-gnu --target=aarch64-linux-gnu]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 12.4.0 (Debian 12.4.0-5) ]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'CMakeFiles/cmTC_c9981.dir/']
+        ignore line: [ /usr/lib/gcc/aarch64-linux-gnu/12/cc1plus -quiet -v -imultiarch aarch64-linux-gnu -D_GNU_SOURCE /usr/share/cmake-3.31/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_c9981.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mlittle-endian -mabi=lp64 -version -fasynchronous-unwind-tables -o /tmp/ccXUt6Si.s]
+        ignore line: [GNU C++17 (Debian 12.4.0-5) version 12.4.0 (aarch64-linux-gnu)]
+        ignore line: [	compiled by GNU C version 12.4.0  GMP version 6.3.0  MPFR version 4.2.1  MPC version 1.3.1  isl version isl-0.27-GMP]
+        ignore line: []
+        ignore line: [warning: MPFR header version 4.2.1 differs from library version 4.2.2.]
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [ignoring duplicate directory "/usr/include/aarch64-linux-gnu/c++/12"]
+        ignore line: [ignoring nonexistent directory "/usr/local/include/aarch64-linux-gnu"]
+        ignore line: [ignoring nonexistent directory "/usr/lib/gcc/aarch64-linux-gnu/12/include-fixed"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ /usr/include/c++/12]
+        ignore line: [ /usr/include/aarch64-linux-gnu/c++/12]
+        ignore line: [ /usr/include/c++/12/backward]
+        ignore line: [ /usr/lib/gcc/aarch64-linux-gnu/12/include]
+        ignore line: [ /usr/local/include]
+        ignore line: [ /usr/aarch64-linux-gnu/include]
+        ignore line: [ /usr/include/aarch64-linux-gnu]
+        ignore line: [ /usr/include]
+        ignore line: [End of search list.]
+        ignore line: [GNU C++17 (Debian 12.4.0-5) version 12.4.0 (aarch64-linux-gnu)]
+        ignore line: [	compiled by GNU C version 12.4.0  GMP version 6.3.0  MPFR version 4.2.1  MPC version 1.3.1  isl version isl-0.27-GMP]
+        ignore line: []
+        ignore line: [warning: MPFR header version 4.2.1 differs from library version 4.2.2.]
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [Compiler executable checksum: 694a6555f9ac17e4175a8775a9316861]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'CMakeFiles/cmTC_c9981.dir/']
+        ignore line: [ as -v -EL -mabi=lp64 -o CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o /tmp/ccXUt6Si.s]
+        ignore line: [GNU assembler version 2.44 (aarch64-linux-gnu) using BFD version (GNU Binutils for Debian) 2.44]
+        ignore line: [COMPILER_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/]
+        ignore line: [LIBRARY_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib/:/lib/aarch64-linux-gnu/:/lib/../lib/:/usr/lib/aarch64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../:/lib/:/usr/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.']
+        ignore line: [Linking CXX executable cmTC_c9981]
+        ignore line: [/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_c9981.dir/link.txt --verbose=1]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=/usr/bin/c++]
+        ignore line: [COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper]
+        ignore line: [Target: aarch64-linux-gnu]
+        ignore line: [Configured with: ../src/configure -v --with-pkgversion='Debian 12.4.0-5' --with-bugurl=file:///usr/share/doc/gcc-12/README.Bugs --enable-languages=c ada c++ go d fortran objc obj-c++ m2 --prefix=/usr --with-gcc-major-version-only --program-suffix=-12 --program-prefix=aarch64-linux-gnu- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-libquadmath --disable-libquadmath-support --enable-plugin --enable-default-pie --with-system-zlib --enable-libphobos-checking=release --with-target-system-zlib=auto --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release --build=aarch64-linux-gnu --host=aarch64-linux-gnu --target=aarch64-linux-gnu]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 12.4.0 (Debian 12.4.0-5) ]
+        ignore line: [COMPILER_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/]
+        ignore line: [LIBRARY_PATH=/usr/lib/gcc/aarch64-linux-gnu/12/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib/:/lib/aarch64-linux-gnu/:/lib/../lib/:/usr/lib/aarch64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/:/usr/lib/gcc/aarch64-linux-gnu/12/../../../:/lib/:/usr/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_c9981' '-shared-libgcc' '-mlittle-endian' '-mabi=lp64' '-dumpdir' 'cmTC_c9981.']
+        link line: [ /usr/lib/gcc/aarch64-linux-gnu/12/collect2 -plugin /usr/lib/gcc/aarch64-linux-gnu/12/liblto_plugin.so -plugin-opt=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper -plugin-opt=-fresolution=/tmp/cc0jYUma.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --build-id --eh-frame-hdr --hash-style=gnu --as-needed -dynamic-linker /lib/ld-linux-aarch64.so.1 -X -EL -maarch64linux --fix-cortex-a53-843419 -pie -o cmTC_c9981 /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o /usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o -L/usr/lib/gcc/aarch64-linux-gnu/12 -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib -L/lib/aarch64-linux-gnu -L/lib/../lib -L/usr/lib/aarch64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../.. -v CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o]
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/collect2] ==> ignore
+          arg [-plugin] ==> ignore
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/liblto_plugin.so] ==> ignore
+          arg [-plugin-opt=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper] ==> ignore
+          arg [-plugin-opt=-fresolution=/tmp/cc0jYUma.res] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [--build-id] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [--hash-style=gnu] ==> ignore
+          arg [--as-needed] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib/ld-linux-aarch64.so.1] ==> ignore
+          arg [-X] ==> ignore
+          arg [-EL] ==> ignore
+          arg [-maarch64linux] ==> ignore
+          arg [--fix-cortex-a53-843419] ==> ignore
+          arg [-pie] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_c9981] ==> ignore
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o] ==> obj [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o]
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o] ==> obj [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o]
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o] ==> obj [/usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o]
+          arg [-L/usr/lib/gcc/aarch64-linux-gnu/12] ==> dir [/usr/lib/gcc/aarch64-linux-gnu/12]
+          arg [-L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib] ==> dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib]
+          arg [-L/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu] ==> dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu]
+          arg [-L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib] ==> dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib]
+          arg [-L/lib/aarch64-linux-gnu] ==> dir [/lib/aarch64-linux-gnu]
+          arg [-L/lib/../lib] ==> dir [/lib/../lib]
+          arg [-L/usr/lib/aarch64-linux-gnu] ==> dir [/usr/lib/aarch64-linux-gnu]
+          arg [-L/usr/lib/../lib] ==> dir [/usr/lib/../lib]
+          arg [-L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib] ==> dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib]
+          arg [-L/usr/lib/gcc/aarch64-linux-gnu/12/../../..] ==> dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../..]
+          arg [-v] ==> ignore
+          arg [CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+          arg [-lstdc++] ==> lib [stdc++]
+          arg [-lm] ==> lib [m]
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [-lgcc] ==> lib [gcc]
+          arg [-lc] ==> lib [c]
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [-lgcc] ==> lib [gcc]
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o] ==> obj [/usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o]
+          arg [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o] ==> obj [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o]
+        ignore line: [collect2 version 12.4.0]
+        ignore line: [/usr/bin/ld -plugin /usr/lib/gcc/aarch64-linux-gnu/12/liblto_plugin.so -plugin-opt=/usr/lib/gcc/aarch64-linux-gnu/12/lto-wrapper -plugin-opt=-fresolution=/tmp/cc0jYUma.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --build-id --eh-frame-hdr --hash-style=gnu --as-needed -dynamic-linker /lib/ld-linux-aarch64.so.1 -X -EL -maarch64linux --fix-cortex-a53-843419 -pie -o cmTC_c9981 /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o /usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o -L/usr/lib/gcc/aarch64-linux-gnu/12 -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib -L/lib/aarch64-linux-gnu -L/lib/../lib -L/usr/lib/aarch64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib -L/usr/lib/gcc/aarch64-linux-gnu/12/../../.. -v CMakeFiles/cmTC_c9981.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o /usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o]
+        linker tool for 'CXX': /usr/bin/ld
+        collapse obj [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/Scrt1.o] ==> [/usr/aarch64-linux-gnu/lib/Scrt1.o]
+        collapse obj [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crti.o] ==> [/usr/aarch64-linux-gnu/lib/crti.o]
+        collapse obj [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib/crtn.o] ==> [/usr/aarch64-linux-gnu/lib/crtn.o]
+        collapse library dir [/usr/lib/gcc/aarch64-linux-gnu/12] ==> [/usr/lib/gcc/aarch64-linux-gnu/12]
+        collapse library dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib/../lib] ==> [/usr/aarch64-linux-gnu/lib]
+        collapse library dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../aarch64-linux-gnu] ==> [/usr/lib/aarch64-linux-gnu]
+        collapse library dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../lib] ==> [/usr/lib]
+        collapse library dir [/lib/aarch64-linux-gnu] ==> [/lib/aarch64-linux-gnu]
+        collapse library dir [/lib/../lib] ==> [/lib]
+        collapse library dir [/usr/lib/aarch64-linux-gnu] ==> [/usr/lib/aarch64-linux-gnu]
+        collapse library dir [/usr/lib/../lib] ==> [/usr/lib]
+        collapse library dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../../../aarch64-linux-gnu/lib] ==> [/usr/aarch64-linux-gnu/lib]
+        collapse library dir [/usr/lib/gcc/aarch64-linux-gnu/12/../../..] ==> [/usr/lib]
+        implicit libs: [stdc++;m;gcc_s;gcc;c;gcc_s;gcc]
+        implicit objs: [/usr/aarch64-linux-gnu/lib/Scrt1.o;/usr/aarch64-linux-gnu/lib/crti.o;/usr/lib/gcc/aarch64-linux-gnu/12/crtbeginS.o;/usr/lib/gcc/aarch64-linux-gnu/12/crtendS.o;/usr/aarch64-linux-gnu/lib/crtn.o]
+        implicit dirs: [/usr/lib/gcc/aarch64-linux-gnu/12;/usr/aarch64-linux-gnu/lib;/usr/lib/aarch64-linux-gnu;/usr/lib;/lib/aarch64-linux-gnu;/lib]
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/Internal/CMakeDetermineLinkerId.cmake:40 (message)"
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:255 (cmake_determine_linker_id)"
+      - "/usr/share/cmake-3.31/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:17 (project)"
+    message: |
+      Running the CXX compiler's linker: "/usr/bin/ld" "-v"
+      GNU ld (GNU Binutils for Debian) 2.44
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/Internal/CheckSourceCompiles.cmake:108 (try_compile)"
+      - "/usr/share/cmake-3.31/Modules/CheckCXXSourceCompiles.cmake:58 (cmake_check_source_compiles)"
+      - "/home/pi/Aurore/deps/tensorflow/tf_capi_build/abseil-cpp/CMake/AbseilDll.cmake:627 (check_cxx_source_compiles)"
+      - "/home/pi/Aurore/deps/tensorflow/tf_capi_build/abseil-cpp/CMakeLists.txt:91 (include)"
+    checks:
+      - "Performing Test ABSL_INTERNAL_AT_LEAST_CXX17"
+    directories:
+      source: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-eqWNvH"
+      binary: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-eqWNvH"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "/home/pi/Aurore/deps/tensorflow/tensorflow/lite/tools/cmake/modules;/home/pi/Aurore/deps/tensorflow/tf_capi_build/abseil-cpp/CMake;/home/pi/Aurore/deps/tensorflow/tf_capi_build/abseil-cpp/absl/copts"
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+    buildResult:
+      variable: "ABSL_INTERNAL_AT_LEAST_CXX17"
+      cached: true
+      stdout: |
+        Change Dir: '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-eqWNvH'
+        
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_cdde4/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_cdde4.dir/build.make CMakeFiles/cmTC_cdde4.dir/build
+        gmake[1]: Entering directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-eqWNvH'
+        Building CXX object CMakeFiles/cmTC_cdde4.dir/src.cxx.o
+        /usr/bin/c++ -DABSL_INTERNAL_AT_LEAST_CXX17  -std=gnu++20 -fPIE -o CMakeFiles/cmTC_cdde4.dir/src.cxx.o -c /home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-eqWNvH/src.cxx
+        Linking CXX executable cmTC_cdde4
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_cdde4.dir/link.txt --verbose=1
+        /usr/bin/c++ CMakeFiles/cmTC_cdde4.dir/src.cxx.o -o cmTC_cdde4
+        gmake[1]: Leaving directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-eqWNvH'
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/Internal/CheckSourceCompiles.cmake:108 (try_compile)"
+      - "/usr/share/cmake-3.31/Modules/CheckCSourceCompiles.cmake:58 (cmake_check_source_compiles)"
+      - "/usr/share/cmake-3.31/Modules/FindThreads.cmake:97 (CHECK_C_SOURCE_COMPILES)"
+      - "/usr/share/cmake-3.31/Modules/FindThreads.cmake:163 (_threads_check_libc)"
+      - "/home/pi/Aurore/deps/tensorflow/tf_capi_build/abseil-cpp/CMakeLists.txt:117 (find_package)"
+    checks:
+      - "Performing Test CMAKE_HAVE_LIBC_PTHREAD"
+    directories:
+      source: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-zpNilb"
+      binary: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-zpNilb"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "/home/pi/Aurore/deps/tensorflow/tensorflow/lite/tools/cmake/modules;/home/pi/Aurore/deps/tensorflow/tf_capi_build/abseil-cpp/CMake;/home/pi/Aurore/deps/tensorflow/tf_capi_build/abseil-cpp/absl/copts"
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+    buildResult:
+      variable: "CMAKE_HAVE_LIBC_PTHREAD"
+      cached: true
+      stdout: |
+        Change Dir: '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-zpNilb'
+        
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_089af/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_089af.dir/build.make CMakeFiles/cmTC_089af.dir/build
+        gmake[1]: Entering directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-zpNilb'
+        Building C object CMakeFiles/cmTC_089af.dir/src.c.o
+        /usr/bin/cc -DCMAKE_HAVE_LIBC_PTHREAD  -fPIE -o CMakeFiles/cmTC_089af.dir/src.c.o -c /home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-zpNilb/src.c
+        Linking C executable cmTC_089af
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_089af.dir/link.txt --verbose=1
+        /usr/bin/cc CMakeFiles/cmTC_089af.dir/src.c.o -o cmTC_089af
+        gmake[1]: Leaving directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-zpNilb'
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/Internal/CheckSourceCompiles.cmake:108 (try_compile)"
+      - "/usr/share/cmake-3.31/Modules/CheckCXXSourceCompiles.cmake:58 (cmake_check_source_compiles)"
+      - "/home/pi/Aurore/deps/tensorflow/tensorflow/lite/tools/cmake/modules/farmhash/CMakeLists.txt:27 (check_cxx_source_compiles)"
+    checks:
+      - "Performing Test FARMHASH_HAS_BUILTIN_EXPECT"
+    directories:
+      source: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-XR3uZE"
+      binary: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-XR3uZE"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "/home/pi/Aurore/deps/tensorflow/tensorflow/lite/tools/cmake/modules"
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+    buildResult:
+      variable: "FARMHASH_HAS_BUILTIN_EXPECT"
+      cached: true
+      stdout: |
+        Change Dir: '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-XR3uZE'
+        
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_cb3c0/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_cb3c0.dir/build.make CMakeFiles/cmTC_cb3c0.dir/build
+        gmake[1]: Entering directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-XR3uZE'
+        Building CXX object CMakeFiles/cmTC_cb3c0.dir/src.cxx.o
+        /usr/bin/c++ -DFARMHASH_HAS_BUILTIN_EXPECT  -std=gnu++20 -fPIE -o CMakeFiles/cmTC_cb3c0.dir/src.cxx.o -c /home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-XR3uZE/src.cxx
+        Linking CXX executable cmTC_cb3c0
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_cb3c0.dir/link.txt --verbose=1
+        /usr/bin/c++ CMakeFiles/cmTC_cb3c0.dir/src.cxx.o -o cmTC_cb3c0
+        gmake[1]: Leaving directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-XR3uZE'
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CheckSymbolExists.cmake:163 (try_compile)"
+      - "/usr/share/cmake-3.31/Modules/CheckCXXSymbolExists.cmake:74 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "/home/pi/Aurore/deps/tensorflow/tf_capi_build/flatbuffers/CMakeLists.txt:105 (check_cxx_symbol_exists)"
+    checks:
+      - "Looking for strtof_l"
+    directories:
+      source: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-jHZKdJ"
+      binary: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-jHZKdJ"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "/home/pi/Aurore/deps/tensorflow/tensorflow/lite/tools/cmake/modules"
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+    buildResult:
+      variable: "FLATBUFFERS_HAS_STRTOF_L"
+      cached: true
+      stdout: |
+        Change Dir: '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-jHZKdJ'
+        
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_5e757/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_5e757.dir/build.make CMakeFiles/cmTC_5e757.dir/build
+        gmake[1]: Entering directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-jHZKdJ'
+        Building CXX object CMakeFiles/cmTC_5e757.dir/CheckSymbolExists.cxx.o
+        /usr/bin/c++   -std=gnu++20 -fPIE -o CMakeFiles/cmTC_5e757.dir/CheckSymbolExists.cxx.o -c /home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-jHZKdJ/CheckSymbolExists.cxx
+        Linking CXX executable cmTC_5e757
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_5e757.dir/link.txt --verbose=1
+        /usr/bin/c++ CMakeFiles/cmTC_5e757.dir/CheckSymbolExists.cxx.o -o cmTC_5e757
+        gmake[1]: Leaving directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-jHZKdJ'
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CheckSymbolExists.cmake:163 (try_compile)"
+      - "/usr/share/cmake-3.31/Modules/CheckCXXSymbolExists.cmake:74 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "/home/pi/Aurore/deps/tensorflow/tf_capi_build/flatbuffers/CMakeLists.txt:106 (check_cxx_symbol_exists)"
+    checks:
+      - "Looking for strtoull_l"
+    directories:
+      source: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-OqaLK1"
+      binary: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-OqaLK1"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "/home/pi/Aurore/deps/tensorflow/tensorflow/lite/tools/cmake/modules"
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+    buildResult:
+      variable: "FLATBUFFERS_HAS_STRTOULL_L"
+      cached: true
+      stdout: |
+        Change Dir: '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-OqaLK1'
+        
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_7ff6c/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_7ff6c.dir/build.make CMakeFiles/cmTC_7ff6c.dir/build
+        gmake[1]: Entering directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-OqaLK1'
+        Building CXX object CMakeFiles/cmTC_7ff6c.dir/CheckSymbolExists.cxx.o
+        /usr/bin/c++   -std=gnu++20 -fPIE -o CMakeFiles/cmTC_7ff6c.dir/CheckSymbolExists.cxx.o -c /home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-OqaLK1/CheckSymbolExists.cxx
+        Linking CXX executable cmTC_7ff6c
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_7ff6c.dir/link.txt --verbose=1
+        /usr/bin/c++ CMakeFiles/cmTC_7ff6c.dir/CheckSymbolExists.cxx.o -o cmTC_7ff6c
+        gmake[1]: Leaving directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-OqaLK1'
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CheckSymbolExists.cmake:163 (try_compile)"
+      - "/usr/share/cmake-3.31/Modules/CheckSymbolExists.cmake:68 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "/home/pi/Aurore/deps/tensorflow/tf_capi_build/flatbuffers/CMakeLists.txt:115 (check_symbol_exists)"
+    checks:
+      - "Looking for realpath"
+    directories:
+      source: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-mbbDzX"
+      binary: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-mbbDzX"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "/home/pi/Aurore/deps/tensorflow/tensorflow/lite/tools/cmake/modules"
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+    buildResult:
+      variable: "HAVE_REALPATH"
+      cached: true
+      stdout: |
+        Change Dir: '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-mbbDzX'
+        
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_9b906/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_9b906.dir/build.make CMakeFiles/cmTC_9b906.dir/build
+        gmake[1]: Entering directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-mbbDzX'
+        Building C object CMakeFiles/cmTC_9b906.dir/CheckSymbolExists.c.o
+        /usr/bin/cc   -fPIE -o CMakeFiles/cmTC_9b906.dir/CheckSymbolExists.c.o -c /home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-mbbDzX/CheckSymbolExists.c
+        Linking C executable cmTC_9b906
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_9b906.dir/link.txt --verbose=1
+        /usr/bin/cc CMakeFiles/cmTC_9b906.dir/CheckSymbolExists.c.o -o cmTC_9b906
+        gmake[1]: Leaving directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-mbbDzX'
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:1237 (message)"
+      - "/usr/share/cmake-3.31/Modules/CMakeDetermineASMCompiler.cmake:135 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "/home/pi/Aurore/deps/tensorflow/tf_capi_build/xnnpack/CMakeLists.txt:18 (PROJECT)"
+    message: |
+      Checking whether the ASM compiler is GNU using "--version" matched "(GNU assembler)|(GCC)|(Free Software Foundation)":
+      cc (Debian 12.4.0-5) 12.4.0
+      Copyright (C) 2022 Free Software Foundation, Inc.
+      This is free software; see the source for copying conditions.  There is NO
+      warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/Internal/CheckSourceCompiles.cmake:108 (try_compile)"
+      - "/usr/share/cmake-3.31/Modules/Internal/CheckLinkerFlag.cmake:37 (cmake_check_source_compiles)"
+      - "/usr/share/cmake-3.31/Modules/CheckLinkerFlag.cmake:44 (cmake_check_linker_flag)"
+      - "/home/pi/Aurore/deps/tensorflow/tf_capi_build/protobuf/CMakeLists.txt:149 (check_linker_flag)"
+    checks:
+      - "Performing Test protobuf_HAVE_LD_VERSION_SCRIPT"
+    directories:
+      source: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-FlTJNR"
+      binary: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-FlTJNR"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/flatbuffers/CMake;/home/pi/Aurore/deps/tensorflow/tensorflow/lite/tools/cmake/modules"
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+    buildResult:
+      variable: "protobuf_HAVE_LD_VERSION_SCRIPT"
+      cached: true
+      stdout: |
+        Change Dir: '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-FlTJNR'
+        
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_97bf0/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_97bf0.dir/build.make CMakeFiles/cmTC_97bf0.dir/build
+        gmake[1]: Entering directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-FlTJNR'
+        Building CXX object CMakeFiles/cmTC_97bf0.dir/src.cxx.o
+        /usr/bin/c++ -Dprotobuf_HAVE_LD_VERSION_SCRIPT  -std=c++11 -fPIE -o CMakeFiles/cmTC_97bf0.dir/src.cxx.o -c /home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-FlTJNR/src.cxx
+        Linking CXX executable cmTC_97bf0
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_97bf0.dir/link.txt --verbose=1
+        /usr/bin/c++ -Wl,--version-script=/home/pi/Aurore/deps/tensorflow/tf_capi_build/_deps/protobuf-build/cmaketest.map CMakeFiles/cmTC_97bf0.dir/src.cxx.o -o cmTC_97bf0
+        gmake[1]: Leaving directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-FlTJNR'
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake-3.31/Modules/Internal/CheckSourceCompiles.cmake:108 (try_compile)"
+      - "/usr/share/cmake-3.31/Modules/CheckCXXSourceCompiles.cmake:58 (cmake_check_source_compiles)"
+      - "/home/pi/Aurore/deps/tensorflow/tf_capi_build/protobuf/CMakeLists.txt:198 (check_cxx_source_compiles)"
+    checks:
+      - "Performing Test protobuf_HAVE_BUILTIN_ATOMICS"
+    directories:
+      source: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-oiZ98t"
+      binary: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-oiZ98t"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "/home/pi/Aurore/deps/tensorflow/tf_capi_build/flatbuffers/CMake;/home/pi/Aurore/deps/tensorflow/tensorflow/lite/tools/cmake/modules"
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+    buildResult:
+      variable: "protobuf_HAVE_BUILTIN_ATOMICS"
+      cached: true
+      stdout: |
+        Change Dir: '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-oiZ98t'
+        
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_6f703/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_6f703.dir/build.make CMakeFiles/cmTC_6f703.dir/build
+        gmake[1]: Entering directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-oiZ98t'
+        Building CXX object CMakeFiles/cmTC_6f703.dir/src.cxx.o
+        /usr/bin/c++ -Dprotobuf_HAVE_BUILTIN_ATOMICS  -std=c++11 -std=c++11 -fPIE -o CMakeFiles/cmTC_6f703.dir/src.cxx.o -c /home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-oiZ98t/src.cxx
+        Linking CXX executable cmTC_6f703
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_6f703.dir/link.txt --verbose=1
+        /usr/bin/c++  -std=c++11 CMakeFiles/cmTC_6f703.dir/src.cxx.o -o cmTC_6f703
+        gmake[1]: Leaving directory '/home/pi/Aurore/deps/tensorflow/tf_capi_build/CMakeFiles/CMakeScratch/TryCompile-oiZ98t'
+        
+      exitCode: 0
+...

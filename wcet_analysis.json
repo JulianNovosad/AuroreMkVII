@@ -1,0 +1,264 @@
+{
+  "analysis_metadata": {
+    "wcet_budget_rt_thread_ns": 5000000,
+    "wcet_budget_safety_monitor_ns": 1000000,
+    "target_platform": "Raspberry Pi 5 (Cortex-A76)",
+    "frame_rate_hz": 120,
+    "safety_monitor_rate_hz": 1000
+  },
+  "findings": [
+    {
+      "type": "SLOW_OP",
+      "file": "src/actuation/ballistic_solver.cpp",
+      "line": 93,
+      "severity": "BLOCKS_WCET",
+      "description": "monte_carlo_p_hit() executes 50 Monte Carlo simulations with std::mt19937 RNG on hot path. Each simulation includes sqrt(), normal distribution sampling. Estimated: 50-200μs per call. Called from solve() which is on fire-control decision path."
+    },
+    {
+      "type": "SLOW_OP",
+      "file": "src/actuation/ballistic_solver.cpp",
+      "line": 52,
+      "severity": "BLOCKS_WCET",
+      "description": "solve_drop() contains 1000-iteration optimization loop searching for minimum velocity. Loop body includes sqrt(), atan2(). Worst-case: 1000 iterations × ~50ns = 50μs. Deterministic but significant budget consumption."
+    },
+    {
+      "type": "SLOW_OP",
+      "file": "src/vision/orb_detector.cpp",
+      "line": 28,
+      "severity": "BLOCKS_WCET",
+      "description": "detect() calls cv::createCLAHE(2.0, {8,8}) on EVERY frame. CLAHE is computationally expensive histogram equalization. At 1536×864 resolution, this alone can exceed 2-3ms on RPi 5."
+    },
+    {
+      "type": "SLOW_OP",
+      "file": "src/vision/orb_detector.cpp",
+      "line": 32,
+      "severity": "BLOCKS_WCET",
+      "description": "detect() calls orb_->detectAndCompute() on every frame. ORB feature detection at 1536×864 with 300 keypoints: estimated 3-5ms on RPi 5. This exceeds the 5ms WCET budget alone."
+    },
+    {
+      "type": "SLOW_OP",
+      "file": "src/vision/orb_detector.cpp",
+      "line": 38,
+      "severity": "BLOCKS_WCET",
+      "description": "detect() calls matcher_->knnMatch() with k=2 for template matching. BFMatcher with NORM_HAMMING on 300 descriptors: O(n×m) complexity. Estimated 1-3ms depending on template count."
+    },
+    {
+      "type": "SLOW_OP",
+      "file": "src/vision/orb_detector.cpp",
+      "line": 47,
+      "severity": "BLOCKS_WCET",
+      "description": "detect() calls cv::findHomography() with RANSAC (3.0 threshold, 8-point algorithm). RANSAC is iterative and non-deterministic. Worst-case: 5-10ms. This is the dominant WCET contributor in vision pipeline."
+    },
+    {
+      "type": "SLOW_OP",
+      "file": "src/tracking/csrt_tracker.cpp",
+      "line": 25,
+      "severity": "BLOCKS_WCET",
+      "description": "update() calls tracker_->update() which runs CSRT correlation tracking. CSRT is accurate but slow: 10-20ms at 1536×864 on RPi 5. This exceeds the 5ms budget by 2-4×."
+    },
+    {
+      "type": "SLOW_OP",
+      "file": "src/tracking/csrt_tracker.cpp",
+      "line": 48,
+      "severity": "WARNING",
+      "description": "update() calls cv::cvtColor() for redetect(). BGR2GRAY conversion at 1536×864: ~0.5-1ms. Not blocking alone but adds to cumulative budget."
+    },
+    {
+      "type": "SLOW_OP",
+      "file": "src/tracking/csrt_tracker.cpp",
+      "line": 58,
+      "severity": "WARNING",
+      "description": "redetect() calls cv::matchTemplate() with TM_CCOEFF_NORMED. Template matching is O(n×m) and slow. Search region dependent but can exceed 5ms for large ROIs."
+    },
+    {
+      "type": "HEAP_ALLOC",
+      "file": "src/common/hud_socket.cpp",
+      "line": 68,
+      "severity": "WARNING",
+      "description": "frame_to_json() uses std::ostringstream for JSON serialization. Each call allocates internal string buffer. On broadcast path, this triggers heap allocation every frame."
+    },
+    {
+      "type": "HEAP_ALLOC",
+      "file": "src/common/hud_socket.cpp",
+      "line": 78,
+      "severity": "WARNING",
+      "description": "send_to_clients() creates std::vector<int> dead for dead connection tracking. Heap allocation in client broadcast path."
+    },
+    {
+      "type": "HEAP_ALLOC",
+      "file": "src/common/telemetry_writer.cpp",
+      "line": 35,
+      "severity": "INFO",
+      "description": "start() uses std::stringstream for session filename generation. One-time allocation at startup, not on hot path."
+    },
+    {
+      "type": "HEAP_ALLOC",
+      "file": "src/common/telemetry_writer.cpp",
+      "line": 98,
+      "severity": "INFO",
+      "description": "log_frame() queues CsvLogEntry to std::queue. Entry is copied by value (trivially copyable), but queue node allocation may occur if capacity exceeded."
+    },
+    {
+      "type": "BLOCKING",
+      "file": "src/common/hud_socket.cpp",
+      "line": 56,
+      "severity": "WARNING",
+      "description": "accept_loop() calls ::accept() in blocking mode. Server socket is O_NONBLOCK but accept() still returns -1/EAGAIN. Thread sleeps 5ms on no connection. Not on RT path but could cause priority inversion if thread priority not managed."
+    },
+    {
+      "type": "BLOCKING",
+      "file": "src/common/hud_socket.cpp",
+      "line": 77,
+      "severity": "WARNING",
+      "description": "send_to_clients() calls ::send() with MSG_NOSIGNAL. While non-blocking socket won't block indefinitely, send() can still block on full socket buffer. No timeout specified."
+    },
+    {
+      "type": "BLOCKING",
+      "file": "src/drivers/fusion_hat_i2c.cpp",
+      "line": 52,
+      "severity": "WARNING",
+      "description": "trigger_effector() calls std::this_thread::sleep_for(pulse_ms). Blocking sleep in actuation path. If called from RT thread, this blocks the thread for pulse duration (default 10ms = 10 frame periods)."
+    },
+    {
+      "type": "BLOCKING",
+      "file": "src/drivers/fusion_hat_i2c.cpp",
+      "line": 43,
+      "severity": "WARNING",
+      "description": "write_pwm_channel() calls ::write() to I2C device. I2C transactions can block for several ms waiting for bus availability. No timeout mechanism. On actuation hot path."
+    },
+    {
+      "type": "LOCK_CONTENTION",
+      "file": "src/common/hud_socket.cpp",
+      "line": 76,
+      "severity": "INFO",
+      "description": "send_to_clients() acquires clients_mutex_ with std::lock_guard. Mutex held during send() syscall to all clients. If any client is slow, all other threads block waiting for mutex."
+    },
+    {
+      "type": "LOCK_CONTENTION",
+      "file": "src/common/telemetry_writer.cpp",
+      "line": 147,
+      "severity": "INFO",
+      "description": "log_frame() acquires queue_mutex_ for queue operations. Mutex held during potential pop operations for backpressure. Low contention expected with single producer."
+    },
+    {
+      "type": "LOCK_CONTENTION",
+      "file": "include/aurore/ring_buffer.hpp",
+      "line": 225,
+      "severity": "INFO",
+      "description": "MPMCRingBuffer::push() and pop() use std::mutex for MPMC synchronization. Not lock-free. If used in RT path with multiple producers/consumers, contention will cause WCET violations."
+    },
+    {
+      "type": "HEAP_ALLOC",
+      "file": "src/drivers/camera_wrapper.cpp",
+      "line": 75,
+      "severity": "INFO",
+      "description": "CameraWrapper constructor uses std::make_unique<Impl>(). One-time allocation at camera initialization, not on frame processing hot path."
+    },
+    {
+      "type": "HEAP_ALLOC",
+      "file": "src/drivers/camera_wrapper.cpp",
+      "line": 155,
+      "severity": "INFO",
+      "description": "FrameBufferAllocator::allocate() calls buffers_.resize(). One-time allocation at camera setup, not on hot path."
+    },
+    {
+      "type": "SLOW_OP",
+      "file": "src/vision/orb_detector.cpp",
+      "line": 25,
+      "severity": "WARNING",
+      "description": "add_template() calls orb_->detectAndCompute() and templates_.push_back(). Called during template registration (not hot path), but push_back can trigger vector reallocation."
+    },
+    {
+      "type": "MEMCPY",
+      "file": "src/tracking/csrt_tracker.cpp",
+      "line": 51,
+      "severity": "INFO",
+      "description": "capture_reference_template() calls bgr_frame(roi).clone(). This performs memcpy of ROI data. Called during template capture (not per-frame hot path)."
+    },
+    {
+      "type": "MEMCPY",
+      "file": "src/common/telemetry_writer.cpp",
+      "line": 134,
+      "severity": "INFO",
+      "description": "CsvLogEntry::copy_to_array() uses strncpy for module/event strings. Small fixed-size copy, negligible impact."
+    }
+  ],
+  "summary": {
+    "blocks_wcet": 8,
+    "warnings": 9,
+    "info": 8
+  },
+  "critical_path_analysis": {
+    "vision_pipeline_120hz": {
+      "budget_ns": 5000000,
+      "estimated_wcet_ns": 15000000,
+      "violations": [
+        "ORB detectAndCompute: 3-5ms",
+        "CLAHE preprocessing: 2-3ms",
+        "BFMatcher knnMatch: 1-3ms",
+        "findHomography RANSAC: 5-10ms"
+      ],
+      "verdict": "BLOCKS_WCET - Vision pipeline exceeds 5ms budget by 2-3×"
+    },
+    "track_compute_120hz": {
+      "budget_ns": 2000000,
+      "estimated_wcet_ns": 12000000,
+      "violations": [
+        "CSRT tracker update: 10-20ms"
+      ],
+      "verdict": "BLOCKS_WCET - CSRT tracking exceeds 2ms budget by 5-10×"
+    },
+    "actuation_output_120hz": {
+      "budget_ns": 1500000,
+      "estimated_wcet_ns": 3000000,
+      "violations": [
+        "I2C write (blocking): 1-3ms",
+        "Ballistic solve with Monte Carlo: 0.5-1ms"
+      ],
+      "verdict": "BLOCKS_WCET - I2C + computation exceeds 1.5ms budget"
+    },
+    "safety_monitor_1khz": {
+      "budget_ns": 1000000,
+      "estimated_wcet_ns": 100000,
+      "violations": [],
+      "verdict": "PASS - Safety monitor uses atomic operations and simple comparisons"
+    }
+  },
+  "recommendations": [
+    {
+      "priority": "CRITICAL",
+      "issue": "ORB detector + RANSAC homography too slow for 120Hz",
+      "solution": "Replace with faster detector (AprilTag, ArUco) or reduce resolution. Consider hardware-accelerated vision (OpenCV with GStreamer/V4L2 M2M)."
+    },
+    {
+      "priority": "CRITICAL",
+      "issue": "CSRT tracker too slow for 2ms budget",
+      "solution": "Use KCF or MOSSE tracker (10× faster, slightly less accurate). Or run tracker at reduced rate (60Hz) with interpolation."
+    },
+    {
+      "priority": "HIGH",
+      "issue": "Monte Carlo P_hit calculation on hot path",
+      "solution": "Pre-compute lookup table for P_hit vs range/elevation. Or use analytical approximation instead of 50-sample Monte Carlo."
+    },
+    {
+      "priority": "HIGH",
+      "issue": "I2C write blocking on actuation path",
+      "solution": "Use async I2C with DMA. Or move I2C to dedicated thread with shared memory command buffer."
+    },
+    {
+      "priority": "MEDIUM",
+      "issue": "CLAHE on every frame",
+      "solution": "Cache CLAHE object, apply only when lighting changes detected. Or use simpler gamma correction."
+    },
+    {
+      "priority": "MEDIUM",
+      "issue": "Heap allocation in HUD socket broadcast",
+      "solution": "Use pre-allocated char buffer with snprintf for JSON. Reserve vector capacity for client list."
+    },
+    {
+      "priority": "LOW",
+      "issue": "Lock contention in MPMCRingBuffer",
+      "solution": "Use LockFreeRingBuffer (SPSC) for single-producer single-consumer paths. Already available in ring_buffer.hpp."
+    }
+  ]
+}

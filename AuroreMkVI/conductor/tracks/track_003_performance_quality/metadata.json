@@ -1,0 +1,12 @@
+{
+  "id": "track_003_performance_quality",
+  "title": "Performance and Quality Fixes",
+  "description": "Fix camera FPS to 100, improve lighting, return display to terminal, disable CPU fallback",
+  "status": "active",
+  "priority": "high",
+  "created": "2026-02-09T19:10:00Z",
+  "owner": "agent",
+  "phases": 5,
+  "total_tasks": 21,
+  "labels": ["performance", "camera", "display", "inference", "quality"]
+}

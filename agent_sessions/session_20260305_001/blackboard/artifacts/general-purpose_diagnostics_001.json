@@ -1,0 +1,387 @@
+{
+  "agent": "general-purpose",
+  "version": 1,
+  "session_id": "session_20260305_001",
+  "timestamp": "2026-03-05T10:30:00Z",
+  "checksum_sha256": "pending_computation",
+  "downstream_consumers": ["implementation-engineer", "orchestrator"],
+  "executive_summary": {
+    "task": "Analyze Mk VI telemetry implementation to identify features for Mk VII port",
+    "key_finding": "Mk VI telemetry provided excellent observability but was overly complex (30+ column CSV, 700+ LOC). Mk VII has a solid simplified foundation (11 columns, ~350 LOC) but lacks critical queue monitoring and real-time metrics integration.",
+    "recommendation": "Port 4 high-priority features from Mk VI: queue overflow tracking, per-module event logging, SharedMetrics integration, and detailed latency breakdown. Skip thread affinity tracking and hardware-specific fields (buffer_fd, PWM values) as they add complexity without proportional value.",
+    "estimated_effort": "4-6 hours implementation time",
+    "risk_level": "low"
+  },
+  "mk_vi_telemetry_analysis": {
+    "architecture": {
+      "unified_csv_format": {
+        "description": "Wide row format with 30+ columns capturing all pipeline stages in single row",
+        "header": "produced_ts_epoch_ms,monotonic_ms,module,event,thread_id,thread_cpu,thread_priority,cam_frame_id,cam_exposure_ms,cam_width,cam_height,cam_pixel_format,cam_buffer_fd,queue_depth_before,queue_depth_after,queue_overflow_count,inference_start_ms,inference_end_ms,inference_latency_ms,inference_delegate_type,inference_confidence,model_name,actuation_decision_ms,actuation_command,servo_pwm_value,servo_write_latency_ms,servo_status,cpu_percent,cpu_temp_c,mem_mb,swap_mb,notes",
+        "timestamp_strategy": {
+          "produced_ts_epoch_ms": "System clock epoch milliseconds for absolute wall-clock correlation",
+          "monotonic_ms": "Steady clock relative to session start for precise latency deltas"
+        },
+        "column_groups": {
+          "common": ["produced_ts_epoch_ms", "monotonic_ms", "module", "event", "thread_id", "thread_cpu", "thread_priority"],
+          "camera": ["cam_frame_id", "cam_exposure_ms", "cam_width", "cam_height", "cam_pixel_format", "cam_buffer_fd"],
+          "queue": ["queue_depth_before", "queue_depth_after", "queue_overflow_count"],
+          "inference": ["inference_start_ms", "inference_end_ms", "inference_latency_ms", "inference_delegate_type", "inference_confidence", "model_name"],
+          "actuation": ["actuation_decision_ms", "actuation_command", "servo_pwm_value", "servo_write_latency_ms", "servo_status"],
+          "system": ["cpu_percent", "cpu_temp_c", "mem_mb", "swap_mb"]
+        }
+      },
+      "run_json_structure": {
+        "location": "{session_dir}/run.json",
+        "content": {
+          "session_start_utc": "ISO 8601 timestamp",
+          "status": "started|running|completed"
+        },
+        "notes": "Mk VI run.json was minimal; Mk VII expanded this significantly with statistics"
+      },
+      "session_management": {
+        "directory_pattern": "/var/log/aurore/run-{timestamp}/",
+        "rotation_policy": "Keep 3 latest sessions, archive older to tar.gz",
+        "files_per_session": ["unified.csv", "run.json", "raw_frames/", "kernel_logs/"]
+      }
+    },
+    "key_features": {
+      "per_frame_accounting": {
+        "description": "Every frame logged with complete pipeline timing from capture to actuation",
+        "value": "Enabled precise latency attribution (camera vs ISP vs inference vs decision)",
+        "implementation": "TelemetryEntry struct with 35+ fields, logged via log_full_entry()"
+      },
+      "queue_monitoring": {
+        "description": "Track queue depth before/after processing, count overflows",
+        "value": "Critical for identifying backpressure and bottleneck stages",
+        "implementation": "queue_depth_before, queue_depth_after, queue_overflow_count columns",
+        "usage_example": "if (frame_queue.full()) { auto dropped = frame_queue.pop_front(); telemetry.log_queue_overflow(dropped.timestamp); }"
+      },
+      "thread_affinity_tracking": {
+        "description": "Log which CPU core and priority each thread ran on",
+        "value": "Helped debug scheduling issues and verify real-time pinning",
+        "implementation": "thread_id, thread_cpu, thread_priority columns populated from pthread_getschedparam()",
+        "complexity_note": "Required platform-specific code (pthread_setaffinity_np, sched_param)"
+      },
+      "shared_metrics_integration": {
+        "description": "Telemetry updated SharedMetrics struct for real-time TUI display",
+        "value": "Enabled live monitoring dashboard without parsing CSV",
+        "implementation": "monitor::SharedMetrics with atomics for CPU, memory, queue depths, latency",
+        "code_reference": "/home/laptop/AuroreMkVII/AuroreMkVI/src/monitor/shared_metrics.hpp"
+      },
+      "hardware_failure_handling": {
+        "description": "Log hardware failures with graceful degradation paths",
+        "value": "Enabled debugging of production issues where camera/TPU failed",
+        "implementation": "log_event() calls for camera_failure, tpu_unavailable, pwm_device_unavailable",
+        "examples": [
+          "if (!access(\"/dev/video0\", F_OK)) { log_to_csv(\"camera_failure\", \"using_test_pattern\"); }",
+          "if (!pwm_device_ready()) { telemetry.log_actuation_error(\"pwm_device_unavailable\"); }"
+        ]
+      },
+      "safety_invariant_monitoring": {
+        "description": "Log safety violations and gate actuation on thermal/CPU thresholds",
+        "value": "Critical for safety certification and debugging false positives",
+        "implementation": "log_safety_invariant_violation() updates both CSV and SharedMetrics",
+        "thresholds": "cpu_temp_c > 80, cpu_percent > 95"
+      }
+    },
+    "implementation_complexity": {
+      "lines_of_code": {
+        "telemetry_hpp": 50,
+        "telemetry_cpp": 100,
+        "util_logging_h": 200,
+        "util_logging_cpp": 400,
+        "shared_metrics_hpp": 40,
+        "total": 790
+      },
+      "dependencies": [
+        "nlohmann/json (for metadata)",
+        "std::filesystem",
+        "pthread (thread affinity)",
+        "chrono (timing)"
+      ],
+      "complexity_drivers": [
+        "FixedString<N> template for zero-allocation logging",
+        "Dual logging paths (CSV + JSON)",
+        "Bootstrap buffer for early-init logs",
+        "Thread-safe queue with lock-free optimization",
+        "SharedMetrics atomic updates"
+      ]
+    },
+    "what_worked_well": [
+      "Unified CSV format enabled easy post-hoc analysis with standard tools (awk, pandas)",
+      "Queue overflow tracking identified bottlenecks in inference pipeline",
+      "SharedMetrics allowed real-time TUI monitoring without CSV parsing overhead",
+      "Session-based organization with automatic rotation kept disk usage bounded",
+      "Per-frame latency breakdown helped optimize hot paths (achieved <15ms end-to-end)"
+    ],
+    "what_was_overly_complex": [
+      "30+ column CSV was hard to maintain - adding fields required header changes",
+      "FixedString templates added 100+ LOC for marginal allocation savings",
+      "Thread affinity tracking was Pi-specific and added platform complexity",
+      "Hardware-specific fields (cam_buffer_fd, servo_pwm_value) not useful for debugging",
+      "Dual timestamp strategy (epoch + monotonic) confused some analysis scripts",
+      "Bootstrap buffer logic for early-init logs was fragile and hard to test"
+    ]
+  },
+  "mk_vii_current_state": {
+    "files_analyzed": [
+      "/home/laptop/AuroreMkVII/include/aurore/telemetry_writer.hpp",
+      "/home/laptop/AuroreMkVII/src/common/telemetry_writer.cpp"
+    ],
+    "architecture": {
+      "csv_format": {
+        "columns": 11,
+        "header": "frame_id,capture_timestamp_ns,vision_latency_ns,track_latency_ns,actuation_latency_ns,total_latency_ns,safety_status,deadline_miss,queue_depth,cpu_percent,notes",
+        "timestamp_strategy": "Single CLOCK_MONOTONIC_RAW nanoseconds (simpler than Mk VI dual approach)"
+      },
+      "run_json_structure": {
+        "location": "{session_dir}/run.json",
+        "fields": [
+          "session_id", "start_time", "end_time", "duration_ms",
+          "total_frames", "avg_frame_rate_hz",
+          "latency_statistics (vision, track, actuation with avg_ns, max_ns, avg_ms)",
+          "fault_statistics (deadline_misses, safety_faults)",
+          "build_info (git_hash, build_type)",
+          "config_notes"
+        ],
+        "assessment": "Well-designed, more comprehensive than Mk VI"
+      },
+      "session_management": {
+        "directory_pattern": "logs/session_{YYYYMMDD_HHMMSS}/",
+        "rotation_policy": "Keep max_sessions (default 10), remove oldest",
+        "files_per_session": ["telemetry.csv", "run.json"]
+      }
+    },
+    "implementation_stats": {
+      "lines_of_code": {
+        "telemetry_writer_hpp": 250,
+        "telemetry_writer_cpp": 200,
+        "total": 450
+      },
+      "dependencies": [
+        "Standard library only (no nlohmann/json - manual JSON writing)",
+        "dirent.h for directory listing",
+        "unistd.h for getpid()"
+      ],
+      "design_choices": {
+        "buffered_writes": "Configurable flush_interval (default 10 frames)",
+        "inline_statistics": "update_statistics() called inline in log_frame() for performance",
+        "manual_json": "Avoids nlohmann/json dependency, writes JSON manually"
+      }
+    },
+    "missing_from_mk_vi": [
+      "No queue overflow tracking (only current depth)",
+      "No per-module event logging (only frame-based)",
+      "No SharedMetrics integration for real-time monitoring",
+      "No thread affinity tracking (intentional simplification)",
+      "No detailed camera/TPU/actuation field breakdown",
+      "No hardware failure event logging",
+      "No inference latency breakdown (just vision/track/actuation)"
+    ],
+    "improvements_over_mk_vi": [
+      "Simpler CSV format (11 vs 30+ columns) - easier to maintain",
+      "Better run.json with aggregated statistics",
+      "Cleaner API (TelemetryWriter vs dual Logger/CsvLogger)",
+      "No bootstrap buffer complexity",
+      "Configurable via TelemetryConfig struct",
+      "Better documentation and inline comments"
+    ]
+  },
+  "feature_recommendations": [
+    {
+      "feature": "Queue overflow tracking",
+      "priority": "high",
+      "complexity": "low",
+      "value": "high",
+      "rationale": "Critical for identifying backpressure. Mk VI showed this was essential for debugging pipeline stalls.",
+      "implementation": "Add queue_overflow_count to TelemetryFrame, increment in camera/encoder when dropping frames",
+      "code_changes": [
+        "Add uint16_t queue_overflow_count to TelemetryFrame struct",
+        "Add to CSV header and flush_buffer() output",
+        "Add to SessionMetadata statistics",
+        "Update run.json schema"
+      ],
+      "estimated LOC": 20
+    },
+    {
+      "feature": "Per-module event logging",
+      "priority": "high",
+      "complexity": "medium",
+      "value": "high",
+      "rationale": "Mk VI's log_event() was invaluable for logging non-frame events (hardware failures, state transitions, safety violations).",
+      "implementation": "Add log_event(module, event, notes) method that writes CSV row with minimal fields",
+      "code_changes": [
+        "Add log_event(uint64_t timestamp_ns, const char* module, const char* event, const char* notes) method",
+        "Event rows use special frame_id=UINT64_MAX to distinguish from frame rows",
+        "Update CSV parser to handle sparse event rows"
+      ],
+      "estimated LOC": 40
+    },
+    {
+      "feature": "SharedMetrics integration",
+      "priority": "high",
+      "complexity": "medium",
+      "value": "high",
+      "rationale": "Enables real-time TUI/dashboard without CSV parsing. Mk VI used this for live monitoring.",
+      "implementation": "Create monitor::SharedMetrics struct with atomics, pass pointer to TelemetryWriter",
+      "code_changes": [
+        "Create include/aurore/monitor/shared_metrics.hpp",
+        "Add SharedMetrics* to TelemetryWriter constructor",
+        "Update atomics in log_frame() (cpu_percent, queue_depth, latencies)",
+        "Add safety_violation_reason string (mutex-protected)"
+      ],
+      "estimated LOC": 80
+    },
+    {
+      "feature": "Hardware failure event logging",
+      "priority": "medium",
+      "complexity": "low",
+      "value": "high",
+      "rationale": "Mk VI's camera_failure, tpu_unavailable events were critical for production debugging.",
+      "implementation": "Convenience methods: log_camera_failure(), log_tpu_unavailable(), log_actuation_error()",
+      "code_changes": [
+        "Add log_hardware_event(const char* device, const char* error, const char* fallback_action)",
+        "Pre-defined event strings for common failures",
+        "Log to both CSV and SharedMetrics"
+      ],
+      "estimated LOC": 30
+    },
+    {
+      "feature": "Detailed latency breakdown",
+      "priority": "medium",
+      "complexity": "low",
+      "value": "medium",
+      "rationale": "Mk VI tracked inference_start/end separately. Mk VII could benefit from finer granularity.",
+      "implementation": "Add inference_latency_ns, decision_latency_ns separate from vision/track/actuation",
+      "code_changes": [
+        "Add inference_latency_ns, decision_latency_ns to TelemetryFrame",
+        "Update CSV header and statistics calculation",
+        "Update run.json latency_statistics section"
+      ],
+      "estimated LOC": 25
+    },
+    {
+      "feature": "Thread affinity tracking",
+      "priority": "low",
+      "complexity": "medium",
+      "value": "low",
+      "rationale": "Mk VI tracked thread_cpu/priority but this was Pi-specific and added complexity. Skip for Mk VII's simplified design.",
+      "recommendation": "SKIP - not porting. Deterministic scheduling is handled by systemd/OS config, not telemetry."
+    },
+    {
+      "feature": "Hardware-specific fields (buffer_fd, PWM values)",
+      "priority": "low",
+      "complexity": "low",
+      "value": "low",
+      "rationale": "Mk VI tracked cam_buffer_fd, servo_pwm_value but these were rarely useful for debugging.",
+      "recommendation": "SKIP - not porting. Add to notes field if specific debugging needed."
+    },
+    {
+      "feature": "Dual timestamp strategy",
+      "priority": "low",
+      "complexity": "low",
+      "value": "low",
+      "rationale": "Mk VI used both epoch and monotonic timestamps. Mk VII's single monotonic approach is simpler and sufficient.",
+      "recommendation": "SKIP - keep Mk VII's simpler single-timestamp design"
+    },
+    {
+      "feature": "Log rotation with archiving",
+      "priority": "medium",
+      "complexity": "medium",
+      "value": "medium",
+      "rationale": "Mk VI archived old sessions to tar.gz. Mk VII just deletes. Archiving is useful for long-term analysis.",
+      "implementation": "Add archive_dir config option, compress old sessions with libz",
+      "code_changes": [
+        "Add archive_dir to TelemetryConfig",
+        "Add compress_session() method using popen() with tar/gzip",
+        "Update rotate_logs() to archive instead of delete"
+      ],
+      "estimated LOC": 50
+    }
+  ],
+  "next_steps": [
+    {
+      "step": 1,
+      "action": "Implement queue overflow tracking",
+      "details": "Add queue_overflow_count field to TelemetryFrame and CSV output",
+      "estimated_time": "30 minutes",
+      "files_to_modify": [
+        "include/aurore/telemetry_writer.hpp",
+        "src/common/telemetry_writer.cpp"
+      ]
+    },
+    {
+      "step": 2,
+      "action": "Add per-module event logging",
+      "details": "Implement log_event() method for non-frame events",
+      "estimated_time": "1 hour",
+      "files_to_modify": [
+        "include/aurore/telemetry_writer.hpp",
+        "src/common/telemetry_writer.cpp"
+      ]
+    },
+    {
+      "step": 3,
+      "action": "Create SharedMetrics integration",
+      "details": "Create shared_metrics.hpp and integrate with TelemetryWriter",
+      "estimated_time": "2 hours",
+      "files_to_create": [
+        "include/aurore/monitor/shared_metrics.hpp"
+      ],
+      "files_to_modify": [
+        "include/aurore/telemetry_writer.hpp",
+        "src/common/telemetry_writer.cpp"
+      ]
+    },
+    {
+      "step": 4,
+      "action": "Add hardware failure event logging",
+      "details": "Implement convenience methods for common hardware failures",
+      "estimated_time": "45 minutes",
+      "files_to_modify": [
+        "include/aurore/telemetry_writer.hpp",
+        "src/common/telemetry_writer.cpp"
+      ]
+    },
+    {
+      "step": 5,
+      "action": "Expand latency breakdown",
+      "details": "Add inference_latency_ns and decision_latency_ns fields",
+      "estimated_time": "45 minutes",
+      "files_to_modify": [
+        "include/aurore/telemetry_writer.hpp",
+        "src/common/telemetry_writer.cpp"
+      ]
+    },
+    {
+      "step": 6,
+      "action": "Update documentation",
+      "details": "Update telemetry_writer.hpp documentation with new features",
+      "estimated_time": "30 minutes",
+      "files_to_modify": [
+        "include/aurore/telemetry_writer.hpp"
+      ]
+    },
+    {
+      "step": 7,
+      "action": "Add unit tests",
+      "details": "Test new event logging, overflow tracking, SharedMetrics updates",
+      "estimated_time": "1.5 hours",
+      "files_to_create": [
+        "tests/test_telemetry_writer.cpp"
+      ]
+    }
+  ],
+  "total_estimated_effort": {
+    "implementation": "5.5 hours",
+    "testing": "1.5 hours",
+    "documentation": "0.5 hours",
+    "total": "7.5 hours"
+  },
+  "risk_assessment": {
+    "technical_risk": "low",
+    "rationale": "All features are straightforward additions to existing telemetry infrastructure. No architectural changes required.",
+    "dependencies": "None - all features use standard library",
+    "compatibility": "CSV format changes are additive (new columns), existing parsers will ignore new fields"
+  }
+}

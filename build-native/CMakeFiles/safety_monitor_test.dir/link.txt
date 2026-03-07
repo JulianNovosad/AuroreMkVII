@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG  -lpthread -lrt -fPIE -pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack CMakeFiles/safety_monitor_test.dir/tests/unit/safety_monitor_test.cpp.o -o safety_monitor_test  -lrt 
