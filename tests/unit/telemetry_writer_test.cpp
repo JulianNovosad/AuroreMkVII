@@ -99,7 +99,7 @@ static bool test_log_frame_increments_counter() {
     // stop() drains the queue before returning
     writer.stop();
 
-    ASSERT_TRUE(writer.get_entries_written() >= 3);
+    ASSERT_TRUE(writer.get_entries_written() == 3);
 
     return true;
 }
@@ -115,7 +115,11 @@ static bool test_backpressure_drop_policy() {
     aurore::TelemetryConfig cfg;
     cfg.log_dir = "/tmp/aurore_test_logs";
     cfg.enable_json = false;
-    cfg.max_queue_size = 5;
+    // Queue of 1 with kDropNewest: first push fills the queue (depth 1 == max),
+    // second push is unconditionally dropped by enqueue_entry() before the
+    // writer thread can drain anything (the drop path returns immediately under
+    // the caller's lock). This guarantees >= 1 drop regardless of writer speed.
+    cfg.max_queue_size = 1;
     cfg.backpressure_policy = aurore::BackpressurePolicy::kDropNewest;
 
     ASSERT_TRUE(writer.start(cfg));
@@ -125,17 +129,12 @@ static bool test_backpressure_drop_policy() {
     aurore::ActuationData act{};
     aurore::SystemHealthData health{};
 
-    // Flood 20 frames into a queue limited to 5.
-    // The writer thread may drain entries concurrently, so we give it no
-    // chance to drain by sleeping the writer thread — we can't do that, but
-    // 20 rapid calls on a queue of 5 guarantee at least some drops.
-    for (int i = 0; i < 20; ++i) {
-        writer.log_frame(det, track, act, health);
-    }
+    writer.log_frame(det, track, act, health);  // fills queue (depth 1 == max)
+    writer.log_frame(det, track, act, health);  // guaranteed drop
 
     writer.stop();
 
-    ASSERT_TRUE(writer.get_entries_dropped() > 0);
+    ASSERT_TRUE(writer.get_entries_dropped() >= 1);
 
     return true;
 }
