@@ -39,6 +39,8 @@
 #include "aurore/camera_wrapper.hpp"
 #include "aurore/state_machine.hpp"  // For TrackSolution
 #include "aurore/tracker.hpp"        // For KcfTracker
+#include "aurore/aurore_link_server.hpp"
+#include "aurore.pb.h"
 
 namespace {
 
@@ -306,12 +308,33 @@ int main(int argc, char* argv[]) {
         std::cerr << "Camera initialization failed: " << e.what() << std::endl;
         if (!dry_run) return 1;
     }
-    
+
+    // Initialize AuroreLink server for remote operator interface
+    aurore::AuroreLinkConfig link_cfg;
+    link_cfg.telemetry_port = 9000;
+    link_cfg.command_port = 9002;
+    aurore::AuroreLinkServer link_server(link_cfg);
+    link_server.start();
+
+    // Install mode callback for FREECAM/AUTO switching
+    link_server.set_mode_callback([&](aurore::LinkMode mode) {
+        if (mode == aurore::LinkMode::FREECAM) {
+            std::cout << "AuroreLink: Mode switched to FREECAM" << std::endl;
+            // TODO: gimbal_controller.set_source(aurore::GimbalSource::FREECAM);
+        } else {
+            std::cout << "AuroreLink: Mode switched to AUTO" << std::endl;
+            // TODO: gimbal_controller.set_source(aurore::GimbalSource::AUTO);
+        }
+    });
+
     // Frame ring buffer (zero-copy)
     aurore::LockFreeRingBuffer<aurore::ZeroCopyFrame, 4> frame_buffer;
 
     // INT-003 Fix: Track solution ring buffer (track_compute -> actuation_output)
     aurore::LockFreeRingBuffer<aurore::TrackSolution, 4> track_buffer;
+
+    // State machine for FCS mode management
+    aurore::StateMachine state_machine;
 
     // Control loop state
     std::atomic<uint64_t> frame_sequence(0);
@@ -422,16 +445,28 @@ int main(int argc, char* argv[]) {
                 if (tracker_initialized && !bgr_frame.empty()) {
                     // Update tracker and get solution
                     current_solution = tracker.update(bgr_frame);
-                    
+
                     // Validate solution bounds
-                    if (current_solution.centroid_x < 0 || 
+                    if (current_solution.centroid_x < 0 ||
                         current_solution.centroid_x > frame.width ||
-                        current_solution.centroid_y < 0 || 
+                        current_solution.centroid_y < 0 ||
                         current_solution.centroid_y > frame.height) {
                         current_solution.valid = false;
                         tracker.reset();
                         tracker_initialized = false;
                     }
+
+                    // State machine: detection event based on confidence
+                    // SEARCH -> TRACKING when confidence > 0.85
+                    // TRACKING -> SEARCH when confidence < 0.5 for 3 frames (handled by state_machine)
+                    aurore::Detection detection;
+                    detection.confidence = current_solution.valid ? current_solution.psr : 0.0f;
+                    detection.bbox.x = static_cast<int>(current_solution.centroid_x - 20);
+                    detection.bbox.y = static_cast<int>(current_solution.centroid_y - 20);
+                    detection.bbox.w = 40;
+                    detection.bbox.h = 40;
+                    state_machine.on_detection(detection);
+                    state_machine.on_tracker_update(current_solution);
                 }
                 else {
                     // No tracker - output center placeholder
@@ -448,6 +483,18 @@ int main(int argc, char* argv[]) {
                     // Buffer full - solution dropped
                 }
                 last_track_sequence.store(frame.sequence, std::memory_order_release);
+
+                // Broadcast telemetry via AuroreLink
+                aurore::Telemetry tel;
+                tel.set_timestamp_ns(aurore::get_timestamp());
+                tel.mutable_health()->set_frame_count(frame_sequence.load());
+                tel.mutable_track()->set_centroid_x(current_solution.centroid_x);
+                tel.mutable_track()->set_centroid_y(current_solution.centroid_y);
+                tel.mutable_track()->set_velocity_x(current_solution.velocity_x);
+                tel.mutable_track()->set_velocity_y(current_solution.velocity_y);
+                tel.mutable_track()->set_valid(current_solution.valid);
+                tel.mutable_track()->set_confidence(current_solution.psr > 0 ? current_solution.psr / 100.0f : 0.0f);
+                link_server.broadcast_telemetry(tel);
 
                 deadline.stop();
                 if (deadline.exceeded()) {
@@ -495,10 +542,21 @@ int main(int argc, char* argv[]) {
                 // Convert centroid to gimbal angles
                 // float az_cmd = (latest_solution.centroid_x - width/2) * pixels_per_degree;
                 // float el_cmd = (latest_solution.centroid_y - height/2) * pixels_per_degree;
-                
+
                 // TODO: Send to Fusion HAT+ I2C
                 // fusion_hat.set_angles(az_cmd, el_cmd);
             }
+
+            // State machine: gimbal status for TRACKING -> ARMED transition
+            // ARMED entry requires gimbal settled (error < 0.5 deg) for sustained period
+            // and ballistics p_hit > 0.95
+            aurore::GimbalStatusSm gimbal_status;
+            // TODO: Read actual gimbal errors from Fusion HAT+
+            // Use frame dimensions from constants (1536x864)
+            gimbal_status.az_error_deg = std::abs(latest_solution.centroid_x - 1536.0f / 2.0f) * 0.1f;
+            gimbal_status.el_error_deg = std::abs(latest_solution.centroid_y - 864.0f / 2.0f) * 0.1f;
+            gimbal_status.velocity_deg_s = 0.0f;  // TODO: Read from gimbal
+            state_machine.on_gimbal_status(gimbal_status);
 
             // INT-002 Fix: Update safety monitor for actuation frame
             // This was missing - track_compute wasn't calling update_actuation_frame
@@ -590,12 +648,15 @@ int main(int argc, char* argv[]) {
     join_with_timeout(track_thread, 2000);
     join_with_timeout(actuation_thread, 2000);
     join_with_timeout(safety_thread, 2000);
-    
+
+    // Stop AuroreLink server
+    link_server.stop();
+
     // Stop camera
     if (camera) {
         camera->stop();
     }
-    
+
     // Stop safety monitor
     safety_monitor.stop();
     

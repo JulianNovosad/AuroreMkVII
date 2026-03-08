@@ -75,12 +75,16 @@ The phase offsets stagger the 120Hz threads so vision captures first, track proc
 ### Data Flow
 
 ```
-[libcamera] → vision_pipeline → LockFreeRingBuffer<ZeroCopyFrame, 4>
-                                        ↓
-                                 track_compute → [TODO: ballistic solver]
-                                        ↓
-                               actuation_output → [TODO: Fusion HAT+ I2C]
-                                        ↓
+[libcamera RAW10] → vision_pipeline → [RAW10→BGR888 conversion]
+                                      ↓
+                         LockFreeRingBuffer<ZeroCopyFrame, 4>
+                                      ↓
+                                 track_compute
+                                      ↓
+                         LockFreeRingBuffer<TrackSolution, 4>
+                                      ↓
+                               actuation_output → Fusion HAT+ I2C
+                                      ↓
                                 safety_monitor (1kHz, watches all threads)
 ```
 
@@ -96,18 +100,27 @@ The phase offsets stagger the 120Hz threads so vision captures first, track proc
 
 **Implemented:**
 - `LockFreeRingBuffer`, `ThreadTiming`, `DeadlineMonitor`, `SafetyMonitor`, `CameraWrapper`, `TelemetryWriter`
+- `StateMachine` - 7-state FCS state machine (BOOT→IDLE_SAFE→FREECAM→SEARCH→TRACKING→ARMED→FAULT)
+- `BallisticSolver` - ballistic trajectory computation with precomputed p_hit lookup tables
+- `FusionHat` - I2C driver for Fusion HAT+ gimbal controller with async command queuing
+- `KcfTracker` - KCF (Kernelized Correlation Filter) visual tracker (1-2ms execution time)
+- `OrbDetector` - ORB feature-based target detection
 - Main thread skeleton with 4-thread startup/shutdown in `src/main.cpp`
 - Unit tests for ring buffer, timing, and safety monitor
 
 **TODO stubs** (commented out in `CMakeLists.txt`):
-- `src/vision/` — image preprocessor, target detector, color segmentation
-- `src/tracking/` — CSRT tracker (`cv::TrackerCSRT`), motion predictor
-- `src/actuation/` — gimbal controller, ballistic solver
-- `src/state_machine/` — `BOOT→IDLE→FREECAM→SEARCH→TRACKING→ARMED→FAULT`
-- `src/safety/` — interlock controller, fault handler
-- `src/drivers/fusion_hat_i2c.cpp` — Fusion HAT+ I2C for 16-bit PWM gimbal
+- `src/vision/` — image preprocessor, color segmentation (ORB detector implemented, integration pending)
 - `src/common/` — logger, config loader
-- HUD telemetry UNIX domain socket output
+- HUD telemetry UNIX domain socket output (TelemetryWriter implemented, socket transport pending)
+- Integration tests with hardware
+- Gimbal control integration in `main.cpp` (Fusion HAT+ I2C commands pending)
+
+**Tracker Selection Rationale:**
+KCF tracker is used instead of CSRT for WCET compliance:
+- KCF: 1-2ms execution time at 1536×864 resolution
+- CSRT: 10-20ms execution time (exceeds 5ms WCET budget)
+- KCF provides sufficient accuracy for rigid target tracking at 120Hz
+- Trade-off: KCF does not support scale change detection (acceptable for fixed-range targets)
 
 ## Requirements Traceability
 

@@ -162,7 +162,7 @@ void StateMachine::on_tracker_update(const TrackSolution& sol) {
     }
 }
 
-void StateMachine::on_gimbal_status(const GimbalStatus& g) {
+void StateMachine::on_gimbal_status(const GimbalStatusSm& g) {
     gimbal_ = g;
     
     if (state_ == FcsState::SEARCH) {

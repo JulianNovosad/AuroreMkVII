@@ -130,7 +130,11 @@ static bool test_backpressure_drop_policy() {
     aurore::SystemHealthData health{};
 
     writer.log_frame(det, track, act, health);  // fills queue (depth 1 == max)
-    writer.log_frame(det, track, act, health);  // guaranteed drop
+    
+    // Flood with entries to guarantee some drops even if writer drains occasionally
+    for (int i = 0; i < 10; i++) {
+        writer.log_frame(det, track, act, health);
+    }
 
     writer.stop();
 

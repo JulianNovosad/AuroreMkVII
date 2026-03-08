@@ -161,6 +161,12 @@ protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 # Make generated headers visible to all targets
 include_directories(${Protobuf_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 
+# nlohmann/json for ConfigLoader
+find_package(nlohmann_json QUIET)
+if(NOT nlohmann_json_FOUND)
+    message(WARNING "nlohmann_json not found - ConfigLoader will not build")
+endif()
+
 # OpenCV - use pkg-config module 'opencv4'
 # Security requirement: >= 4.9.0 to address CVE-2024-2167 (heap buffer overflow)
 # and CVE-2024-3400 (DNN denial of service)
@@ -556,6 +562,18 @@ if(AURORE_ENABLE_TESTS)
     )
     add_test(NAME AuroreLinkTest COMMAND aurore_link_test)
     set_tests_properties(AuroreLinkTest PROPERTIES TIMEOUT 30)
+endif()
+
+if(AURORE_ENABLE_TESTS)
+    # ConfigLoader tests
+    add_executable(config_loader_test
+        tests/unit/config_loader_test.cpp
+        src/common/config_loader.cpp
+    )
+    target_include_directories(config_loader_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(config_loader_test PRIVATE Threads::Threads nlohmann_json::nlohmann_json)
+    add_test(NAME ConfigLoaderTest COMMAND config_loader_test)
+    set_tests_properties(ConfigLoaderTest PROPERTIES TIMEOUT 15)
 endif()
 
 # ============================================================================

@@ -77,8 +77,10 @@ struct Detection {
     float cy() const { return static_cast<float>(bbox.y) + bbox.h * 0.5f; }
 };
 
-struct GimbalStatus {
+// Note: Named GimbalStatusSm to avoid conflict with proto-generated aurore::GimbalStatus
+struct GimbalStatusSm {
     float az_error_deg{999.f};
+    float el_error_deg{999.f};
     float velocity_deg_s{999.f};
     int settled_frames{0};
 };
@@ -125,7 +127,7 @@ public:
     void on_detection(const Detection& d);
     void on_tracker_initialized(const TrackSolution& sol);
     void on_tracker_update(const TrackSolution& sol);
-    void on_gimbal_status(const GimbalStatus& g);
+    void on_gimbal_status(const GimbalStatusSm& g);
     void on_redetection_score(float score);
     void on_lrf_range(float range_m);
     void on_ballistics_solution(const FireControlSolution& sol);
@@ -186,7 +188,7 @@ private:
     static constexpr float kAlignErrorMaxDeg = 0.5f;
     static constexpr int   kAlignSustainMs   =  20;
 
-    GimbalStatus gimbal_{};
+    GimbalStatusSm gimbal_{};
     FireControlSolution solution_{};
     float redetection_score_{0.f};
     int align_sustained_ms_{0};

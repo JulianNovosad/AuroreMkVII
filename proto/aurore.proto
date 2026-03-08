@@ -3,14 +3,15 @@ package aurore;
 
 // ── Shared enums ──────────────────────────────────────────────
 
-enum FcsState {
-    BOOT      = 0;
-    IDLE_SAFE = 1;
-    FREECAM   = 2;
-    SEARCH    = 3;
-    TRACKING  = 4;
-    ARMED     = 5;
-    FAULT     = 6;
+// Note: Using ProtoFcsState to avoid conflict with C++ enum class FcsState in state_machine.hpp
+enum ProtoFcsState {
+    PROTO_BOOT      = 0;
+    PROTO_IDLE_SAFE = 1;
+    PROTO_FREECAM   = 2;
+    PROTO_SEARCH    = 3;
+    PROTO_TRACKING  = 4;
+    PROTO_ARMED     = 5;
+    PROTO_FAULT     = 6;
 }
 
 enum OperatingMode {
@@ -47,13 +48,13 @@ message GimbalStatus {
 }
 
 message SystemHealth {
-    float         cpu_temp_c       = 1;
-    float         cpu_usage_pct    = 2;
-    uint64        frame_count      = 3;
-    uint32        deadline_misses  = 4;
-    bool          emergency_active = 5;
-    FcsState      fcs_state        = 6;
-    OperatingMode mode             = 7;
+    float              cpu_temp_c        = 1;
+    float              cpu_usage_pct     = 2;
+    uint64             frame_count       = 3;
+    uint32             deadline_misses   = 4;
+    bool               emergency_active  = 5;
+    ProtoFcsState      fcs_state         = 6;
+    OperatingMode      mode              = 7;
 }
 
 message Telemetry {

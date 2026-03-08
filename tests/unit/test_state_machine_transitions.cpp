@@ -303,7 +303,7 @@ TEST(test_search_gimbal_settling) {
     sm.force_state_for_test(aurore::FcsState::SEARCH);
 
     // Gimbal not settled (high error)
-    aurore::GimbalStatus g;
+    aurore::GimbalStatusSm g;
     g.az_error_deg = 10.0f;  // > kGimbalErrorMaxDeg (2.0)
     g.velocity_deg_s = 20.0f;  // > kGimbalVelocityMaxDs (5.0)
     g.settled_frames = 0;

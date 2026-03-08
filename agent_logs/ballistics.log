@@ -1,0 +1,24 @@
+(node:489596) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
+(Use `node --trace-warnings ...` to show where the warning was created)
+Task 8.1 complete. Summary:
+
+**Implemented G1 Drag + RK4 Ballistics:**
+
+1. **G1 Drag Model** (`include/aurore/ballistic_solver.hpp`, `src/actuation/ballistic_solver.cpp`):
+   - 4-segment piecewise Cd vs Mach number
+   - Subsonic (0-0.8): Cd=0.2, Transonic (0.8-1.2): Cd=0.4, Supersonic (1.2-2.5): Cd=0.25, Hypersonic (2.5-10): Cd=0.18
+
+2. **RK4 Integrator**:
+   - State vector: [x, y, z, vx, vy, vz]
+   - Derivative computation with drag + gravity physics
+   - Full trajectory simulation with adaptive stepping
+
+3. **Modified `solve_kinetic()` and `solve_drop()`**:
+   - Both now use RK4 + G1 drag for trajectory simulation
+   - Binary search for correct launch angle/velocity
+
+4. **Unit Tests** (`tests/unit/ballistics_test.cpp`):
+   - `test_rk4_vacuum_trajectory`: RK4 matches analytical vacuum solution (range error: 0m)
+   - `test_g1_drag_drop`: G1 drag produces expected velocity decay (300→183 m/s over 612m)
+
+**Test Results**: 8/8 tests passing

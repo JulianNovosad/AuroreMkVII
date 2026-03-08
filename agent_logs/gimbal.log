@@ -1,0 +1,23 @@
+(node:489584) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
+(Use `node --trace-warnings ...` to show where the warning was created)
+Done. The GimbalController implementation is complete:
+
+**Files committed:**
+- `CMakeLists.txt` - Added `gimbal_controller.cpp` to build and new `gimbal_controller_test` target
+
+**Files already in repo (no changes needed):**
+- `include/aurore/gimbal_controller.hpp` - Header with `GimbalController` class
+- `src/actuation/gimbal_controller.cpp` - Implementation with pixel-to-angle conversion
+- `tests/unit/gimbal_controller_test.cpp` - 6 unit tests (all passing)
+
+**Test results:**
+```
+=== GimbalController Unit Tests ===
+Running test_pixel_at_center_gives_zero_command... PASS
+Running test_pixel_offset_gives_correct_angle... PASS
+Running test_auto_source_accumulates_angle... PASS
+Running test_freecam_source_sets_absolute... PASS
+Running test_limits_clamp_commands... PASS
+Running test_source_switch_auto_to_freecam... PASS
+Passed: 6, Failed: 0
+```
