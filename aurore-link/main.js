@@ -293,7 +293,10 @@ function setConnBadge(state) {
 
 function connect() {
   setConnBadge('reconnecting');
-  ws = new WebSocket('ws://localhost:8080/ws');
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host || 'localhost:8080';
+  const wsUrl = `${protocol}//${host}/ws`;
+  ws = new WebSocket(wsUrl);
 
   ws.addEventListener('open', () => {
     setConnBadge('connected');
@@ -312,7 +315,7 @@ function connect() {
   ws.addEventListener('close', () => {
     setConnBadge('disconnected');
     setTimeout(connect, reconnectDelay);
-    reconnectDelay = Math.min(reconnectDelay * 1.5, 30000);
+    reconnectDelay = Math.min(reconnectDelay * 1.5, 10000);
   });
 
   ws.addEventListener('error', () => {

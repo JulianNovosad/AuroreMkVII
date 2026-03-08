@@ -28,6 +28,16 @@ const MIME = {
   '.ico':  'image/x-icon',
 };
 
+function securityHeaders() {
+  return {
+    'Content-Security-Policy':
+      "default-src 'self'; connect-src ws: wss:; font-src https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
+    'X-Frame-Options': 'DENY',
+    'X-Content-Type-Options': 'nosniff',
+    'X-XSS-Protection': '1; mode=block',
+  };
+}
+
 function serveStatic(req, res) {
   let urlPath = req.url === '/' ? '/index.html' : req.url;
   // Strip query string
@@ -36,19 +46,22 @@ function serveStatic(req, res) {
 
   // Security: ensure we stay inside STATIC_ROOT
   if (!filePath.startsWith(STATIC_ROOT)) {
-    res.writeHead(403);
+    res.writeHead(403, securityHeaders());
     res.end('Forbidden');
     return;
   }
 
   fs.readFile(filePath, (err, data) => {
     if (err) {
-      res.writeHead(404);
+      res.writeHead(404, securityHeaders());
       res.end('Not found: ' + urlPath);
       return;
     }
     const ext = path.extname(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    res.writeHead(200, {
+      'Content-Type': MIME[ext] || 'application/octet-stream',
+      ...securityHeaders(),
+    });
     res.end(data);
   });
 }
@@ -177,11 +190,22 @@ wss.on('connection', (ws, req) => {
         }
         break;
 
-      case 'freecam':
-        console.log(`[CMD] freecam az=${cmd.az?.toFixed(2)} el=${cmd.el?.toFixed(2)}`);
-        // Reflect in gimbal
-        if (typeof cmd.az === 'number') state.gimbal_t = cmd.az * 0.05;
+      case 'freecam': {
+        const az = cmd.az;
+        const el = cmd.el;
+        if (
+          typeof az !== 'number' || !isFinite(az) ||
+          typeof el !== 'number' || !isFinite(el) ||
+          az < -180 || az > 180 ||
+          el < -90  || el > 90
+        ) {
+          console.warn(`[CMD] freecam validation failed: az=${az} el=${el} — discarding`);
+          break;
+        }
+        console.log(`[CMD] freecam az=${az.toFixed(2)} el=${el.toFixed(2)}`);
+        state.gimbal_t = az * 0.05;
         break;
+      }
 
       default:
         console.warn(`[CMD] Unknown command type: ${cmd.type}`);
