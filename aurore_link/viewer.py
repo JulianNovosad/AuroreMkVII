@@ -14,18 +14,18 @@ import sys
 import cv2
 import numpy as np
 
-from aurore_pb2 import Telemetry, FcsState, OperatingMode
+from aurore_pb2 import Telemetry, ProtoFcsState, OperatingMode
 from client import AuroreClient
 
 
 FCS_STATE_NAMES = {
-    FcsState.BOOT: "BOOT",
-    FcsState.IDLE_SAFE: "IDLE_SAFE",
-    FcsState.FREECAM: "FREECAM",
-    FcsState.SEARCH: "SEARCH",
-    FcsState.TRACKING: "TRACKING",
-    FcsState.ARMED: "ARMED",
-    FcsState.FAULT: "FAULT",
+    ProtoFcsState.PROTO_BOOT: "BOOT",
+    ProtoFcsState.PROTO_IDLE_SAFE: "IDLE_SAFE",
+    ProtoFcsState.PROTO_FREECAM: "FREECAM",
+    ProtoFcsState.PROTO_SEARCH: "SEARCH",
+    ProtoFcsState.PROTO_TRACKING: "TRACKING",
+    ProtoFcsState.PROTO_ARMED: "ARMED",
+    ProtoFcsState.PROTO_FAULT: "FAULT",
 }
 
 MODE_NAMES = {
@@ -82,8 +82,8 @@ class TelemetryViewer:
 
         fcs_state = FCS_STATE_NAMES.get(t.health.fcs_state, "UNKNOWN")
         state_color = (0, 255, 0) if t.health.fcs_state not in (
-            FcsState.FAULT,
-            FcsState.BOOT,
+            ProtoFcsState.PROTO_FAULT,
+            ProtoFcsState.PROTO_BOOT,
         ) else (0, 0, 255)
         cv2.putText(
             frame, f"FCS State: {fcs_state}", (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, state_color, 2
