@@ -491,6 +491,26 @@ if(AURORE_ENABLE_TESTS)
     set_tests_properties(InterlockControllerTest PROPERTIES TIMEOUT 15)
 endif()
 
+if(AURORE_ENABLE_TESTS)
+    add_executable(camera_wrapper_test
+        tests/unit/camera_wrapper_test.cpp
+        src/drivers/camera_wrapper.cpp
+    )
+    target_include_directories(camera_wrapper_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${OPENCV_INCLUDE_DIRS}
+        ${LIBCAMERA_INCLUDE_DIRS}
+    )
+    target_link_libraries(camera_wrapper_test PRIVATE
+        Threads::Threads
+        ${OPENCV_LIBRARIES}
+        ${LIBCAMERA_LIBRARIES}
+        rt
+    )
+    add_test(NAME CameraWrapperTest COMMAND camera_wrapper_test)
+    set_tests_properties(CameraWrapperTest PROPERTIES TIMEOUT 30)
+endif()
+
 # ============================================================================
 # Integration Tests
 # ============================================================================
