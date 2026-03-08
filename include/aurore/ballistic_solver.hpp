@@ -21,6 +21,33 @@ struct DropSolution {
     float tof_s{0.f};
 };
 
+// G1 Drag Model: 4-segment piecewise Cd vs Mach number
+// Subsonic (Mach 0-0.8): cd = 0.2
+// Transonic (Mach 0.8-1.2): cd = 0.4
+// Supersonic (Mach 1.2-2.5): cd = 0.25
+// Hypersonic (Mach 2.5-10): cd = 0.18
+static constexpr float kMachSubsonicMax   = 0.8f;
+static constexpr float kMachTransonicMax  = 1.2f;
+static constexpr float kMachSupersonicMax = 2.5f;
+static constexpr float kMachHypersonicMax = 10.0f;
+static constexpr float kCdSubsonic        = 0.2f;
+static constexpr float kCdTransonic       = 0.4f;
+static constexpr float kCdSupersonic      = 0.25f;
+static constexpr float kCdHypersonic      = 0.18f;
+static constexpr float kSpeedOfSound      = 343.0f;  // m/s at sea level, 15°C
+
+// RK4 State vector: [x, y, z, vx, vy, vz]
+struct Rk4State {
+    float x{0.f}, y{0.f}, z{0.f};     // Position (m)
+    float vx{0.f}, vy{0.f}, vz{0.f};  // Velocity (m/s)
+};
+
+// RK4 Derivative vector: [vx, vy, vz, ax, ay, az]
+struct Rk4Derivative {
+    float dx{0.f}, dy{0.f}, dz{0.f};   // Velocity components
+    float dvx{0.f}, dvy{0.f}, dvz{0.f}; // Acceleration components
+};
+
 // PERF-005: Lookup table dimensions for pre-computed p_hit
 // Range: 0.1m to 10m in 0.1m steps (100 entries)
 // Velocity: 50 m/s to 500 m/s in 10 m/s steps (46 entries)
@@ -56,6 +83,24 @@ public:
 
     // Legacy method kept for compatibility
     float monte_carlo_p_hit(const FireControlSolution& nominal, int n_sims = 50) const;
+
+    // G1 Drag + RK4 integration methods (public for testing)
+    float get_drag_coefficient(float mach_number) const;
+    Rk4Derivative compute_derivative(const Rk4State& state, float air_density,
+                                      float cross_section_m2, float mass_kg) const;
+    Rk4State rk4_step(const Rk4State& state, float dt, float air_density,
+                      float cross_section_m2, float mass_kg) const;
+
+    // Trajectory simulation using RK4 + G1 drag
+    struct TrajectoryPoint {
+        float x{0.f}, y{0.f}, z{0.f};    // Position (m)
+        float vx{0.f}, vy{0.f}, vz{0.f}; // Velocity (m/s)
+        float time{0.f};                  // Time since launch (s)
+    };
+    std::vector<TrajectoryPoint> simulate_trajectory(
+        float muzzle_velocity_m_s, float launch_angle_rad,
+        float air_density, float cross_section_m2, float mass_kg,
+        float max_distance_m, float dt = 0.0005f) const;
 
 private:
     // PERF-005: Pre-computed lookup table [range_bin][velocity_bin]
