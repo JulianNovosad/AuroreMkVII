@@ -19,6 +19,13 @@ struct HudFrame {
     float    p_hit{0.f};
     float    range_m{0.f};
     uint64_t timestamp_ns{0};
+    float    target_w{0.f};
+    float    target_h{0.f};
+    float    velocity_x{0.f};
+    float    velocity_y{0.f};
+    float    az_lead_mrad{0.f};
+    float    el_lead_mrad{0.f};
+    uint32_t deadline_misses{0};
 };
 
 // SEC-008: Peer credential validation result

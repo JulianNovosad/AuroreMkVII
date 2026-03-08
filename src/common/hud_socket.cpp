@@ -185,13 +185,15 @@ void HudSocket::accept_loop() {
 // PERF-008: Pre-allocated buffer for JSON serialization (avoids heap allocation per frame)
 std::string HudSocket::frame_to_json(const HudFrame& f) const {
     // PERF-008: Use pre-allocated char buffer instead of std::ostringstream
-    // Buffer size calculated for max JSON output: ~200 chars typical, 512 for safety
-    char buffer[512];
-    
+    // Buffer size calculated for max JSON output: ~400 chars typical, 768 for safety
+    char buffer[768];
+
     // PERF-008: Use snprintf for efficient formatting (no heap allocation)
     int written = std::snprintf(buffer, sizeof(buffer),
         "{\"state\":\"%s\",\"az\":%.2f,\"el\":%.2f,\"cx\":%.1f,\"cy\":%.1f,"
-        "\"conf\":%.3f,\"p_hit\":%.3f,\"range\":%.2f,\"ts\":%lu}\n",
+        "\"conf\":%.3f,\"p_hit\":%.3f,\"range\":%.2f,\"ts\":%lu,"
+        "\"target_w\":%.2f,\"target_h\":%.2f,\"velocity_x\":%.3f,\"velocity_y\":%.3f,"
+        "\"az_lead_mrad\":%.2f,\"el_lead_mrad\":%.2f,\"deadline_misses\":%u}\n",
         fcs_state_name(static_cast<FcsState>(f.state)),
         static_cast<double>(f.az_deg),
         static_cast<double>(f.el_deg),
@@ -200,14 +202,21 @@ std::string HudSocket::frame_to_json(const HudFrame& f) const {
         static_cast<double>(f.confidence),
         static_cast<double>(f.p_hit),
         static_cast<double>(f.range_m),
-        static_cast<unsigned long>(f.timestamp_ns));
-    
-    // Safety check for truncation or error (should never happen with 512 buffer)
+        static_cast<unsigned long>(f.timestamp_ns),
+        static_cast<double>(f.target_w),
+        static_cast<double>(f.target_h),
+        static_cast<double>(f.velocity_x),
+        static_cast<double>(f.velocity_y),
+        static_cast<double>(f.az_lead_mrad),
+        static_cast<double>(f.el_lead_mrad),
+        static_cast<unsigned int>(f.deadline_misses));
+
+    // Safety check for truncation or error (should never happen with 768 buffer)
     if (written < 0 || static_cast<size_t>(written) >= sizeof(buffer)) {
         // Fallback to empty JSON on error
         return "{}\n";
     }
-    
+
     // PERF-008: Use null-terminated string constructor (safer than length-based)
     return std::string(buffer);
 }
