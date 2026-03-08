@@ -45,6 +45,7 @@
 #include "aurore/interlock_controller.hpp"
 #include "aurore/ballistic_solver.hpp"
 #include "aurore/aurore_link_server.hpp"
+#include "aurore/hud_socket.hpp"
 #include "aurore/config_loader.hpp"
 #include "aurore/telemetry_writer.hpp"
 #include "aurore.pb.h"
@@ -338,6 +339,18 @@ int main(int argc, char* argv[]) {
     link_cfg.command_port = static_cast<uint16_t>(config.get_int("network.aurore_link.command_port", 9002));
     aurore::AuroreLinkServer link_server(link_cfg);
     link_server.start();
+
+    // Initialize HUD socket for low-latency telemetry to aurore-link frontend
+    aurore::HudSocketConfig hud_cfg;
+    hud_cfg.socket_path = config.get_string("network.hud_telemetry.socket_path", "/tmp/aurore_hud.sock");
+    // In dry-run, socket path should be writable; in production, requires root
+    hud_cfg.require_root_uid = !dry_run;
+    aurore::HudSocket hud_socket(hud_cfg);
+    if (hud_socket.start()) {
+        std::cout << "HUD socket listening: " << hud_cfg.socket_path << std::endl;
+    } else {
+        std::cerr << "Warning: HUD socket failed to start" << std::endl;
+    }
 
     // Gimbal controller (FusionHAT+ sysfs driver — fails gracefully without hardware)
     aurore::FusionHat fusion_hat;
@@ -733,11 +746,40 @@ int main(int argc, char* argv[]) {
                 safety_monitor.update_actuation_frame(last_actuation_sequence, now);
             }
 
-            // Broadcast telemetry every 4th frame (30Hz)
+            // Broadcast telemetry and HUD updates every 4th frame (30Hz)
             ++telemetry_throttle_count;
             if (telemetry_throttle_count >= 4) {
                 telemetry_throttle_count = 0;
 
+                // HUD socket broadcast (low-latency JSON to frontend)
+                aurore::HudFrame hud_frame;
+                hud_frame.state = static_cast<int>(state);
+                hud_frame.az_deg = gimbal_cmd.az_deg;
+                hud_frame.el_deg = gimbal_cmd.el_deg;
+                hud_frame.target_cx = latest_solution.centroid_x;
+                hud_frame.target_cy = latest_solution.centroid_y;
+                hud_frame.target_w = latest_solution.valid ? 50.0f : 0.0f;  // Placeholder bbox size
+                hud_frame.target_h = latest_solution.valid ? 50.0f : 0.0f;
+                hud_frame.velocity_x = latest_solution.velocity_x;
+                hud_frame.velocity_y = latest_solution.velocity_y;
+                hud_frame.confidence = latest_solution.psr > 0 ? latest_solution.psr : 0.0f;
+                hud_frame.range_m = test_range_m;
+
+                // Convert ballistics lead angles from degrees to milliradians
+                if (last_ballistics_sol.has_value()) {
+                    constexpr float kDegToMrad = 17.4533f;  // π/180 * 1000
+                    hud_frame.az_lead_mrad = last_ballistics_sol->az_lead_deg * kDegToMrad;
+                    hud_frame.el_lead_mrad = last_ballistics_sol->el_lead_deg * kDegToMrad;
+                } else {
+                    hud_frame.az_lead_mrad = 0.0f;
+                    hud_frame.el_lead_mrad = 0.0f;
+                }
+
+                hud_frame.p_hit = last_ballistics_sol.has_value() ? last_ballistics_sol->p_hit : 0.0f;
+                hud_frame.deadline_misses = static_cast<uint32_t>(safety_monitor.deadline_misses());
+                hud_socket.broadcast(hud_frame);
+
+                // AuroreLink protobuf broadcast (telemetry over TCP)
                 aurore::Telemetry tel;
                 tel.set_timestamp_ns(aurore::get_timestamp());
                 tel.mutable_health()->set_frame_count(frame_sequence.load());
@@ -880,8 +922,9 @@ int main(int argc, char* argv[]) {
     join_with_timeout(actuation_thread, 2000);
     join_with_timeout(safety_thread, 2000);
 
-    // Stop AuroreLink server
+    // Stop servers
     link_server.stop();
+    hud_socket.stop();
 
     // Stop camera
     if (camera) {
