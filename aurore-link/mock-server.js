@@ -10,11 +10,19 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const net = require('net');
 const { WebSocketServer } = require('ws');
 
 const PORT = 8080;
 const TELEMETRY_INTERVAL_MS = 150;
 const STATIC_ROOT = __dirname;
+const HUD_SOCKET_PATH = '/tmp/aurore_hud.sock';
+const HUD_RECONNECT_MS = 2000;
+
+// FCS state enum (must match C++ FcsState: BOOT=0, IDLE_SAFE=1, FREECAM=2, SEARCH=3, TRACKING=4, ARMED=5, FAULT=6)
+const FCS_STATES = ['BOOT', 'IDLE_SAFE', 'FREECAM', 'SEARCH', 'TRACKING', 'ARMED', 'FAULT'];
+const CANVAS_W = 1536;
+const CANVAS_H = 864;
 
 // ---------------------------------------------------------------------------
 // Static file server
@@ -88,11 +96,10 @@ const state = {
   cpu_temp: 67.3,
   cpu_pct: 34.2,
   deadline_misses: 0,
+  // HUD socket state
+  hud_socket_connected: false,
+  use_hud_socket: true,  // Set to false to disable HUD socket and use mock data only
 };
-
-const FCS_STATES = ['BOOT', 'IDLE_SAFE', 'FREECAM', 'SEARCH', 'TRACKING', 'ARMED', 'FAULT'];
-const CANVAS_W = 1536;
-const CANVAS_H = 864;
 
 function buildTelemetry() {
   state.track_t += 0.012;
@@ -152,6 +159,133 @@ function buildTelemetry() {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// HUD Socket client (connects to C++ UNIX domain socket at /tmp/aurore_hud.sock)
+// ---------------------------------------------------------------------------
+
+let hudSocket = null;
+let hudSocketBuffer = '';
+let hudSocketReconnectTimer = null;
+let lastHudFrameData = null;  // Cache last valid frame for WebSocket clients
+
+function connectHudSocket() {
+  if (!state.use_hud_socket) {
+    return;
+  }
+
+  if (hudSocket !== null) {
+    return;
+  }
+
+  console.log(`[HUD Socket] Attempting to connect to ${HUD_SOCKET_PATH}...`);
+
+  hudSocket = net.createConnection({ path: HUD_SOCKET_PATH }, () => {
+    console.log('[HUD Socket] Connected');
+    state.hud_socket_connected = true;
+    hudSocketBuffer = '';
+  });
+
+  hudSocket.on('data', (data) => {
+    // Append data to buffer and process newline-delimited JSON
+    hudSocketBuffer += data.toString();
+
+    let lines = hudSocketBuffer.split('\n');
+    // Keep the last incomplete line in the buffer
+    hudSocketBuffer = lines.pop();
+
+    for (const line of lines) {
+      if (!line.trim()) {
+        continue;
+      }
+
+      try {
+        const hudData = JSON.parse(line);
+        lastHudFrameData = mapHudFrameToTelemetry(hudData);
+      } catch (err) {
+        console.warn('[HUD Socket] Failed to parse JSON:', line.slice(0, 100), err.message);
+      }
+    }
+  });
+
+  hudSocket.on('error', (err) => {
+    console.error('[HUD Socket] Error:', err.message);
+    state.hud_socket_connected = false;
+    hudSocket = null;
+    scheduleHudSocketReconnect();
+  });
+
+  hudSocket.on('close', () => {
+    console.log('[HUD Socket] Disconnected');
+    state.hud_socket_connected = false;
+    hudSocket = null;
+    scheduleHudSocketReconnect();
+  });
+}
+
+function scheduleHudSocketReconnect() {
+  if (hudSocketReconnectTimer) {
+    return;
+  }
+
+  hudSocketReconnectTimer = setTimeout(() => {
+    hudSocketReconnectTimer = null;
+    connectHudSocket();
+  }, HUD_RECONNECT_MS);
+}
+
+/**
+ * Map HudFrame (from C++ socket) to frontend telemetry schema
+ * HudFrame fields:
+ *   state (0-6: BOOT, IDLE_SAFE, FREECAM, SEARCH, TRACKING, ARMED, FAULT)
+ *   az_deg, el_deg (gimbal angles)
+ *   target_cx, target_cy (track centroid in pixels)
+ *   target_w, target_h (target bbox dimensions)
+ *   velocity_x, velocity_y (target velocity, m/s or px/frame)
+ *   confidence (track confidence 0-1)
+ *   az_lead_mrad, el_lead_mrad (ballistics lead angles in mrad)
+ *   p_hit (ballistics probability of hit)
+ *   range_m (estimated range in meters)
+ *   deadline_misses (count of missed deadlines)
+ */
+function mapHudFrameToTelemetry(hudData) {
+  const stateName = FCS_STATES[hudData.state] || 'UNKNOWN';
+
+  return {
+    ts: Date.now(),
+    mode: state.mode,
+    fcs_state: stateName,
+    frame_count: state.frame_count,
+    gimbal: {
+      yaw: +(hudData.az || 0).toFixed(2),
+      pitch: +(hudData.el || 0).toFixed(2),
+    },
+    track: {
+      valid: stateName === 'TRACKING' || stateName === 'ARMED',
+      cx: +(hudData.cx || 0).toFixed(1),
+      cy: +(hudData.cy || 0).toFixed(1),
+      w: +(hudData.w || 0).toFixed(1),
+      h: +(hudData.h || 0).toFixed(1),
+      confidence: +(hudData.conf || 0).toFixed(3),
+      range_m: +(hudData.range || 0).toFixed(1),
+      vx: +(hudData.vx || 0).toFixed(3),
+      vy: +(hudData.vy || 0).toFixed(3),
+    },
+    ballistic: {
+      az_lead_mrad: +(hudData.az_lead_mrad || 0).toFixed(3),
+      el_lead_mrad: +(hudData.el_lead_mrad || 0).toFixed(3),
+      p_hit: +(hudData.p_hit || 0).toFixed(3),
+    },
+    health: {
+      cpu_temp: +(state.cpu_temp).toFixed(1),
+      cpu_pct: +(state.cpu_pct).toFixed(1),
+      deadline_misses: hudData.deadline_misses || 0,
+    },
+  };
+}
+
+// Start HUD socket connection on startup
+connectHudSocket();
 
 // ---------------------------------------------------------------------------
 // WebSocket server (upgrade from same HTTP server)
@@ -232,7 +366,21 @@ wss.on('connection', (ws, req) => {
 
 setInterval(() => {
   if (clients.size === 0) return;
-  const msg = JSON.stringify(buildTelemetry());
+
+  // Use HUD socket data if available and connected, otherwise fall back to mock
+  let telemetry;
+  if (state.use_hud_socket && state.hud_socket_connected && lastHudFrameData) {
+    telemetry = lastHudFrameData;
+  } else {
+    // Update mock data
+    state.frame_count += Math.round(120 * TELEMETRY_INTERVAL_MS / 1000);
+    state.track_t += 0.012;
+    state.gimbal_t += 0.004;
+    state.phit_t += 0.021;
+    telemetry = buildTelemetry();
+  }
+
+  const msg = JSON.stringify(telemetry);
   for (const ws of clients) {
     if (ws.readyState === ws.OPEN) {
       ws.send(msg);
@@ -244,8 +392,28 @@ setInterval(() => {
 // Start
 // ---------------------------------------------------------------------------
 
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\n[Server] Shutting down gracefully...');
+  if (hudSocket) {
+    hudSocket.destroy();
+  }
+  if (hudSocketReconnectTimer) {
+    clearTimeout(hudSocketReconnectTimer);
+  }
+  server.close(() => {
+    console.log('[Server] Closed');
+    process.exit(0);
+  });
+});
+
 server.listen(PORT, () => {
   console.log(`Aurore mock server running at http://localhost:${PORT}`);
   console.log(`WebSocket endpoint: ws://localhost:${PORT}/ws`);
+  if (state.use_hud_socket) {
+    console.log(`HUD socket: attempting connection to ${HUD_SOCKET_PATH} (reconnect interval: ${HUD_RECONNECT_MS}ms)`);
+  } else {
+    console.log(`HUD socket: disabled (using mock data generator)`);
+  }
   console.log('Press Ctrl+C to stop.');
 });
