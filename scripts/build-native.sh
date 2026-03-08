@@ -24,10 +24,28 @@ cd "$BUILD_DIR"
 
 # Configure
 echo "Configuring..."
+
+# Protobuf hint: if protoc is not in the system PATH, look in ~/.local/bin
+# (installed without sudo via: apt-get download protobuf-compiler && dpkg-deb -x ...)
+PROTOBUF_ARGS=()
+LOCAL_PROTOC="$HOME/.local/bin/protoc"
+LOCAL_PROTOBUF_LIB="$HOME/.local/lib/x86_64-linux-gnu/libprotobuf.so"
+LOCAL_PROTOBUF_INC="$HOME/.local/include"
+if [ -x "$LOCAL_PROTOC" ] && [ ! -x "$(command -v protoc 2>/dev/null)" ]; then
+    PROTOBUF_ARGS+=(
+        "-DProtobuf_INCLUDE_DIR=$LOCAL_PROTOBUF_INC"
+        "-DProtobuf_LIBRARY=$LOCAL_PROTOBUF_LIB"
+        "-DProtobuf_PROTOC_EXECUTABLE=$LOCAL_PROTOC"
+    )
+    export PATH="$HOME/.local/bin:$PATH"
+    export LD_LIBRARY_PATH="$HOME/.local/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+fi
+
 cmake .. \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DAURORE_ENABLE_TESTS=ON \
-    -DAURORE_REALTIME=ON
+    -DAURORE_REALTIME=ON \
+    "${PROTOBUF_ARGS[@]}"
 
 # Build
 echo ""

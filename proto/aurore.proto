@@ -1,0 +1,97 @@
+syntax = "proto3";
+package aurore;
+
+// ── Shared enums ──────────────────────────────────────────────
+
+enum FcsState {
+    BOOT      = 0;
+    IDLE_SAFE = 1;
+    FREECAM   = 2;
+    SEARCH    = 3;
+    TRACKING  = 4;
+    ARMED     = 5;
+    FAULT     = 6;
+}
+
+enum OperatingMode {
+    AUTO    = 0;
+    FREECAM_MODE = 1;
+}
+
+// ── MkVII → Link messages ─────────────────────────────────────
+
+message TrackState {
+    bool  valid       = 1;
+    float centroid_x  = 2;
+    float centroid_y  = 3;
+    float velocity_x  = 4;
+    float velocity_y  = 5;
+    float confidence  = 6;
+    float range_m     = 7;
+}
+
+message BallisticSolution {
+    bool  valid       = 1;
+    float az_lead_deg = 2;
+    float el_lead_deg = 3;
+    float range_m     = 4;
+    float p_hit       = 5;
+}
+
+message GimbalStatus {
+    float az_deg       = 1;
+    float el_deg       = 2;
+    float az_error_deg = 3;
+    float el_error_deg = 4;
+    bool  settled      = 5;
+}
+
+message SystemHealth {
+    float         cpu_temp_c       = 1;
+    float         cpu_usage_pct    = 2;
+    uint64        frame_count      = 3;
+    uint32        deadline_misses  = 4;
+    bool          emergency_active = 5;
+    FcsState      fcs_state        = 6;
+    OperatingMode mode             = 7;
+}
+
+message Telemetry {
+    uint64           timestamp_ns = 1;
+    TrackState       track        = 2;
+    BallisticSolution ballistic   = 3;
+    GimbalStatus     gimbal       = 4;
+    SystemHealth     health       = 5;
+}
+
+message VideoFrame {
+    uint64 frame_id     = 1;
+    uint64 timestamp_ns = 2;
+    uint32 width        = 3;
+    uint32 height       = 4;
+    bytes  jpeg_data    = 5;
+}
+
+// ── Link → MkVII messages ─────────────────────────────────────
+
+message ModeSwitch {
+    OperatingMode mode = 1;
+}
+
+message FreecamTarget {
+    float az_deg        = 1;
+    float el_deg        = 2;
+    float velocity_dps  = 3;
+}
+
+message ConfigPatch {
+    map<string, string> values = 1;
+}
+
+message Command {
+    oneof payload {
+        ModeSwitch    mode_switch = 1;
+        FreecamTarget freecam    = 2;
+        ConfigPatch   config     = 3;
+    }
+}

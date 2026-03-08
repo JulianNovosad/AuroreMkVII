@@ -152,6 +152,15 @@ add_link_options(
 # Find required packages
 find_package(Threads REQUIRED)
 
+find_package(Protobuf REQUIRED)
+
+# Generate C++ source from proto schema
+set(PROTO_FILES ${CMAKE_SOURCE_DIR}/proto/aurore.proto)
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
+
+# Make generated headers visible to all targets
+include_directories(${Protobuf_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
+
 # OpenCV - use pkg-config module 'opencv4'
 # Security requirement: >= 4.9.0 to address CVE-2024-2167 (heap buffer overflow)
 # and CVE-2024-3400 (DNN denial of service)
@@ -269,6 +278,9 @@ set(AURORE_SOURCES
     # Common utilities
     src/common/telemetry_writer.cpp
     src/common/hud_socket.cpp
+
+    # Protobuf generated sources
+    ${PROTO_SRCS}
 )
 
 # Header files (for IDE integration)
@@ -296,6 +308,7 @@ target_link_libraries(aurore PRIVATE
     Threads::Threads
     ${OPENCV_LIBRARIES}
     ${LIBCAMERA_LIBRARIES}
+    ${Protobuf_LIBRARIES}
     rt      # Real-time extensions (clock_nanosleep, etc.)
     pthread # POSIX threads
 )
