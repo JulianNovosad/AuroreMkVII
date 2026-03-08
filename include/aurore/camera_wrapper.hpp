@@ -47,8 +47,7 @@ namespace libcamera {
     class Stream;
     class StreamConfiguration;
     class StreamRoles;
-    class Transform;
-    struct StreamRole;
+
     struct PixelFormat;
     struct Size;
     struct Rectangle;

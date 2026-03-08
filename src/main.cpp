@@ -41,6 +41,9 @@
 #include "aurore/state_machine.hpp"  // For TrackSolution
 #include "aurore/tracker.hpp"        // For KcfTracker
 #include "aurore/detector.hpp"       // For OrbDetector
+#include "aurore/gimbal_controller.hpp"
+#include "aurore/interlock_controller.hpp"
+#include "aurore/ballistic_solver.hpp"
 #include "aurore/aurore_link_server.hpp"
 #include "aurore/config_loader.hpp"
 #include "aurore/telemetry_writer.hpp"
@@ -336,20 +339,44 @@ int main(int argc, char* argv[]) {
     aurore::AuroreLinkServer link_server(link_cfg);
     link_server.start();
 
-    // Install mode callback for FREECAM/AUTO switching
-    link_server.set_mode_callback([&](aurore::LinkMode mode) {
-        if (mode == aurore::LinkMode::FREECAM) {
-            std::cout << "AuroreLink: Mode switched to FREECAM" << std::endl;
-            // TODO: gimbal_controller.set_source(aurore::GimbalSource::FREECAM);
-        } else {
-            std::cout << "AuroreLink: Mode switched to AUTO" << std::endl;
-            // TODO: gimbal_controller.set_source(aurore::GimbalSource::AUTO);
-        }
-    });
-
     // Gimbal controller (FusionHAT+ sysfs driver — fails gracefully without hardware)
     aurore::FusionHat fusion_hat;
     fusion_hat.init();
+
+    // Configure gimbal rate limiting from config
+    const float gimbal_rate_limit_dps = config.get_float("gimbal.elevation.velocity_limit_dps", 60.0f);
+    fusion_hat.set_rate_limit(true, gimbal_rate_limit_dps);
+
+    // Set gimbal endstop limits from config
+    const float az_min = config.get_float("gimbal.azimuth.min_deg", -90.0f);
+    const float az_max = config.get_float("gimbal.azimuth.max_deg", 90.0f);
+    const float el_min = config.get_float("gimbal.elevation.min_deg", -10.0f);
+    const float el_max = config.get_float("gimbal.elevation.max_deg", 45.0f);
+    fusion_hat.set_endstop_limits(0, az_min, az_max);  // Channel 0 = azimuth
+    fusion_hat.set_endstop_limits(1, el_min, el_max);  // Channel 1 = elevation
+
+    // GimbalController for AUTO/FREECAM gimbal targeting
+    aurore::GimbalController gimbal_ctrl;
+    gimbal_ctrl.set_limits(az_min, az_max, el_min, el_max);
+
+    // InterlockController for actuation safety gating
+    aurore::InterlockConfig interlock_cfg;
+    aurore::InterlockController interlock(interlock_cfg);
+    if (interlock.init()) {
+        if (dry_run) {
+            interlock.force_state(aurore::InterlockState::CLOSED);
+            std::cout << "Interlock: Forced CLOSED in dry-run mode" << std::endl;
+        }
+        interlock.start();
+    } else {
+        std::cerr << "Warning: Interlock initialization failed" << std::endl;
+    }
+
+    // BallisticSolver for fire control solutions
+    aurore::BallisticSolver ballistics;
+    ballistics.initialize_lookup_table();
+    const float muzzle_velocity_mps = config.get_float("ballistics.muzzle_velocity_mps", 900.0f);
+    const float test_range_m = config.get_float("ballistics.test_range_m", 5.0f);
 
     // Frame ring buffer (zero-copy)
     aurore::LockFreeRingBuffer<aurore::ZeroCopyFrame, 4> frame_buffer;
@@ -389,6 +416,26 @@ int main(int argc, char* argv[]) {
                     "State machine transitioned to FAULT");
             }
         });
+
+    // Install mode callback for FREECAM/AUTO switching
+    link_server.set_mode_callback([&](aurore::LinkMode mode) {
+        if (mode == aurore::LinkMode::FREECAM) {
+            std::cout << "AuroreLink: Mode switched to FREECAM" << std::endl;
+            gimbal_ctrl.set_source(aurore::GimbalSource::FREECAM);
+            state_machine.request_freecam();
+        } else {
+            std::cout << "AuroreLink: Mode switched to AUTO" << std::endl;
+            gimbal_ctrl.set_source(aurore::GimbalSource::AUTO);
+            state_machine.request_search();
+        }
+    });
+
+    // Install arm callback for operator authorization
+    link_server.set_arm_callback([&](bool authorized) {
+        std::cout << "AuroreLink: Operator authorization "
+                  << (authorized ? "granted" : "revoked") << std::endl;
+        state_machine.set_operator_authorization(authorized);
+    });
 
 
     // Control loop state
@@ -564,18 +611,6 @@ int main(int argc, char* argv[]) {
                 }
                 last_track_sequence.store(frame.sequence, std::memory_order_release);
 
-                // Broadcast telemetry via AuroreLink
-                aurore::Telemetry tel;
-                tel.set_timestamp_ns(aurore::get_timestamp());
-                tel.mutable_health()->set_frame_count(frame_sequence.load());
-                tel.mutable_track()->set_centroid_x(current_solution.centroid_x);
-                tel.mutable_track()->set_centroid_y(current_solution.centroid_y);
-                tel.mutable_track()->set_velocity_x(current_solution.velocity_x);
-                tel.mutable_track()->set_velocity_y(current_solution.velocity_y);
-                tel.mutable_track()->set_valid(current_solution.valid);
-                tel.mutable_track()->set_confidence(current_solution.psr > 0 ? current_solution.psr : 0.0f);
-                link_server.broadcast_telemetry(tel);
-
                 deadline.stop();
                 if (deadline.exceeded()) {
                     std::cerr << "Track compute exceeded deadline: "
@@ -616,54 +651,124 @@ int main(int argc, char* argv[]) {
 
         actuation_running.store(true, std::memory_order_release);
 
-        // INT-003 Fix: Read track solution from buffer
+        // Track latest solution from track thread
         aurore::TrackSolution latest_solution;
         latest_solution.valid = false;
         uint64_t last_actuation_sequence = 0;
+
+        // Last ballistics solution for state machine feedback
+        std::optional<aurore::FireControlSolution> last_ballistics_sol;
+
+        // Throttle telemetry broadcast to 30Hz (every 4th actuation frame)
+        int telemetry_throttle_count = 0;
 
         while (!g_shutdown_requested.load(std::memory_order_acquire) &&
                !safety_monitor.is_emergency_active()) {
 
             timing.wait();
-
             deadline.start();
 
-            // INT-003 Fix: Read latest track solution from buffer
+            // Read latest track solution from buffer
             while (track_buffer.pop(latest_solution)) {
-                // Keep popping to get the latest solution
                 last_actuation_sequence++;
             }
 
-            // Calculate gimbal command and send to Fusion HAT+ via sysfs PWM
-            if (latest_solution.valid) {
-                // IMX708 at 120fps (binned mode): ~66° H × 40° V FoV
-                constexpr float kHFovDeg = 66.0f;
-                constexpr float kVFovDeg = 40.0f;
-                const float az_cmd = (latest_solution.centroid_x - (1536.0f / 2.0f))
-                                     * (kHFovDeg / 1536.0f);
-                // Negate: increasing pixel-Y is downward, positive elevation is up
-                const float el_cmd = -(latest_solution.centroid_y - (864.0f / 2.0f))
-                                     * (kVFovDeg / 864.0f);
-                fusion_hat.set_servo_angle(0, az_cmd);  // ch0 = azimuth
-                fusion_hat.set_servo_angle(1, el_cmd);  // ch1 = elevation
+            // Get current FSM state to gate actuation
+            aurore::FcsState state = state_machine.state();
+            bool actuation_allowed = interlock.is_actuation_allowed() &&
+                                     (state == aurore::FcsState::TRACKING ||
+                                      state == aurore::FcsState::ARMED ||
+                                      state == aurore::FcsState::FREECAM);
+
+            // Compute gimbal command based on source (AUTO=tracking centroid, FREECAM=operator)
+            aurore::GimbalCommand gimbal_cmd{0.f, 0.f};
+            if (latest_solution.valid && state == aurore::FcsState::TRACKING) {
+                // AUTO mode: convert track centroid to gimbal delta
+                gimbal_cmd = gimbal_ctrl.command_from_pixel(
+                    latest_solution.centroid_x, latest_solution.centroid_y, 1.0f);
+            } else if (state == aurore::FcsState::FREECAM) {
+                // FREECAM mode: use last commanded angles (set via operator link)
+                gimbal_cmd.az_deg = gimbal_ctrl.current_az();
+                gimbal_cmd.el_deg = gimbal_ctrl.current_el();
             }
 
-            // State machine: gimbal status for TRACKING -> ARMED transition
-            // ARMED entry requires gimbal settled (error < 0.5 deg) for sustained period
-            // and ballistics p_hit > 0.95
+            // Send servo commands only if actuation is gated and we're in a command state
+            if (actuation_allowed && (state == aurore::FcsState::TRACKING ||
+                                      state == aurore::FcsState::ARMED ||
+                                      state == aurore::FcsState::FREECAM)) {
+                fusion_hat.set_servo_angle(0, gimbal_cmd.az_deg);   // ch0 = azimuth
+                fusion_hat.set_servo_angle(1, gimbal_cmd.el_deg);   // ch1 = elevation
+            }
+
+            // Compute ballistics solution if tracking
+            if (latest_solution.valid && state == aurore::FcsState::TRACKING) {
+                // Estimate target aspect angle (elevation from gimbal + range offset)
+                const float target_aspect = gimbal_cmd.el_deg;
+                last_ballistics_sol = ballistics.solve(
+                    test_range_m,           // Use configured test range for dry-run
+                    gimbal_cmd.el_deg,      // Current gimbal elevation
+                    target_aspect,          // Target aspect (equals gimbal el in simplified model)
+                    muzzle_velocity_mps);   // Configured muzzle velocity
+
+                if (last_ballistics_sol.has_value()) {
+                    // Signal ballistics solution to state machine (enables ARMED mode)
+                    state_machine.on_ballistics_solution(*last_ballistics_sol);
+                }
+            }
+
+            // Read gimbal status from actual servo feedback
             aurore::GimbalStatusSm gimbal_status;
-            // TODO: Read actual gimbal errors from Fusion HAT+
-            // Use frame dimensions from constants (1536x864)
-            gimbal_status.az_error_deg = std::abs(latest_solution.centroid_x - 1536.0f / 2.0f) * 0.1f;
-            gimbal_status.el_error_deg = std::abs(latest_solution.centroid_y - 864.0f / 2.0f) * 0.1f;
+            if (auto az = fusion_hat.get_servo_angle(0)) {
+                gimbal_status.az_error_deg = std::abs(*az - gimbal_cmd.az_deg);
+            }
+            if (auto el = fusion_hat.get_servo_angle(1)) {
+                gimbal_status.el_error_deg = std::abs(*el - gimbal_cmd.el_deg);
+            }
             gimbal_status.velocity_deg_s = 0.0f;  // TODO: Read from gimbal
             state_machine.on_gimbal_status(gimbal_status);
 
-            // INT-002 Fix: Update safety monitor for actuation frame
-            // This was missing - track_compute wasn't calling update_actuation_frame
+            // Update safety monitor for actuation frame
             if (last_actuation_sequence > 0) {
                 const aurore::TimestampNs now = aurore::get_timestamp();
                 safety_monitor.update_actuation_frame(last_actuation_sequence, now);
+            }
+
+            // Broadcast telemetry every 4th frame (30Hz)
+            ++telemetry_throttle_count;
+            if (telemetry_throttle_count >= 4) {
+                telemetry_throttle_count = 0;
+
+                aurore::Telemetry tel;
+                tel.set_timestamp_ns(aurore::get_timestamp());
+                tel.mutable_health()->set_frame_count(frame_sequence.load());
+
+                // Track data
+                tel.mutable_track()->set_centroid_x(latest_solution.centroid_x);
+                tel.mutable_track()->set_centroid_y(latest_solution.centroid_y);
+                tel.mutable_track()->set_velocity_x(latest_solution.velocity_x);
+                tel.mutable_track()->set_velocity_y(latest_solution.velocity_y);
+                tel.mutable_track()->set_valid(latest_solution.valid);
+                tel.mutable_track()->set_confidence(latest_solution.psr > 0 ? latest_solution.psr : 0.0f);
+
+                // Gimbal data
+                tel.mutable_gimbal()->set_az_deg(gimbal_cmd.az_deg);
+                tel.mutable_gimbal()->set_el_deg(gimbal_cmd.el_deg);
+                tel.mutable_gimbal()->set_az_error_deg(gimbal_status.az_error_deg);
+                tel.mutable_gimbal()->set_el_error_deg(gimbal_status.el_error_deg);
+
+                // Ballistics data
+                if (last_ballistics_sol.has_value()) {
+                    tel.mutable_ballistic()->set_p_hit(last_ballistics_sol->p_hit);
+                    tel.mutable_ballistic()->set_range_m(test_range_m);
+                }
+
+                // FCS state (map FcsState enum to ProtoFcsState)
+                aurore::ProtoFcsState proto_state = static_cast<aurore::ProtoFcsState>(static_cast<int>(state));
+                tel.mutable_health()->set_fcs_state(proto_state);
+                tel.mutable_health()->set_deadline_misses(
+                    static_cast<uint32_t>(safety_monitor.deadline_misses()));
+
+                link_server.broadcast_telemetry(tel);
             }
 
             deadline.stop();
@@ -681,20 +786,24 @@ int main(int argc, char* argv[]) {
         if (!configure_rt_thread("safety_monitor", 99, 3)) {
             return;
         }
-        
+
         aurore::ThreadTiming timing(1000000, 0);  // 1kHz
-        
+
         while (!g_shutdown_requested.load(std::memory_order_acquire)) {
             timing.wait();
-            
+
+            // Feed interlock watchdog every cycle
+            interlock.watchdog_feed();
+
             if (!safety_monitor.run_cycle()) {
                 // Safety fault detected
                 std::cerr << "Safety fault detected!" << std::endl;
-                
+
                 // Emergency stop
                 if (safety_monitor.is_emergency_active()) {
                     std::cerr << "Emergency stop active - halting all outputs" << std::endl;
-                    // TODO: Disable all actuators
+                    fusion_hat.disable_all_servos();
+                    interlock.set_inhibit(true);
                 }
             }
         }
@@ -729,6 +838,15 @@ int main(int argc, char* argv[]) {
     // Shutdown sequence
     std::cout << "\nShutting down..." << std::endl;
 
+    // Emergency stop: disable all actuators
+    std::cout << "Emergency stop: disabling all servos" << std::endl;
+    fusion_hat.disable_all_servos();
+    interlock.set_inhibit(true);
+    telemetry.log_event(
+        aurore::TelemetryEventId::SAFETY_INHIBIT_ENGAGED,
+        aurore::TelemetrySeverity::kCritical,
+        "Emergency stop triggered during shutdown");
+
     // Log system shutdown event
     telemetry.log_event(
         aurore::TelemetryEventId::SYSTEM_SHUTDOWN,
@@ -739,7 +857,7 @@ int main(int argc, char* argv[]) {
     vision_running.store(false);
     track_running.store(false);
     actuation_running.store(false);
-    
+
     // Wait for threads with timeout
     auto join_with_timeout = [](std::thread& t, int timeout_ms) {
         auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
@@ -756,7 +874,7 @@ int main(int argc, char* argv[]) {
             t.detach();
         }
     };
-    
+
     join_with_timeout(vision_thread, 2000);
     join_with_timeout(track_thread, 2000);
     join_with_timeout(actuation_thread, 2000);
@@ -769,6 +887,9 @@ int main(int argc, char* argv[]) {
     if (camera) {
         camera->stop();
     }
+
+    // Stop interlock controller
+    interlock.stop();
 
     // Stop safety monitor
     safety_monitor.stop();

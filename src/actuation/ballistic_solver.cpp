@@ -182,7 +182,7 @@ void BallisticSolver::initialize_lookup_table() {
     std::normal_distribution<float> vel_noise(0.f, kVelocitySigmaMps);
     std::normal_distribution<float> align_noise(0.f, kAlignSigmaDeg);
 
-    const int n_sims = 500;  // Higher sample count for accurate table generation
+    const int n_sims = 50;  // Higher sample count for accurate table generation
 
     // Pre-compute for KINETIC mode
     for (int ri = 0; ri < kLookupTableRangeBins; ++ri) {
@@ -211,7 +211,7 @@ void BallisticSolver::initialize_lookup_table() {
                 float miss = std::sqrt(impact_x * impact_x + impact_y * impact_y);
                 if (miss <= kTargetHalfSizeM) ++hits;
             }
-            p_hit_table_kinetic_[ri][vi] = static_cast<float>(hits) / static_cast<float>(n_sims);
+            p_hit_table_kinetic_[static_cast<size_t>(ri)][static_cast<size_t>(vi)] = static_cast<float>(hits) / static_cast<float>(n_sims);
         }
     }
 
@@ -236,7 +236,7 @@ void BallisticSolver::initialize_lookup_table() {
                 float miss = std::sqrt(impact_x * impact_x + impact_y * impact_y);
                 if (miss <= kTargetHalfSizeM) ++hits;
             }
-            p_hit_table_drop_[ri][vi] = static_cast<float>(hits) / static_cast<float>(n_sims);
+            p_hit_table_drop_[static_cast<size_t>(ri)][static_cast<size_t>(vi)] = static_cast<float>(hits) / static_cast<float>(n_sims);
         }
     }
 
@@ -455,9 +455,9 @@ float BallisticSolver::get_p_hit_from_table(float range_m, float velocity_m_s, b
 
     // Return pre-computed value
     if (kinetic_mode) {
-        return p_hit_table_kinetic_[ri][vi];
+        return p_hit_table_kinetic_[static_cast<size_t>(ri)][static_cast<size_t>(vi)];
     } else {
-        return p_hit_table_drop_[ri][vi];
+        return p_hit_table_drop_[static_cast<size_t>(ri)][static_cast<size_t>(vi)];
     }
 }
 

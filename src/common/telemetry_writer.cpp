@@ -200,8 +200,8 @@ void TelemetryWriter::log_frame(
     auto now = std::chrono::system_clock::now();
     auto epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         now.time_since_epoch()).count();
-    entry.produced_ts_epoch_ms = epoch_ms;
-    entry.call_ts_epoch_ms = epoch_ms;
+    entry.produced_ts_epoch_ms = static_cast<uint64_t>(epoch_ms);
+    entry.call_ts_epoch_ms = static_cast<uint64_t>(epoch_ms);
 
     // Frame ID from detection
     entry.cam_frame_id = detection.frame_id;
@@ -383,7 +383,7 @@ void TelemetryWriter::write_csv_entry(const CsvLogEntry& entry) {
               << entry.det_width << ","
               << entry.det_height << ","
               << entry.det_confidence << ","
-              << (int)entry.det_target_class << ","
+              << static_cast<int>(entry.det_target_class) << ","
               << entry.track_id << ","
               << entry.track_x << ","
               << entry.track_y << ","

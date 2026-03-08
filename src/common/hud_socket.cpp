@@ -141,7 +141,7 @@ void HudSocket::accept_loop() {
 
         if (client < 0) {
             // EAGAIN/EWOULDBLOCK expected for non-blocking socket
-            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+            if (errno == EAGAIN || errno == EINTR) {
                 // PERF-007: Use clock_nanosleep instead of sleep_for
                 struct timespec ts{};
                 ts.tv_sec = 0;
@@ -193,13 +193,13 @@ std::string HudSocket::frame_to_json(const HudFrame& f) const {
         "{\"state\":\"%s\",\"az\":%.2f,\"el\":%.2f,\"cx\":%.1f,\"cy\":%.1f,"
         "\"conf\":%.3f,\"p_hit\":%.3f,\"range\":%.2f,\"ts\":%lu}\n",
         fcs_state_name(static_cast<FcsState>(f.state)),
-        f.az_deg,
-        f.el_deg,
-        f.target_cx,
-        f.target_cy,
-        f.confidence,
-        f.p_hit,
-        f.range_m,
+        static_cast<double>(f.az_deg),
+        static_cast<double>(f.el_deg),
+        static_cast<double>(f.target_cx),
+        static_cast<double>(f.target_cy),
+        static_cast<double>(f.confidence),
+        static_cast<double>(f.p_hit),
+        static_cast<double>(f.range_m),
         static_cast<unsigned long>(f.timestamp_ns));
     
     // Safety check for truncation or error (should never happen with 512 buffer)

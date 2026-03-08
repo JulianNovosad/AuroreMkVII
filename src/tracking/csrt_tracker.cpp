@@ -44,7 +44,7 @@ TrackSolution KcfTracker::update(const cv::Mat& bgr_frame) {
     // Area change sanity check (drift detection)
     double prev_area = last_bbox_.width * last_bbox_.height;
     double curr_area = static_cast<double>(bbox.width) * bbox.height;
-    if (prev_area > 0 && std::abs(curr_area - prev_area) / prev_area > kAreaChangeMaxRatio) {
+    if (prev_area > 0 && std::abs(curr_area - prev_area) / prev_area > static_cast<double>(kAreaChangeMaxRatio)) {
         valid_ = false;
         return sol;
     }

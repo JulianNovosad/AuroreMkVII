@@ -394,8 +394,13 @@ private:
      * @brief Add one period to timespec
      */
     void add_period(struct timespec& ts) {
-        ts.tv_sec += period_ns_ / 1000000000L;
-        ts.tv_nsec += period_ns_ % 1000000000L;
+        // Correctly handle addition of unsigned nanoseconds to signed timespec fields
+        // Perform calculation with uint64_t and then cast the result to signed types
+        uint64_t seconds_to_add = period_ns_ / 1000000000ULL;
+        uint64_t nsecs_to_add = period_ns_ % 1000000000ULL;
+
+        ts.tv_sec += static_cast<time_t>(seconds_to_add);
+        ts.tv_nsec += static_cast<long>(nsecs_to_add);
         normalize_timespec(ts);
     }
     

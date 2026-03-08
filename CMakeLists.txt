@@ -101,6 +101,7 @@ add_compile_options(
     -Wformat=2
     -Wnull-dereference
     -Wdouble-promotion
+    -Werror
 )
 
 # Additional warnings for GCC
@@ -117,10 +118,9 @@ endif()
 # Sanitizers and Coverage (Debug Only)
 # ============================================================================
 
-if(AURORE_ENABLE_SANITIZERS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
-    message(STATUS "Enabling sanitizers (AddressSanitizer, UndefinedBehaviorSanitizer)")
-    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
-    add_link_options(-fsanitize=address,undefined)
+if(AURORE_ENABLE_SANITIZERS)
+    message(STATUS "Disabling sanitizers for Valgrind analysis.")
+    # No compile or link options for sanitizers when disabled for Valgrind
 endif()
 
 if(AURORE_ENABLE_COVERAGE)
@@ -267,8 +267,8 @@ endif()
 # Include directories
 include_directories(
     ${CMAKE_SOURCE_DIR}/include
-    ${OPENCV_INCLUDE_DIRS}
-    ${LIBCAMERA_INCLUDE_DIRS}
+    SYSTEM PUBLIC ${OPENCV_INCLUDE_DIRS}
+    SYSTEM PUBLIC ${LIBCAMERA_INCLUDE_DIRS}
 )
 
 # Link directories

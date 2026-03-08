@@ -27,6 +27,7 @@ struct AuroreLinkConfig {
 // Callbacks installed by main.cpp:
 using ModeCallback    = std::function<void(LinkMode)>;
 using FreecamCallback = std::function<void(float az_deg, float el_deg, float velocity_dps)>;
+using ArmCallback     = std::function<void(bool authorized)>;
 
 /**
  * AuroreLinkServer - TCP server for remote operator interface
@@ -54,6 +55,7 @@ public:
 
     void set_mode_callback(ModeCallback cb);
     void set_freecam_callback(FreecamCallback cb);
+    void set_arm_callback(ArmCallback cb);
 
     size_t client_count() const;
     LinkMode current_mode() const { return mode_.load(std::memory_order_acquire); }
@@ -83,6 +85,7 @@ private:
 
     ModeCallback    on_mode_;
     FreecamCallback on_freecam_;
+    ArmCallback     on_arm_;
 };
 
 }  // namespace aurore

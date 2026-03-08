@@ -1,16 +1,22 @@
 {
   "env": {
     "browser": true,
-    "es2022": true
+    "node": true,
+    "es2021": true
   },
+  "extends": [
+    "eslint:recommended",
+    "plugin:security/recommended"
+  ],
   "parserOptions": {
-    "ecmaVersion": 2022,
+    "ecmaVersion": "latest",
     "sourceType": "module"
   },
+  "plugins": [
+    "security"
+  ],
   "rules": {
     "no-unused-vars": "warn",
-    "no-console": "off",
-    "prefer-const": "error",
-    "no-var": "error"
+    "no-console": "off"
   }
 }

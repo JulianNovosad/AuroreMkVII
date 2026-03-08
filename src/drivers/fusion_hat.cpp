@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -159,9 +160,9 @@ bool FusionHat::init() {
             continue;
         }
         
-        channels_[ch].enabled.store(false, std::memory_order_release);
-        channels_[ch].current_pulse_width.store(1500, std::memory_order_release);  // Center
-        channels_[ch].current_angle.store(0.0f, std::memory_order_release);
+        channels_[static_cast<size_t>(ch)].enabled.store(false, std::memory_order_release);
+        channels_[static_cast<size_t>(ch)].current_pulse_width.store(1500, std::memory_order_release);  // Center
+        channels_[static_cast<size_t>(ch)].current_angle.store(0.0f, std::memory_order_release);
     }
     
     initialized_.store(true, std::memory_order_release);
@@ -188,42 +189,66 @@ bool FusionHat::set_servo_angle(int channel, float angle_deg) {
     if (!initialized_.load(std::memory_order_acquire)) {
         return false;
     }
-    
+
     if (channel < 0 || channel >= 12) {
         error_count_.fetch_add(1, std::memory_order_relaxed);
         return false;
     }
-    
+
     // Apply software endstops
     if (config_.enable_endstops) {
-        const auto& ch = channels_[channel];
+        const auto& ch = channels_[static_cast<size_t>(channel)];
         float min_angle = ch.min_angle;
         float max_angle = ch.max_angle;
-        
+
         if (angle_deg < min_angle) {
             angle_deg = min_angle;
         } else if (angle_deg > max_angle) {
             angle_deg = max_angle;
         }
     }
-    
+
     // Apply global limits
     angle_deg = std::clamp(angle_deg, config_.min_angle_deg, config_.max_angle_deg);
-    
+
+    // Apply rate limiting if enabled
+    if (config_.enable_rate_limit) {
+        const uint64_t now_ns = get_timestamp();
+        auto& ch = channels_[static_cast<size_t>(channel)];
+        const uint64_t last_ns = ch.last_update_ns.load(std::memory_order_acquire);
+
+        if (last_ns > 0) {
+            // Calculate elapsed time since last update
+            const float dt_s = static_cast<float>(now_ns - last_ns) * 1e-9f;
+
+            // Calculate maximum allowed angular change
+            const float max_delta = config_.max_angular_velocity_dps * dt_s;
+
+            // Get current angle for comparison
+            const float curr_angle = ch.current_angle.load(std::memory_order_acquire);
+            const float angle_delta = angle_deg - curr_angle;
+
+            // Clamp angle if it exceeds the rate limit
+            if (std::abs(angle_delta) > max_delta) {
+                angle_deg = curr_angle + std::copysign(max_delta, angle_delta);
+            }
+        }
+    }
+
     // Convert to pulse width
     int pulse_width = angle_to_pulse_width(angle_deg);
-    
+
     // Set pulse width
     if (!set_servo_pulse_width(channel, pulse_width)) {
         return false;
     }
-    
+
     // Update channel state
-    channels_[channel].current_angle.store(angle_deg, std::memory_order_release);
-    channels_[channel].current_pulse_width.store(pulse_width, std::memory_order_release);
-    channels_[channel].last_update_ns.store(get_timestamp(), std::memory_order_release);
-    channels_[channel].enabled.store(true, std::memory_order_release);
-    
+    channels_[static_cast<size_t>(channel)].current_angle.store(angle_deg, std::memory_order_release);
+    channels_[static_cast<size_t>(channel)].current_pulse_width.store(pulse_width, std::memory_order_release);
+    channels_[static_cast<size_t>(channel)].last_update_ns.store(get_timestamp(), std::memory_order_release);
+    channels_[static_cast<size_t>(channel)].enabled.store(true, std::memory_order_release);
+
     command_count_.fetch_add(1, std::memory_order_relaxed);
     return true;
 }
@@ -232,7 +257,7 @@ std::optional<float> FusionHat::get_servo_angle(int channel) const {
     if (channel < 0 || channel >= 12) {
         return std::nullopt;
     }
-    return channels_[channel].current_angle.load(std::memory_order_acquire);
+    return channels_[static_cast<size_t>(channel)].current_angle.load(std::memory_order_acquire);
 }
 
 bool FusionHat::set_servo_pulse_width(int channel, int pulse_width_us) {
@@ -284,7 +309,7 @@ bool FusionHat::set_servo_enabled(int channel, bool enable) {
         return false;
     }
     
-    channels_[channel].enabled.store(enable, std::memory_order_release);
+    channels_[static_cast<size_t>(channel)].enabled.store(enable, std::memory_order_release);
     return true;
 }
 
@@ -292,7 +317,7 @@ bool FusionHat::is_servo_enabled(int channel) const {
     if (channel < 0 || channel >= 12) {
         return false;
     }
-    return channels_[channel].enabled.load(std::memory_order_acquire);
+    return channels_[static_cast<size_t>(channel)].enabled.load(std::memory_order_acquire);
 }
 
 ServoStatus FusionHat::get_servo_status(int channel) const {
@@ -300,13 +325,13 @@ ServoStatus FusionHat::get_servo_status(int channel) const {
     status.channel = channel;
     
     if (channel >= 0 && channel < 12) {
-        const auto& ch = channels_[channel];
+        const auto& ch = channels_[static_cast<size_t>(channel)];
         status.angle_deg = ch.current_angle.load(std::memory_order_acquire);
         status.pulse_width_us = ch.current_pulse_width.load(std::memory_order_acquire);
         status.enabled = ch.enabled.load(std::memory_order_acquire);
         status.last_update_ns = ch.last_update_ns.load(std::memory_order_acquire);
-        status.endstop_active = (status.angle_deg <= channels_[channel].min_angle ||
-                                 status.angle_deg >= channels_[channel].max_angle);
+        status.endstop_active = (status.angle_deg <= channels_[static_cast<size_t>(channel)].min_angle ||
+                                 status.angle_deg >= channels_[static_cast<size_t>(channel)].max_angle);
     }
     
     return status;
@@ -385,8 +410,8 @@ int FusionHat::get_pwm_period(int channel) const {
 
 void FusionHat::set_endstop_limits(int channel, float min_angle_deg, float max_angle_deg) {
     if (channel >= 0 && channel < 12 && min_angle_deg < max_angle_deg) {
-        channels_[channel].min_angle = min_angle_deg;
-        channels_[channel].max_angle = max_angle_deg;
+        channels_[static_cast<size_t>(channel)].min_angle = min_angle_deg;
+        channels_[static_cast<size_t>(channel)].max_angle = max_angle_deg;
     }
 }
 
@@ -410,8 +435,8 @@ int FusionHat::angle_to_pulse_width(float angle_deg) const noexcept {
     ratio = std::clamp(ratio, 0.0f, 1.0f);
     
     int pulse_width = static_cast<int>(
-        config_.min_pulse_width_us + 
-        ratio * (config_.max_pulse_width_us - config_.min_pulse_width_us)
+        static_cast<float>(config_.min_pulse_width_us) + 
+        ratio * (static_cast<float>(config_.max_pulse_width_us) - static_cast<float>(config_.min_pulse_width_us))
     );
     
     return std::clamp(pulse_width, config_.min_pulse_width_us, config_.max_pulse_width_us);

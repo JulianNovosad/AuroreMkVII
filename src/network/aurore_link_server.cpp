@@ -113,7 +113,7 @@ void AuroreLinkServer::telemetry_accept_loop() {
     while (running_.load(std::memory_order_acquire)) {
         int client = ::accept(telemetry_fd_, nullptr, nullptr);
         if (client < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+            if (errno == EAGAIN || errno == EINTR) {
                 struct timespec ts{0, 10000000};  // 10ms
                 clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, nullptr);
                 continue;
@@ -135,7 +135,7 @@ void AuroreLinkServer::video_accept_loop() {
     while (running_.load(std::memory_order_acquire)) {
         int client = ::accept(video_fd_, nullptr, nullptr);
         if (client < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+            if (errno == EAGAIN || errno == EINTR) {
                 struct timespec ts{0, 10000000};  // 10ms
                 clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, nullptr);
                 continue;
@@ -157,7 +157,7 @@ void AuroreLinkServer::command_accept_loop() {
     while (running_.load(std::memory_order_acquire)) {
         int client = ::accept(command_fd_, nullptr, nullptr);
         if (client < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+            if (errno == EAGAIN || errno == EINTR) {
                 struct timespec ts{0, 10000000};
                 clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, nullptr);
                 continue;
@@ -189,6 +189,9 @@ void AuroreLinkServer::command_accept_loop() {
                         cmd.freecam().velocity_dps()
                     );
                 }
+                if (cmd.has_arm() && on_arm_) {
+                    on_arm_(cmd.arm().authorized());
+                }
             }
             ::close(client);
             std::lock_guard<std::mutex> lk(clients_mutex_);
@@ -205,6 +208,10 @@ void AuroreLinkServer::set_mode_callback(ModeCallback cb) {
 
 void AuroreLinkServer::set_freecam_callback(FreecamCallback cb) {
     on_freecam_ = std::move(cb);
+}
+
+void AuroreLinkServer::set_arm_callback(ArmCallback cb) {
+    on_arm_ = std::move(cb);
 }
 
 size_t AuroreLinkServer::client_count() const {

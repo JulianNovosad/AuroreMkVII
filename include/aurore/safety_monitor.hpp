@@ -158,7 +158,7 @@ struct StageLatencyStats {
     std::atomic<uint64_t> stall_count{0};
 
     /// Stall threshold in nanoseconds (default: 25ms = 25000000ns)
-    uint64_t stall_threshold_ns = 25000000;
+    std::atomic<uint64_t> stall_threshold_ns{25000000};
 
     /**
      * @brief Record a latency sample
@@ -453,7 +453,7 @@ public:
         if (idx >= static_cast<size_t>(PipelineStage::NUM_STAGES)) return;
 
         // Set stall threshold from config
-        stage_stats_[idx].stall_threshold_ns = config_.per_stage.stall_threshold_ns;
+        stage_stats_[idx].stall_threshold_ns.store(config_.per_stage.stall_threshold_ns, std::memory_order_relaxed);
 
         // Record latency
         stage_stats_[idx].record_latency(latency_ns);
@@ -478,7 +478,7 @@ public:
      *
      * @param total_latency_ns Total end-to-end latency
      */
-    void record_frame_complete(uint64_t total_latency_ns) noexcept {
+    void record_frame_complete([[maybe_unused]] uint64_t total_latency_ns) noexcept {
         total_frames_.fetch_add(1, std::memory_order_relaxed);
 
         // Check if frame was healthy (no stage stalled)
@@ -540,31 +540,31 @@ public:
         const char* stage_names[] = {"VISION", "TRACK", "ACTUATION"};
 
         int offset = 0;
-        offset += snprintf(buffer + offset, sizeof(buffer) - offset,
+        offset += snprintf(buffer + offset, sizeof(buffer) - static_cast<size_t>(offset),
                           "=== Per-Stage Health Report ===\n");
-        offset += snprintf(buffer + offset, sizeof(buffer) - offset,
+        offset += snprintf(buffer + offset, sizeof(buffer) - static_cast<size_t>(offset),
                           "Total Frames: %lu\n", total_frames_.load());
-        offset += snprintf(buffer + offset, sizeof(buffer) - offset,
+        offset += snprintf(buffer + offset, sizeof(buffer) - static_cast<size_t>(offset),
                           "Healthy Frames: %lu (%.1f%%)\n",
                           healthy_frames_.load(),
                           total_frames_.load() > 0 ?
-                              100.0 * healthy_frames_.load() / total_frames_.load() : 0.0);
-        offset += snprintf(buffer + offset, sizeof(buffer) - offset,
+                              100.0 * static_cast<double>(healthy_frames_.load()) / static_cast<double>(total_frames_.load()) : 0.0);
+        offset += snprintf(buffer + offset, sizeof(buffer) - static_cast<size_t>(offset),
                           "Total Stalls: %lu\n\n", total_frame_stalls_.load());
 
         for (size_t i = 0; i < static_cast<size_t>(PipelineStage::NUM_STAGES); ++i) {
             const auto& stats = stage_stats_[i];
-            offset += snprintf(buffer + offset, sizeof(buffer) - offset,
+            offset += snprintf(buffer + offset, sizeof(buffer) - static_cast<size_t>(offset),
                               "  %s:\n", stage_names[i]);
-            offset += snprintf(buffer + offset, sizeof(buffer) - offset,
+            offset += snprintf(buffer + offset, sizeof(buffer) - static_cast<size_t>(offset),
                               "    Avg: %.3f ms\n",
                               static_cast<double>(stats.get_avg_latency_ns()) / 1000000.0);
-            offset += snprintf(buffer + offset, sizeof(buffer) - offset,
+            offset += snprintf(buffer + offset, sizeof(buffer) - static_cast<size_t>(offset),
                               "    Max: %.3f ms\n",
                               static_cast<double>(stats.max_latency_ns.load()) / 1000000.0);
-            offset += snprintf(buffer + offset, sizeof(buffer) - offset,
+            offset += snprintf(buffer + offset, sizeof(buffer) - static_cast<size_t>(offset),
                               "    Stalls: %lu\n", stats.stall_count.load());
-            offset += snprintf(buffer + offset, sizeof(buffer) - offset,
+            offset += snprintf(buffer + offset, sizeof(buffer) - static_cast<size_t>(offset),
                               "    Status: %s\n\n",
                               stats.is_stalled() ? "STALLED" : "OK");
         }

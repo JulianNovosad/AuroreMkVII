@@ -73,8 +73,8 @@ enum class FcsState : uint8_t {
 struct Detection {
     float confidence{0.0f};
     struct { int x, y, w, h; } bbox{};
-    float cx() const { return static_cast<float>(bbox.x) + bbox.w * 0.5f; }
-    float cy() const { return static_cast<float>(bbox.y) + bbox.h * 0.5f; }
+    float cx() const { return static_cast<float>(bbox.x) + static_cast<float>(bbox.w) * 0.5f; }
+    float cy() const { return static_cast<float>(bbox.y) + static_cast<float>(bbox.h) * 0.5f; }
 };
 
 // Note: Named GimbalStatusSm to avoid conflict with proto-generated aurore::GimbalStatus

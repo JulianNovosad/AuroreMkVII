@@ -92,9 +92,9 @@ Statistics calculate_stats(std::vector<uint64_t>& samples) {
     uint64_t sq_sum = 0;
     for (auto s : samples) {
         int64_t diff = static_cast<int64_t>(s) - static_cast<int64_t>(stats.mean);
-        sq_sum += diff * diff;
+        sq_sum += static_cast<uint64_t>(diff * diff);
     }
-    stats.stddev = std::sqrt(static_cast<double>(sq_sum) / samples.size());
+    stats.stddev = static_cast<uint64_t>(std::sqrt(static_cast<double>(sq_sum) / static_cast<double>(samples.size())));
     
     // Percentiles
     stats.p99 = samples[samples.size() * 99 / 100];
@@ -125,7 +125,7 @@ void print_stats(const Statistics& stats, const WcetConfig& config) {
     
     // Jitter analysis
     uint64_t jitter = stats.stddev;
-    double jitter_percent = static_cast<double>(jitter) / stats.mean * 100.0;
+    double jitter_percent = static_cast<double>(jitter) / static_cast<double>(stats.mean) * 100.0;
     std::cout << "\nJitter Analysis:" << std::endl;
     std::cout << "  Absolute:    " << jitter << " ns" << std::endl;
     std::cout << "  Relative:    " << jitter_percent << "% of mean" << std::endl;
@@ -180,7 +180,7 @@ int main(int argc, char* argv[]) {
     double total_time = static_cast<double>(total_end - total_start) / 1e9;
     
     std::cout << "Collection complete in " << total_time << " seconds" << std::endl;
-    std::cout << "Sampling rate: " << (config.num_samples / total_time) << " samples/sec" << std::endl;
+    std::cout << "Sampling rate: " << (static_cast<double>(config.num_samples) / total_time) << " samples/sec" << std::endl;
     
     // Calculate statistics
     Statistics stats = calculate_stats(samples);

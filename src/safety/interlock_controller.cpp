@@ -78,11 +78,11 @@ void InterlockController::GpioState::cleanup() {
 
 void InterlockController::GpioState::set_pin_mode(int pin, int mode) {
     // mode: 0=input, 1=output
-    uint32_t reg = GPFSEL0 + (pin / 10) * 4;
-    uint32_t shift = (pin % 10) * 3;
+    uint32_t reg = GPFSEL0 + (static_cast<uint32_t>(pin) / 10) * 4;
+    uint32_t shift = (static_cast<uint32_t>(pin) % 10) * 3;
     uint32_t mask = 0b111 << shift;
     
-    gpio_map[reg / 4] = (gpio_map[reg / 4] & ~mask) | (mode << shift);
+    gpio_map[reg / 4] = (gpio_map[reg / 4] & ~mask) | (static_cast<uint32_t>(mode) << shift);
     __sync_synchronize();  // Memory barrier
 }
 

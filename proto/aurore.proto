@@ -85,6 +85,10 @@ message FreecamTarget {
     float velocity_dps  = 3;
 }
 
+message ArmCommand {
+    bool authorized = 1;
+}
+
 message ConfigPatch {
     map<string, string> values = 1;
 }
@@ -94,5 +98,6 @@ message Command {
         ModeSwitch    mode_switch = 1;
         FreecamTarget freecam    = 2;
         ConfigPatch   config     = 3;
+        ArmCommand    arm        = 4;
     }
 }

@@ -98,8 +98,7 @@ public:
         // Write element to buffer
         buffer_[current_head] = item;
         
-        // Release fence ensures write is visible before head update
-        atomic_thread_fence(std::memory_order_release);
+        // Release store ensures write is visible before head update
         head_.store(next_head, std::memory_order_release);
         
         return true;
@@ -118,7 +117,8 @@ public:
     bool emplace(Args&&... args) noexcept {
         const uint32_t current_head = head_.load(std::memory_order_relaxed);
         const uint32_t next_head = (current_head + 1) & mask_;
-        
+
+        // We read tail_ with acquire to ensure we see the latest consumer state
         if (next_head == tail_.load(std::memory_order_acquire)) {
             return false;
         }
@@ -126,7 +126,7 @@ public:
         // Construct element in-place
         new (&buffer_[current_head]) T(std::forward<Args>(args)...);
         
-        atomic_thread_fence(std::memory_order_release);
+        // Release store ensures write is visible before head update
         head_.store(next_head, std::memory_order_release);
         
         return true;
@@ -152,8 +152,7 @@ public:
         // Read element from buffer
         item = buffer_[current_tail];
         
-        // Acquire fence ensures read happens before tail update
-        atomic_thread_fence(std::memory_order_acquire);
+        // Release store ensures write is visible before tail update
         tail_.store((current_tail + 1) & mask_, std::memory_order_release);
         
         return true;
@@ -176,7 +175,7 @@ public:
         
         T item = std::move(buffer_[current_tail]);
         
-        atomic_thread_fence(std::memory_order_acquire);
+        // Release store ensures write is visible before tail update
         tail_.store((current_tail + 1) & mask_, std::memory_order_release);
         
         return item;
@@ -259,8 +258,8 @@ private:
 /**
  * @brief Multi-Producer Multi-Consumer ring buffer (mutex-protected)
  *
- * For scenarios with multiple producers or consumers. Uses separate mutexes
- * for producer and consumer operations to reduce contention.
+ * For scenarios with multiple producers or consumers. Uses a single mutex
+ * to protect all operations.
  *
  * Security note: This implementation uses proper locking to prevent race
  * conditions. For high-performance MPMC scenarios, consider using a
@@ -289,23 +288,19 @@ public:
      * Multiple consumers can pop concurrently.
      */
     bool push(const T& item) noexcept {
-        std::lock_guard<std::mutex> lock(producer_mutex_);
+        std::lock_guard<std::mutex> lock(buffer_mutex_);
 
         const uint32_t current_head = head_;
         const uint32_t next_head = (current_head + 1) & mask_;
 
         // Check if buffer is full
-        // Note: We need to read tail_ atomically to avoid race with consumers
-        const uint32_t current_tail = tail_.load(std::memory_order_acquire);
+        const uint32_t current_tail = tail_;
         if (next_head == current_tail) {
             return false;
         }
 
         buffer_[current_head] = item;
-
-        // Memory barrier before updating head
-        atomic_thread_fence(std::memory_order_release);
-        head_.store(next_head, std::memory_order_release);
+        head_ = next_head;
 
         return true;
     }
@@ -320,21 +315,18 @@ public:
      * Multiple producers can push concurrently.
      */
     bool pop(T& item) noexcept {
-        std::lock_guard<std::mutex> lock(consumer_mutex_);
+        std::lock_guard<std::mutex> lock(buffer_mutex_);
 
         const uint32_t current_tail = tail_;
-        const uint32_t current_head = head_.load(std::memory_order_acquire);
+        const uint32_t current_head = head_;
 
         // Check if buffer is empty
         if (current_tail == current_head) {
             return false;
         }
 
-        // Memory barrier before reading
-        atomic_thread_fence(std::memory_order_acquire);
         item = buffer_[current_tail];
-
-        tail_.store((current_tail + 1) & mask_, std::memory_order_release);
+        tail_ = (current_tail + 1) & mask_;
 
         return true;
     }
@@ -348,9 +340,7 @@ public:
      * Use as hint only - always check pop() return value.
      */
     bool empty() const noexcept {
-        const uint32_t head = head_.load(std::memory_order_acquire);
-        const uint32_t tail = tail_.load(std::memory_order_acquire);
-        return head == tail;
+        return head_ == tail_;
     }
 
     /**
@@ -361,8 +351,8 @@ public:
      * Note: Size is approximate in concurrent scenarios.
      */
     size_t size() const noexcept {
-        const uint32_t head = head_.load(std::memory_order_acquire);
-        const uint32_t tail = tail_.load(std::memory_order_acquire);
+        const uint32_t head = head_;
+        const uint32_t tail = tail_;
         return (head - tail) & mask_;
     }
 
@@ -373,12 +363,11 @@ public:
 private:
     // Separate mutexes for producers and consumers to reduce contention
     // Producer mutex protects head_, consumer mutex protects tail_
-    alignas(CACHE_LINE_SIZE) mutable std::mutex producer_mutex_;
-    alignas(CACHE_LINE_SIZE) mutable std::mutex consumer_mutex_;
+    alignas(CACHE_LINE_SIZE) mutable std::mutex buffer_mutex_;
 
     // Atomic head and tail for cross-thread visibility
-    alignas(CACHE_LINE_SIZE) std::atomic<uint32_t> head_;
-    alignas(CACHE_LINE_SIZE) std::atomic<uint32_t> tail_;
+    alignas(CACHE_LINE_SIZE) uint32_t head_;
+    alignas(CACHE_LINE_SIZE) uint32_t tail_;
 
     const uint32_t mask_;
 
