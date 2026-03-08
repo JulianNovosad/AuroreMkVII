@@ -1,0 +1,299 @@
+/* ============================================================
+   Aurore MkVII — Remote Control Station
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+/* --- Variables -------------------------------------------- */
+:root {
+  --green:  #00ff41;
+  --amber:  #ff9900;
+  --red:    #ff3333;
+  --blue:   #00aaff;
+  --grey:   #888;
+  --bg:     #0a0a0a;
+  --panel:  #111;
+  --border: #222;
+  --font:   'JetBrains Mono', 'Courier New', monospace;
+  --sidebar-w: 280px;
+}
+
+/* --- Reset ------------------------------------------------ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--green);
+  font-family: var(--font);
+  font-size: 13px;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* --- App layout — laptop (default) ----------------------- */
+#app {
+  display: grid;
+  grid-template-areas: "video sidebar";
+  grid-template-columns: 1fr var(--sidebar-w);
+  grid-template-rows: 100vh;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* --- Video area ------------------------------------------ */
+#video-area {
+  grid-area: video;
+  position: relative;
+  background: #000;
+  overflow: hidden;
+}
+
+#video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+#hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Scanline overlay */
+#video-area::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.08) 2px,
+    rgba(0, 0, 0, 0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Green vignette */
+#video-area::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 60%,
+    rgba(0, 20, 0, 0.5) 100%
+  );
+  pointer-events: none;
+  z-index: 11;
+}
+
+/* --- Connection badge ------------------------------------ */
+#conn-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+  padding: 3px 10px;
+  border: 1px solid currentColor;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+#conn-badge.connected    { color: var(--green); border-color: var(--green); }
+#conn-badge.disconnected { color: var(--red);   border-color: var(--red); }
+#conn-badge.reconnecting { color: var(--amber); border-color: var(--amber); }
+
+/* --- Timestamp badge ------------------------------------- */
+#ts-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 20;
+  font-size: 11px;
+  color: var(--grey);
+  pointer-events: none;
+}
+
+/* --- Sidebar -------------------------------------------- */
+#sidebar {
+  grid-area: sidebar;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  gap: 14px;
+  z-index: 5;
+}
+
+/* --- Panel sections ------------------------------------- */
+.section {
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+}
+
+.section-title {
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--grey);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+
+/* --- FCS state badge ------------------------------------ */
+#fcs-state {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border: 1px solid currentColor;
+  margin-bottom: 4px;
+}
+.state-TRACKING  { color: var(--green); }
+.state-ARMED     { color: var(--red);   }
+.state-FREECAM   { color: var(--blue);  }
+.state-SEARCH    { color: var(--amber); }
+.state-FAULT     { color: var(--red);   background: rgba(255,51,51,0.15); }
+.state-IDLE_SAFE { color: var(--grey);  }
+.state-BOOT      { color: var(--grey);  }
+
+/* --- Telemetry rows ------------------------------------- */
+.telem-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+  gap: 8px;
+}
+.telem-label { color: var(--grey); font-size: 11px; flex-shrink: 0; }
+.telem-value { font-size: 12px; text-align: right; }
+
+/* --- P_hit bar ----------------------------------------- */
+.bar-outer {
+  width: 100%;
+  height: 6px;
+  background: #1a1a1a;
+  border: 1px solid var(--border);
+  margin-top: 4px;
+}
+.bar-inner {
+  height: 100%;
+  background: var(--green);
+  transition: width 0.15s;
+}
+
+/* --- CPU temp color ------------------------------------ */
+.temp-ok     { color: var(--green); }
+.temp-warm   { color: var(--amber); }
+.temp-hot    { color: var(--red); }
+
+/* --- Mode toggle buttons ------------------------------- */
+.mode-buttons {
+  display: flex;
+  gap: 8px;
+}
+.mode-btn {
+  flex: 1;
+  padding: 7px 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--grey);
+  font-family: var(--font);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: border-color 0.1s, color 0.1s;
+}
+.mode-btn:hover       { border-color: var(--green); color: var(--green); }
+.mode-btn.active-auto { border-color: var(--green); color: var(--green); }
+.mode-btn.active-free { border-color: var(--blue);  color: var(--blue); }
+
+/* --- Virtual joystick ---------------------------------- */
+#joystick-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+#joystick {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: #0d0d0d;
+  position: relative;
+  cursor: crosshair;
+  touch-action: none;
+}
+#joystick.active { border-color: var(--blue); }
+#joy-dot {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--blue);
+  transform: translate(-50%, -50%);
+  left: 50%; top: 50%;
+  pointer-events: none;
+  transition: background 0.1s;
+}
+#joy-label {
+  font-size: 10px;
+  color: var(--grey);
+  letter-spacing: 0.08em;
+}
+#joy-readout {
+  font-size: 11px;
+  color: var(--blue);
+}
+
+/* --- Phone toggle --------------------------------------- */
+#phone-toggle {
+  padding: 7px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--grey);
+  font-family: var(--font);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+  letter-spacing: 0.06em;
+}
+#phone-toggle:hover { color: var(--green); border-color: var(--green); }
+
+/* ============================================================
+   PHONE LAYOUT
+   Triggered by ≤640px or .phone-view class on #app
+   ============================================================ */
+@media (max-width: 640px) {
+  #app { grid-template-areas: "video" "sidebar"; grid-template-columns: 1fr; grid-template-rows: auto; overflow-y: auto; }
+  #video-area { height: 56vw; min-height: 200px; }
+  #sidebar { border-left: none; border-top: 1px solid var(--border); }
+  body { overflow: auto; }
+}
+
+#app.phone-view {
+  grid-template-areas: "video" "sidebar" !important;
+  grid-template-columns: 1fr !important;
+  grid-template-rows: auto !important;
+  overflow-y: auto;
+}
+#app.phone-view #video-area { height: 56vw; min-height: 200px; }
+#app.phone-view #sidebar    { border-left: none; border-top: 1px solid var(--border); }
+#app.phone-view body        { overflow: auto; }
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #0a0a0a; }
+::-webkit-scrollbar-thumb { background: #333; }

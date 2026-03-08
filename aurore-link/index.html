@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aurore MkVII — Remote Control Station</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ====================================================
+         VIDEO AREA
+    ===================================================== -->
+    <div id="video-area">
+      <canvas id="video"></canvas>
+
+      <svg id="hud" xmlns="http://www.w3.org/2000/svg"></svg>
+
+      <div id="conn-badge" class="reconnecting">RECONNECTING</div>
+      <div id="ts-badge">--:--:--.---</div>
+    </div>
+
+    <!-- ====================================================
+         SIDEBAR
+    ===================================================== -->
+    <aside id="sidebar">
+
+      <!-- FCS State -->
+      <div class="section">
+        <div class="section-title">System Status</div>
+        <div id="fcs-state" class="state-BOOT">BOOT</div>
+      </div>
+
+      <!-- Mode Control -->
+      <div class="section">
+        <div class="section-title">Mode</div>
+        <div class="mode-buttons">
+          <button id="btn-auto" class="mode-btn active-auto">AUTO</button>
+          <button id="btn-free" class="mode-btn">FREECAM</button>
+        </div>
+      </div>
+
+      <!-- Gimbal -->
+      <div class="section">
+        <div class="section-title">Gimbal</div>
+        <div class="telem-row">
+          <span class="telem-label">YAW</span>
+          <span class="telem-value" id="val-yaw">—</span>
+        </div>
+        <div class="telem-row">
+          <span class="telem-label">PITCH</span>
+          <span class="telem-value" id="val-pitch">—</span>
+        </div>
+      </div>
+
+      <!-- Track -->
+      <div class="section">
+        <div class="section-title">Track</div>
+        <div class="telem-row">
+          <span class="telem-label">RANGE</span>
+          <span class="telem-value" id="val-range">—</span>
+        </div>
+        <div class="telem-row">
+          <span class="telem-label">CONF</span>
+          <span class="telem-value" id="val-conf">—</span>
+        </div>
+      </div>
+
+      <!-- Ballistic -->
+      <div class="section">
+        <div class="section-title">Ballistic</div>
+        <div class="telem-row">
+          <span class="telem-label">AZ LEAD</span>
+          <span class="telem-value" id="val-az">—</span>
+        </div>
+        <div class="telem-row">
+          <span class="telem-label">EL LEAD</span>
+          <span class="telem-value" id="val-el">—</span>
+        </div>
+        <div class="telem-row">
+          <span class="telem-label">P_HIT</span>
+          <span class="telem-value" id="val-phit">—</span>
+        </div>
+        <div class="bar-outer"><div class="bar-inner" id="bar-phit" style="width:0%"></div></div>
+      </div>
+
+      <!-- Health -->
+      <div class="section">
+        <div class="section-title">Health</div>
+        <div class="telem-row">
+          <span class="telem-label">CPU TEMP</span>
+          <span class="telem-value temp-ok" id="val-temp">—</span>
+        </div>
+        <div class="telem-row">
+          <span class="telem-label">CPU</span>
+          <span class="telem-value" id="val-cpu">—</span>
+        </div>
+        <div class="telem-row">
+          <span class="telem-label">DL MISS</span>
+          <span class="telem-value" id="val-frames">—</span>
+        </div>
+      </div>
+
+      <!-- FREECAM joystick -->
+      <div class="section">
+        <div class="section-title">FREECAM Control</div>
+        <div id="joystick-wrap">
+          <div id="joystick">
+            <div id="joy-dot"></div>
+          </div>
+          <div id="joy-label">DRAG TO SLEW</div>
+          <div id="joy-readout">AZ 0.0° EL 0.0°</div>
+        </div>
+      </div>
+
+      <!-- Phone toggle -->
+      <button id="phone-toggle">PHONE VIEW</button>
+
+    </aside>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
