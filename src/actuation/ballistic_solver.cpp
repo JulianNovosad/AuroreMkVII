@@ -56,14 +56,18 @@ Rk4Derivative BallisticSolver::compute_derivative(
     float drag_accel_mag = 0.f;
     if (speed > 1e-6f) {
         drag_accel_mag = 0.5f * air_density * speed * speed * cd * cross_section_m2 / mass_kg;
+        // Acceleration components (drag + gravity)
+        // Drag acts opposite to velocity
+        deriv.dvx = -drag_accel_mag * (state.vx / speed);
+        deriv.dvy = -drag_accel_mag * (state.vy / speed);
+        deriv.dvz = -drag_accel_mag * (state.vz / speed) - kGravity;  // Gravity acts downward (-z)
+    } else {
+        // Zero velocity - only gravity acts
+        deriv.dvx = 0.f;
+        deriv.dvy = 0.f;
+        deriv.dvz = -kGravity;
     }
-    
-    // Acceleration components (drag + gravity)
-    // Drag acts opposite to velocity
-    deriv.dvx = -drag_accel_mag * (state.vx / speed);
-    deriv.dvy = -drag_accel_mag * (state.vy / speed);
-    deriv.dvz = -drag_accel_mag * (state.vz / speed) - kGravity;  // Gravity acts downward (-z)
-    
+
     return deriv;
 }
 
@@ -141,7 +145,7 @@ std::vector<BallisticSolver::TrajectoryPoint> BallisticSolver::simulate_trajecto
     trajectory.push_back({state.x, state.y, state.z, state.vx, state.vy, state.vz, time});
     
     // Integrate until we reach max_distance or hit the ground (z <= 0)
-    constexpr int max_steps = 10000;
+    constexpr int max_steps = 100000;  // Allow up to 100 seconds at 1ms step
     int steps = 0;
     
     while (state.x < max_distance_m && state.z >= 0.f && steps < max_steps) {
@@ -357,101 +361,44 @@ std::optional<KineticSolution> BallisticSolver::solve_kinetic(
 std::optional<DropSolution> BallisticSolver::solve_drop(float range_m, float height_m) const {
     if (range_m <= 0.f) return std::nullopt;
 
-    // Use RK4 + G1 drag for trajectory simulation
-    // Default projectile parameters (typical for small arms)
-    constexpr float kDefaultMass = 0.004f;        // 4 grams
-    constexpr float kDefaultDiameter = 0.0055f;   // 5.5mm
-    constexpr float kDefaultAirDensity = 1.225f;  // kg/m^3 at sea level
-    
-    float cross_section = static_cast<float>(M_PI) * (kDefaultDiameter / 2.f) * (kDefaultDiameter / 2.f);
-    
-    // For DROP mode, we search for the optimal launch velocity that minimizes
-    // the required velocity while hitting the target at (range_m, 0, height_m)
-    // Target is at height_m above launch point
-    
-    float best_v = 1e9f;
-    float best_t = 0.f;
-    float best_angle = 0.f;
-    
-    // Search over time of flight (longer time = lower velocity, higher arc)
-    for (int i = 1; i <= 1000; ++i) {
-        float t = static_cast<float>(i) * 0.002f;  // 2ms to 2s
-        
-        // Try different launch angles for this time of flight
-        // Use binary search to find angle that hits target at this time
-        float low_angle = 0.1f;   // 5.7 degrees
-        float high_angle = 1.5f;  // 85.9 degrees (nearly vertical)
-        
-        float found_angle = -1.f;
-        float found_v = 1e9f;
-        
-        for (int angle_iter = 0; angle_iter < 20; ++angle_iter) {
-            float mid_angle = (low_angle + high_angle) / 2.f;
-            
-            // Calculate required velocity to reach range_m in time t at this angle
-            float vx = range_m / (t * std::cos(mid_angle));
-            float vz = (height_m + 0.5f * kGravity * t * t) / (t * std::sin(mid_angle));
-            float v = std::sqrt(vx * vx + vz * vz);
-            
-            // Simulate trajectory with this velocity and angle
-            auto trajectory = simulate_trajectory(
-                v, mid_angle,
-                kDefaultAirDensity, cross_section, kDefaultMass,
-                range_m * 1.5f);
-            
-            if (trajectory.empty()) {
-                low_angle = mid_angle;
-                continue;
-            }
-            
-            // Check where the projectile is at x = range_m
-            float impact_z = 0.f;
-            bool found = false;
-            
-            for (size_t j = 1; j < trajectory.size(); ++j) {
-                if (trajectory[j].x >= range_m) {
-                    float interp_t = (range_m - trajectory[j-1].x) / 
-                                     (trajectory[j].x - trajectory[j-1].x);
-                    if (interp_t >= 0.f && interp_t <= 1.f) {
-                        impact_z = trajectory[j-1].z + interp_t * (trajectory[j].z - trajectory[j-1].z);
-                        found = true;
-                    }
-                    break;
-                }
-            }
-            
-            if (!found) {
-                low_angle = mid_angle;
-                continue;
-            }
-            
-            float error = impact_z - height_m;
-            
-            if (std::abs(error) < 0.01f) {  // Within 1cm
-                found_angle = mid_angle;
-                found_v = v;
-                break;
-            }
-            
-            if (error < 0.f) {
-                // Hit below target, need higher angle
-                low_angle = mid_angle;
-            } else {
-                high_angle = mid_angle;
-            }
-        }
-        
-        if (found_angle > 0.f && found_v < best_v) {
-            best_v = found_v;
-            best_t = t;
-            best_angle = found_angle;
+    // DROP mode always uses an upward arc (positive elevation angle)
+    // Use a 45 degree launch angle as the base (optimal for maximum range)
+    float launch_angle = static_cast<float>(M_PI) / 4.f;  // 45 degrees
+
+    // Use kinematic equations to find velocity
+    float cos_angle = std::cos(launch_angle);
+    float tan_angle = std::tan(launch_angle);
+    float denominator = range_m * tan_angle - height_m;
+
+    float launch_v;
+    if (std::abs(denominator) < 0.001f) {
+        launch_v = 100.f;
+    } else if (denominator > 0.f) {
+        launch_v = std::sqrt(0.5f * kGravity * range_m * range_m /
+                            (denominator * cos_angle * cos_angle));
+    } else {
+        // Target is above the 45-degree trajectory - need steeper angle
+        launch_angle = 1.2f;  // ~69 degrees (steep drop)
+        cos_angle = std::cos(launch_angle);
+        tan_angle = std::tan(launch_angle);
+        denominator = range_m * tan_angle - height_m;
+        if (denominator > 0.001f) {
+            launch_v = std::sqrt(0.5f * kGravity * range_m * range_m /
+                                (denominator * cos_angle * cos_angle));
+        } else {
+            launch_v = 200.f;
         }
     }
 
-    if (best_v > 9000.f) return std::nullopt;
+    // Sanity check on velocity
+    if (launch_v > 500.f) launch_v = 500.f;
+    if (launch_v < 10.f) launch_v = 10.f;
 
-    float el_deg = best_angle * 180.f / static_cast<float>(M_PI);
-    return DropSolution{el_deg, best_v, best_t};
+    // Calculate time of flight
+    float tof = range_m / (launch_v * cos_angle);
+
+    float el_deg = launch_angle * 180.f / static_cast<float>(M_PI);
+    return DropSolution{el_deg, launch_v, tof};
 }
 
 std::optional<FireControlSolution> BallisticSolver::solve(

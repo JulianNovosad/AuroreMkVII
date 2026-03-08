@@ -31,6 +31,7 @@ option(AURORE_ENABLE_TESTS "Build unit tests" ON)
 option(AURORE_ENABLE_COVERAGE "Enable code coverage" OFF)
 option(AURORE_ENABLE_SANITIZERS "Enable sanitizers (debug only)" OFF)
 option(AURORE_REALTIME "Enable real-time optimizations" ON)
+option(AURORE_LAPTOP_BUILD "Build for laptop (no libcamera/I2C hardware, use mocks)" OFF)
 
 # ============================================================================
 # C++ Standard Configuration
@@ -152,11 +153,26 @@ add_link_options(
 # Find required packages
 find_package(Threads REQUIRED)
 
-find_package(Protobuf REQUIRED)
+# Protobuf is optional for laptop builds (only needed for AuroreLink server)
+if(AURORE_LAPTOP_BUILD)
+    find_package(Protobuf QUIET)
+    if(NOT Protobuf_FOUND)
+        message(STATUS "Laptop build: Protobuf not found - AuroreLink server disabled")
+    endif()
+else()
+    find_package(Protobuf REQUIRED)
+endif()
 
-# Generate C++ source from proto schema
-set(PROTO_FILES ${CMAKE_SOURCE_DIR}/proto/aurore.proto)
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
+# Generate C++ source from proto schema if Protobuf found
+if(Protobuf_FOUND)
+    set(PROTO_FILES ${CMAKE_SOURCE_DIR}/proto/aurore.proto)
+    protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
+    add_compile_definitions(AURORE_HAS_PROTOBUF)
+else()
+    # Stub out proto variables
+    set(PROTO_SRCS "")
+    set(PROTO_HDRS "")
+endif()
 
 # Make generated headers visible to all targets
 include_directories(${Protobuf_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
@@ -179,7 +195,7 @@ endif()
 
 # Warn if OpenCV version is below security threshold
 if(OPENCV_VERSION VERSION_LESS 4.9.0)
-    message(WARNING 
+    message(WARNING
         "OpenCV ${OPENCV_VERSION} is below the recommended security version 4.9.0.\n"
         "CVE-2024-2167 (heap buffer overflow) may affect this version.\n"
         "For DEVELOPMENT only. PRODUCTION deployment requires OpenCV >= 4.9.0.\n"
@@ -188,8 +204,16 @@ if(OPENCV_VERSION VERSION_LESS 4.9.0)
     add_compile_definitions(AURORE_OPENCV_UNSECURE)
 endif()
 
-# libcamera - use pkg-config (version 0.2.0 on Ubuntu 24.04)
-pkg_check_modules(LIBCAMERA REQUIRED libcamera>=0.2.0)
+# libcamera - only required for non-laptop builds
+if(NOT AURORE_LAPTOP_BUILD)
+    pkg_check_modules(LIBCAMERA REQUIRED libcamera>=0.2.0)
+else()
+    message(STATUS "Laptop build: libcamera not required (using mock camera)")
+    # Define stub variables for laptop build
+    set(LIBCAMERA_INCLUDE_DIRS "")
+    set(LIBCAMERA_LIBRARIES "")
+    set(LIBCAMERA_LIBRARY_DIRS "")
+endif()
 
 # libwebp - transitive dependency via OpenCV, checked explicitly for CVE-2023-4863
 # Security requirement: >= 1.3.2 to address critical heap buffer overflow
@@ -257,41 +281,83 @@ link_directories(
 # Main Application
 # ============================================================================
 
-# Source files
-set(AURORE_SOURCES
-    # Main entry point
-    src/main.cpp
+# Source files - conditional based on laptop build
+if(AURORE_LAPTOP_BUILD)
+    set(AURORE_SOURCES
+        # Main entry point
+        src/main.cpp
 
-    # Drivers
-    src/drivers/camera_wrapper.cpp
-    src/drivers/fusion_hat.cpp
+        # Drivers (mock versions for laptop)
+        src/drivers/mock_camera_wrapper.cpp
+        src/drivers/mock_fusion_hat.cpp
 
-    # Vision pipeline
-    src/vision/orb_detector.cpp
+        # Vision pipeline
+        src/vision/orb_detector.cpp
 
-    # Tracking
-    src/tracking/csrt_tracker.cpp
+        # Tracking
+        src/tracking/csrt_tracker.cpp
 
-    # Actuation
-    src/actuation/ballistic_solver.cpp
-    src/actuation/gimbal_controller.cpp
+        # Actuation
+        src/actuation/ballistic_solver.cpp
+        src/actuation/gimbal_controller.cpp
 
-    # State machine
-    src/state_machine/state_machine.cpp
+        # State machine
+        src/state_machine/state_machine.cpp
 
-    # Safety
-    src/safety/interlock_controller.cpp
+        # Safety
+        src/safety/interlock_controller.cpp
 
-    # Common utilities
-    src/common/telemetry_writer.cpp
-    src/common/hud_socket.cpp
+        # Common utilities
+        src/common/telemetry_writer.cpp
+        src/common/hud_socket.cpp
+        src/common/config_loader.cpp
 
-    # Network
-    src/network/aurore_link_server.cpp
+        # Network
+        src/network/aurore_link_server.cpp
 
-    # Protobuf generated sources
-    ${PROTO_SRCS}
-)
+        # Protobuf generated sources
+        ${PROTO_SRCS}
+    )
+    add_compile_definitions(AURORE_LAPTOP_BUILD=1)
+    message(STATUS "Laptop build: using mock hardware drivers")
+else()
+    set(AURORE_SOURCES
+        # Main entry point
+        src/main.cpp
+
+        # Drivers (real hardware)
+        src/drivers/camera_wrapper.cpp
+        src/drivers/fusion_hat.cpp
+
+        # Vision pipeline
+        src/vision/orb_detector.cpp
+
+        # Tracking
+        src/tracking/csrt_tracker.cpp
+
+        # Actuation
+        src/actuation/ballistic_solver.cpp
+        src/actuation/gimbal_controller.cpp
+
+        # State machine
+        src/state_machine/state_machine.cpp
+
+        # Safety
+        src/safety/interlock_controller.cpp
+
+        # Common utilities
+        src/common/telemetry_writer.cpp
+        src/common/hud_socket.cpp
+        src/common/config_loader.cpp
+
+        # Network
+        src/network/aurore_link_server.cpp
+
+        # Protobuf generated sources
+        ${PROTO_SRCS}
+    )
+    message(STATUS "Hardware build: using real libcamera and I2C drivers")
+endif()
 
 # Header files (for IDE integration)
 set(AURORE_HEADERS
@@ -315,14 +381,24 @@ target_include_directories(aurore PRIVATE
 )
 
 # Link libraries
-target_link_libraries(aurore PRIVATE
-    Threads::Threads
-    ${OPENCV_LIBRARIES}
-    ${LIBCAMERA_LIBRARIES}
-    ${Protobuf_LIBRARIES}
-    rt      # Real-time extensions (clock_nanosleep, etc.)
-    pthread # POSIX threads
-)
+if(AURORE_LAPTOP_BUILD)
+    target_link_libraries(aurore PRIVATE
+        Threads::Threads
+        ${OPENCV_LIBRARIES}
+        ${Protobuf_LIBRARIES}
+        rt      # Real-time extensions (clock_nanosleep, etc.)
+        pthread # POSIX threads
+    )
+else()
+    target_link_libraries(aurore PRIVATE
+        Threads::Threads
+        ${OPENCV_LIBRARIES}
+        ${LIBCAMERA_LIBRARIES}
+        ${Protobuf_LIBRARIES}
+        rt      # Real-time extensions (clock_nanosleep, etc.)
+        pthread # POSIX threads
+    )
+endif()
 
 # Target compile definitions
 target_compile_definitions(aurore PRIVATE
