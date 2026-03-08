@@ -419,9 +419,11 @@ int main(int argc, char* argv[]) {
     // State machine for FCS mode management
     aurore::StateMachine state_machine;
 
-    // Set state change callback for telemetry
+    // Set state change callback for telemetry and stdout logging
     state_machine.set_state_change_callback(
-        [&telemetry]([[maybe_unused]] aurore::FcsState from, aurore::FcsState to) {
+        [&telemetry](aurore::FcsState from, aurore::FcsState to) {
+            std::cout << "State: " << aurore::fcs_state_name(from)
+                      << " -> " << aurore::fcs_state_name(to) << std::endl;
             if (to == aurore::FcsState::FAULT) {
                 telemetry.log_event(
                     aurore::TelemetryEventId::SAFETY_FAULT,
