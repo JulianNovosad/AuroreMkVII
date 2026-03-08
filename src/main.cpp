@@ -37,6 +37,7 @@
 #include "aurore/timing.hpp"
 #include "aurore/safety_monitor.hpp"
 #include "aurore/camera_wrapper.hpp"
+#include "aurore/fusion_hat.hpp"
 #include "aurore/state_machine.hpp"  // For TrackSolution
 #include "aurore/tracker.hpp"        // For KcfTracker
 #include "aurore/aurore_link_server.hpp"
@@ -327,6 +328,10 @@ int main(int argc, char* argv[]) {
         }
     });
 
+    // Gimbal controller (FusionHAT+ sysfs driver — fails gracefully without hardware)
+    aurore::FusionHat fusion_hat;
+    fusion_hat.init();
+
     // Frame ring buffer (zero-copy)
     aurore::LockFreeRingBuffer<aurore::ZeroCopyFrame, 4> frame_buffer;
 
@@ -536,15 +541,18 @@ int main(int argc, char* argv[]) {
                 last_actuation_sequence++;
             }
 
-            // INT-003 Fix: Calculate gimbal command and send to Fusion HAT+ via I2C
-            // TODO: Implement actual gimbal control
+            // Calculate gimbal command and send to Fusion HAT+ via sysfs PWM
             if (latest_solution.valid) {
-                // Convert centroid to gimbal angles
-                // float az_cmd = (latest_solution.centroid_x - width/2) * pixels_per_degree;
-                // float el_cmd = (latest_solution.centroid_y - height/2) * pixels_per_degree;
-
-                // TODO: Send to Fusion HAT+ I2C
-                // fusion_hat.set_angles(az_cmd, el_cmd);
+                // IMX708 at 120fps (binned mode): ~66° H × 40° V FoV
+                constexpr float kHFovDeg = 66.0f;
+                constexpr float kVFovDeg = 40.0f;
+                const float az_cmd = (latest_solution.centroid_x - (1536.0f / 2.0f))
+                                     * (kHFovDeg / 1536.0f);
+                // Negate: increasing pixel-Y is downward, positive elevation is up
+                const float el_cmd = -(latest_solution.centroid_y - (864.0f / 2.0f))
+                                     * (kVFovDeg / 864.0f);
+                fusion_hat.set_servo_angle(0, az_cmd);  // ch0 = azimuth
+                fusion_hat.set_servo_angle(1, el_cmd);  // ch1 = elevation
             }
 
             // State machine: gimbal status for TRACKING -> ARMED transition

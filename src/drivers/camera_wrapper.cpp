@@ -2,223 +2,519 @@
  * @file camera_wrapper.cpp
  * @brief Camera capture implementation
  *
- * Supports multiple capture modes:
- * 1. Test pattern generator (development, no hardware)
- * 2. OpenCV webcam capture (development with USB webcam)
- * 3. libcamera DMA buffers (production on RPi 5)
+ * Supports three capture modes selected by the AURORE_CAM_MODE env var:
+ *   (unset)   → libcamera (real IMX708 on RPi 5), fallback to test pattern
+ *   "test"    → test pattern generator (development, no hardware)
+ *   "webcam"  → OpenCV webcam capture (USB webcam)
  *
- * This file implements modes 1 and 2 for development machine testing.
+ * On AURORE_LAPTOP_BUILD (test / unit-test builds), libcamera is absent;
+ * only the test-pattern and webcam paths are compiled.
+ *
+ * The real libcamera path:
+ *   1. init_libcamera()    — configure stream, allocate DMA buffers, queue requests
+ *   2. capture_libcamera() — wait on requestCompleted, copy data, requeue
+ *   3. cleanup_libcamera() — stop camera, unmap DMA buffers, release resources
  */
 
 #include "aurore/camera_wrapper.hpp"
 
+#include <cerrno>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
 #include <iostream>
+#include <mutex>
+#include <queue>
+#include <unordered_map>
 #include <system_error>
+
+#include <sys/mman.h>
 
 // OpenCV headers
 #include <opencv2/opencv.hpp>
+
+// libcamera headers — only available on non-laptop (hardware) builds
+#ifndef AURORE_LAPTOP_BUILD
+#include <libcamera/libcamera.h>
+#endif
 
 namespace aurore {
 
 /**
  * @brief Internal implementation (pimpl pattern)
  *
- * Supports test pattern generation and OpenCV webcam capture.
+ * Supports libcamera (real hardware), test pattern, and OpenCV webcam.
+ * The libcamera fields and methods are conditionally compiled.
  */
 struct CameraWrapper::Impl {
-    int width;
-    int height;
-    int fps;
-    uint64_t frame_counter;
-    
-    // Capture mode
-    bool use_test_pattern;
-    bool use_webcam;
+    int width  = 0;
+    int height = 0;
+    int fps    = 0;
+    uint64_t frame_counter = 0;
+
+    // --- Capture mode flags (set by configure_stream) ---
+    bool use_libcamera    = false;
+    bool use_test_pattern = false;
+    bool use_webcam       = false;
+
+    // --- OpenCV webcam state ---
     cv::VideoCapture webcam_cap;
-    int webcam_id;
-    
-    // Test pattern state
+    int webcam_id = 0;
+
+    // --- Test pattern state ---
     cv::Point2f target_pos;
     cv::Point2f target_velocity;
-    float target_size;
+    float target_size = 30.0f;
 
-    bool init_camera() {
-        if (use_webcam) {
-            // Try to open webcam
-            webcam_cap.open(webcam_id, cv::CAP_V4L2);
-            if (!webcam_cap.isOpened()) {
-                webcam_cap.open(webcam_id);  // Fallback to default backend
-            }
-            
-            if (webcam_cap.isOpened()) {
-                webcam_cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
-                webcam_cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
-                webcam_cap.set(cv::CAP_PROP_FPS, fps);
-                std::cout << "Webcam opened: " << width << "x" << height 
-                          << " @ " << webcam_cap.get(cv::CAP_PROP_FPS) << " FPS" << std::endl;
-                return true;
-            } else {
-                std::cerr << "Webcam not available, falling back to test pattern" << std::endl;
-                use_webcam = false;
-                use_test_pattern = true;
-            }
-        }
-        
-        if (use_test_pattern) {
-            std::cout << "Using test pattern generator (" << width << "x" << height << ")" << std::endl;
-            // Initialize target at center with random velocity
-            target_pos = cv::Point2f(width / 2.0f, height / 2.0f);
-            target_velocity = cv::Point2f(2.0f, 1.5f);  // pixels per frame
-            target_size = 30.0f;
-            return true;
-        }
-        
-        return true;
-    }
+#ifndef AURORE_LAPTOP_BUILD
+    // =========================================================================
+    // libcamera state (hardware builds only)
+    // =========================================================================
+    std::unique_ptr<libcamera::CameraManager>        lc_cm;
+    std::shared_ptr<libcamera::Camera>               lc_camera;
+    std::unique_ptr<libcamera::FrameBufferAllocator> lc_allocator;
+    libcamera::Stream*                               lc_stream = nullptr;
+    std::vector<std::unique_ptr<libcamera::Request>> lc_requests;
+
+    // DMA buffer mapping: FrameBuffer* → {mmap ptr, size}
+    struct MappedBuf { void* data; size_t size; };
+    std::unordered_map<const libcamera::FrameBuffer*, MappedBuf> lc_mapped;
+
+    // Completed-request synchronisation
+    std::mutex              lc_mutex;
+    std::condition_variable lc_cv;
+    std::queue<libcamera::Request*> lc_completed;
+    bool lc_stopped = false;
+#endif  // !AURORE_LAPTOP_BUILD
+
+    // =========================================================================
+    // Mode selection
+    // =========================================================================
 
     bool configure_stream(const CameraConfig& config) {
-        width = config.width;
-        height = config.height;
-        fps = config.fps;
+        width         = config.width;
+        height        = config.height;
+        fps           = config.fps;
         frame_counter = 0;
-        
-        // Check for test pattern mode flag
-        use_test_pattern = true;  // Default to test pattern
-        use_webcam = false;
-        webcam_id = 0;
-        
-        // Can be overridden by environment variable
+
+        use_libcamera    = false;
+        use_test_pattern = false;
+        use_webcam       = false;
+        webcam_id        = 0;
+
         const char* cam_mode = std::getenv("AURORE_CAM_MODE");
         if (cam_mode) {
-            std::string mode(cam_mode);
+            const std::string mode(cam_mode);
             if (mode == "webcam" || mode == "webcam0") {
                 use_webcam = true;
-                use_test_pattern = false;
             } else if (mode == "test" || mode == "pattern") {
                 use_test_pattern = true;
-                use_webcam = false;
+            } else if (mode == "libcamera" || mode == "camera") {
+                use_libcamera = true;
+            } else {
+                use_test_pattern = true;  // Unknown → safe fallback
             }
+        } else {
+#ifndef AURORE_LAPTOP_BUILD
+            // Default on hardware builds: try libcamera, fallback on failure
+            use_libcamera = true;
+#else
+            use_test_pattern = true;
+#endif
         }
-        
         return true;
     }
 
-    bool allocate_buffers(const CameraConfig& config) {
-        (void)config;
-        return true;
-    }
+    // =========================================================================
+    // Init / cleanup dispatch
+    // =========================================================================
 
-    bool create_requests(const CameraConfig& config) {
+    bool init_camera(const CameraConfig& config) {
+#ifndef AURORE_LAPTOP_BUILD
+        if (use_libcamera) {
+            if (init_libcamera(config)) {
+                return true;
+            }
+            std::cerr << "[camera] libcamera init failed — falling back to test pattern\n";
+            use_libcamera    = false;
+            use_test_pattern = true;
+        }
+#else
         (void)config;
+#endif
+
+        if (use_webcam) {
+            webcam_cap.open(webcam_id, cv::CAP_V4L2);
+            if (!webcam_cap.isOpened()) {
+                webcam_cap.open(webcam_id);
+            }
+            if (webcam_cap.isOpened()) {
+                webcam_cap.set(cv::CAP_PROP_FRAME_WIDTH,  width);
+                webcam_cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+                webcam_cap.set(cv::CAP_PROP_FPS,          fps);
+                std::cout << "[camera] Webcam opened: " << width << "x" << height
+                          << " @ " << webcam_cap.get(cv::CAP_PROP_FPS) << " FPS\n";
+                return true;
+            }
+            std::cerr << "[camera] Webcam unavailable — falling back to test pattern\n";
+            use_webcam       = false;
+            use_test_pattern = true;
+        }
+
+        if (use_test_pattern) {
+            std::cout << "[camera] Test pattern generator ("
+                      << width << "x" << height << ")\n";
+            target_pos      = cv::Point2f(static_cast<float>(width)  / 2.0f,
+                                          static_cast<float>(height) / 2.0f);
+            target_velocity = cv::Point2f(2.0f, 1.5f);
+            target_size     = 30.0f;
+        }
         return true;
     }
 
     void cleanup() {
+#ifndef AURORE_LAPTOP_BUILD
+        if (use_libcamera) {
+            cleanup_libcamera();
+        }
+#endif
         if (webcam_cap.isOpened()) {
             webcam_cap.release();
         }
     }
 
+#ifndef AURORE_LAPTOP_BUILD
+    // =========================================================================
+    // libcamera implementation (hardware builds only)
+    // =========================================================================
+
+    /**
+     * @brief Initialise libcamera: configure stream, allocate DMA buffers, queue requests.
+     */
+    bool init_libcamera(const CameraConfig& config) {
+        lc_cm = std::make_unique<libcamera::CameraManager>();
+        if (lc_cm->start() != 0) {
+            std::cerr << "[camera] CameraManager start failed\n";
+            lc_cm.reset();
+            return false;
+        }
+
+        if (lc_cm->cameras().empty()) {
+            std::cerr << "[camera] No cameras found\n";
+            lc_cm->stop();
+            lc_cm.reset();
+            return false;
+        }
+
+        lc_camera = lc_cm->cameras()[0];
+        if (lc_camera->acquire() != 0) {
+            std::cerr << "[camera] Camera acquire failed\n";
+            lc_camera.reset();
+            lc_cm->stop();
+            lc_cm.reset();
+            return false;
+        }
+
+        auto cfg = lc_camera->generateConfiguration({libcamera::StreamRole::Raw});
+        if (!cfg) {
+            std::cerr << "[camera] generateConfiguration failed\n";
+            lc_camera->release();
+            lc_camera.reset();
+            lc_cm->stop();
+            lc_cm.reset();
+            return false;
+        }
+
+        auto& scfg        = cfg->at(0);
+        scfg.size.width   = static_cast<unsigned int>(config.width);
+        scfg.size.height  = static_cast<unsigned int>(config.height);
+        scfg.pixelFormat  = libcamera::formats::SGRBG10_CSI2P;
+        scfg.bufferCount  = static_cast<unsigned int>(config.buffer_count);
+
+        if (cfg->validate() == libcamera::CameraConfiguration::Invalid) {
+            std::cerr << "[camera] Configuration invalid\n";
+            lc_camera->release();
+            lc_camera.reset();
+            lc_cm->stop();
+            lc_cm.reset();
+            return false;
+        }
+
+        if (lc_camera->configure(cfg.get()) != 0) {
+            std::cerr << "[camera] configure() failed\n";
+            lc_camera->release();
+            lc_camera.reset();
+            lc_cm->stop();
+            lc_cm.reset();
+            return false;
+        }
+
+        lc_stream = scfg.stream();
+
+        lc_allocator = std::make_unique<libcamera::FrameBufferAllocator>(lc_camera);
+        if (lc_allocator->allocate(lc_stream) < 0) {
+            std::cerr << "[camera] Buffer allocation failed\n";
+            lc_camera->release();
+            lc_camera.reset();
+            lc_cm->stop();
+            lc_cm.reset();
+            return false;
+        }
+
+        for (const auto& fb : lc_allocator->buffers(lc_stream)) {
+            const auto& plane = fb->planes()[0];
+            const off_t off   = (plane.offset != libcamera::FrameBuffer::Plane::kInvalidOffset)
+                                ? static_cast<off_t>(plane.offset) : 0;
+            void* mapped = mmap(nullptr, plane.length, PROT_READ, MAP_SHARED,
+                                plane.fd.get(), off);
+            if (mapped == MAP_FAILED) {
+                std::cerr << "[camera] mmap failed: " << strerror(errno) << "\n";
+                continue;
+            }
+            lc_mapped[fb.get()] = {mapped, plane.length};
+
+            auto req = lc_camera->createRequest();
+            if (req && req->addBuffer(lc_stream, fb.get()) == 0) {
+                lc_requests.push_back(std::move(req));
+            }
+        }
+
+        if (lc_requests.empty()) {
+            std::cerr << "[camera] No capture requests created\n";
+            cleanup_libcamera();
+            return false;
+        }
+
+        lc_camera->requestCompleted.connect(this, &Impl::on_request_completed);
+
+        libcamera::ControlList controls(lc_camera->controls());
+        controls.set(libcamera::controls::ExposureTime,
+                     static_cast<int32_t>(config.exposure_us));
+        controls.set(libcamera::controls::AnalogueGain, config.gain);
+
+        if (lc_camera->start(&controls) != 0) {
+            std::cerr << "[camera] camera->start() failed\n";
+            cleanup_libcamera();
+            return false;
+        }
+
+        for (auto& req : lc_requests) {
+            lc_camera->queueRequest(req.get());
+        }
+
+        std::cout << "[camera] libcamera: "
+                  << scfg.size.width << "x" << scfg.size.height
+                  << " " << scfg.pixelFormat.toString()
+                  << " stride=" << scfg.stride << "\n";
+        return true;
+    }
+
+    /** @brief Signal slot — called from CameraManager's event thread. */
+    void on_request_completed(libcamera::Request* req) {
+        if (req->status() == libcamera::Request::RequestCancelled) {
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lock(lc_mutex);
+            lc_completed.push(req);
+        }
+        lc_cv.notify_one();
+    }
+
+    /**
+     * @brief Blocking libcamera frame capture.
+     *
+     * Copies DMA buffer data to a heap allocation (same lifetime convention as
+     * the test-pattern path; consumer must delete[] via frame.error[0] flag).
+     *
+     * TODO: True zero-copy via reference-counted DMA buffer when buffer
+     * lifecycle is tracked through the ring buffer.
+     */
+    bool capture_libcamera(ZeroCopyFrame& frame, int timeout_ms) {
+        std::unique_lock<std::mutex> lock(lc_mutex);
+        const bool got = lc_cv.wait_for(
+            lock, std::chrono::milliseconds(timeout_ms),
+            [this] { return !lc_completed.empty() || lc_stopped; });
+
+        if (!got || lc_completed.empty()) {
+            frame.valid = false;
+            snprintf(frame.error, sizeof(frame.error), "%s", "libcamera timeout");
+            return false;
+        }
+
+        libcamera::Request* req = lc_completed.front();
+        lc_completed.pop();
+        lock.unlock();
+
+        const auto& bufs = req->buffers();
+        const auto  it   = bufs.find(lc_stream);
+        if (it == bufs.end()) {
+            req->reuse(libcamera::Request::ReuseBuffers);
+            lc_camera->queueRequest(req);
+            return false;
+        }
+
+        libcamera::FrameBuffer* fb = it->second;
+        const auto& meta           = fb->metadata();
+        const auto& plane          = fb->planes()[0];
+
+        auto* data = new uint8_t[plane.length];
+        const auto mit = lc_mapped.find(fb);
+        if (mit != lc_mapped.end()) {
+            std::memcpy(data, mit->second.data, plane.length);
+        }
+
+        frame.sequence      = meta.sequence;
+        frame.timestamp_ns  = static_cast<TimestampNs>(meta.timestamp);
+        frame.width         = width;
+        frame.height        = height;
+        frame.format        = PixelFormat::RAW10;
+        frame.plane_data[0] = data;
+        frame.plane_size[0] = plane.length;
+        // SGRBG10_CSI2P: packed RAW10 stride = ceil(width * 10 / 8)
+        frame.stride[0]     = static_cast<int>((static_cast<unsigned int>(width) * 10u + 7u) / 8u);
+        frame.valid         = true;
+        frame.error[0]      = 1;  // Mark heap-allocated — consumer must delete[]
+
+        frame_counter++;
+
+        req->reuse(libcamera::Request::ReuseBuffers);
+        lc_camera->queueRequest(req);
+
+        return frame.validate(width, height);
+    }
+
+    /** @brief Stop and release all libcamera resources. */
+    void cleanup_libcamera() {
+        {
+            std::lock_guard<std::mutex> lock(lc_mutex);
+            lc_stopped = true;
+        }
+        lc_cv.notify_all();
+
+        if (lc_camera) {
+            lc_camera->stop();
+            lc_requests.clear();
+
+            for (auto& [fb, buf] : lc_mapped) {
+                munmap(buf.data, buf.size);
+            }
+            lc_mapped.clear();
+
+            if (lc_allocator && lc_stream) {
+                lc_allocator->free(lc_stream);
+            }
+            lc_allocator.reset();
+            lc_stream = nullptr;
+
+            lc_camera->release();
+            lc_camera.reset();
+        }
+
+        if (lc_cm) {
+            lc_cm->stop();
+            lc_cm.reset();
+        }
+    }
+#endif  // !AURORE_LAPTOP_BUILD
+
+    // =========================================================================
+    // Test pattern
+    // =========================================================================
+
     cv::Mat generate_test_pattern() {
-        // Create background (gray)
         cv::Mat frame(height, width, CV_8UC3, cv::Scalar(128, 128, 128));
-        
-        // Draw grid
+
         for (int x = 0; x < width; x += 100) {
-            cv::line(frame, cv::Point(x, 0), cv::Point(x, height), 
+            cv::line(frame, cv::Point(x, 0), cv::Point(x, height),
                      cv::Scalar(100, 100, 100), 1);
         }
         for (int y = 0; y < height; y += 100) {
-            cv::line(frame, cv::Point(0, y), cv::Point(width, y), 
+            cv::line(frame, cv::Point(0, y), cv::Point(width, y),
                      cv::Scalar(100, 100, 100), 1);
         }
-        
-        // Update target position (bounce off edges)
+
         target_pos += target_velocity;
-        if (target_pos.x < target_size || target_pos.x > width - target_size) {
+        if (target_pos.x < target_size ||
+            target_pos.x > static_cast<float>(width) - target_size) {
             target_velocity.x = -target_velocity.x;
         }
-        if (target_pos.y < target_size || target_pos.y > height - target_size) {
+        if (target_pos.y < target_size ||
+            target_pos.y > static_cast<float>(height) - target_size) {
             target_velocity.y = -target_velocity.y;
         }
-        
-        // Draw moving target (red circle)
-        cv::circle(frame, target_pos, static_cast<int>(target_size), 
+
+        cv::circle(frame, target_pos, static_cast<int>(target_size),
                    cv::Scalar(0, 0, 255), -1);
-        
-        // Draw crosshair at center
-        cv::line(frame, cv::Point(width/2 - 20, height/2), cv::Point(width/2 + 20, height/2),
+
+        const int cx = width / 2, cy = height / 2;
+        cv::line(frame, cv::Point(cx - 20, cy), cv::Point(cx + 20, cy),
                  cv::Scalar(0, 255, 0), 2);
-        cv::line(frame, cv::Point(width/2, height/2 - 20), cv::Point(width/2, height/2 + 20),
+        cv::line(frame, cv::Point(cx, cy - 20), cv::Point(cx, cy + 20),
                  cv::Scalar(0, 255, 0), 2);
-        
-        // Draw frame counter
-        std::string text = "Frame: " + std::to_string(frame_counter);
-        cv::putText(frame, text, cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX, 
+
+        cv::putText(frame, "Frame: " + std::to_string(frame_counter),
+                    cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX,
                     0.7, cv::Scalar(0, 255, 0), 2);
-        
-        text = "Test Pattern Mode";
-        cv::putText(frame, text, cv::Point(10, 60), cv::FONT_HERSHEY_SIMPLEX,
+        cv::putText(frame, "Test Pattern Mode",
+                    cv::Point(10, 60), cv::FONT_HERSHEY_SIMPLEX,
                     0.7, cv::Scalar(255, 255, 0), 2);
-        
+
         return frame;
     }
 
-    bool capture_frame_stub(ZeroCopyFrame& frame) {
+    // =========================================================================
+    // Unified capture dispatch
+    // =========================================================================
+
+    bool capture_frame_stub(ZeroCopyFrame& frame, int timeout_ms = 100) {
+#ifndef AURORE_LAPTOP_BUILD
+        if (use_libcamera) {
+            return capture_libcamera(frame, timeout_ms);
+        }
+#else
+        (void)timeout_ms;
+#endif
+
         cv::Mat bgr_frame;
-        
         if (use_webcam && webcam_cap.isOpened()) {
-            // Capture from webcam
             webcam_cap >> bgr_frame;
             if (bgr_frame.empty()) {
                 frame.valid = false;
-                snprintf(frame.error, sizeof(frame.error), "%s", "Webcam capture failed");
+                snprintf(frame.error, sizeof(frame.error),
+                         "%s", "Webcam capture failed");
                 return false;
             }
         } else {
-            // Generate test pattern
             bgr_frame = generate_test_pattern();
         }
-        
-        // Convert BGR to RAW10 format for zero-copy simulation
-        // In production, this would be actual DMA buffer
-        // For development, we'll store the BGR data and convert on wrap_as_mat
-        
-        frame.sequence = frame_counter++;
-        frame.timestamp_ns = get_timestamp(ClockId::MonotonicRaw);
-        frame.width = width;
-        frame.height = height;
-        frame.format = PixelFormat::BGR888;  // Store as BGR for easier OpenCV integration
-        frame.valid = !bgr_frame.empty();
-        
-        // Allocate temporary storage for frame data
-        // Note: In production, this would be DMA buffer mmap
-        uint8_t* frame_data = new uint8_t[width * height * 3];
-        std::memcpy(frame_data, bgr_frame.data, width * height * 3);
-        
+
+        frame.sequence      = frame_counter++;
+        frame.timestamp_ns  = get_timestamp(ClockId::MonotonicRaw);
+        frame.width         = width;
+        frame.height        = height;
+        frame.format        = PixelFormat::BGR888;
+        frame.valid         = !bgr_frame.empty();
+
+        const size_t sz = static_cast<size_t>(width) * static_cast<size_t>(height) * 3u;
+        auto* frame_data = new uint8_t[sz];
+        std::memcpy(frame_data, bgr_frame.data, sz);
+
         frame.plane_data[0] = frame_data;
-        frame.plane_size[0] = width * height * 3;
-        frame.stride[0] = width * 3;
-        
-        // Set cleanup flag in user data (hack for development)
-        frame.error[0] = 1;  // Mark that data[0] needs deletion
-        
-        snprintf(frame.error + 1, sizeof(frame.error) - 1, "%s", "Development mode - BGR capture");
-        
+        frame.plane_size[0] = sz;
+        frame.stride[0]     = width * 3;
+        frame.error[0]      = 1;  // Mark heap-allocated
+
+        snprintf(frame.error + 1, sizeof(frame.error) - 1,
+                 "%s", "Development mode - BGR capture");
+
         return frame.validate(width, height);
     }
-    
-    cv::Mat get_last_frame_as_mat() {
-        if (use_webcam && webcam_cap.isOpened()) {
-            cv::Mat frame;
-            webcam_cap >> frame;
-            return frame;
-        } else {
-            return generate_test_pattern();
-        }
-    }
 };
+
+// =============================================================================
+// CameraWrapper public interface
+// =============================================================================
 
 CameraWrapper::CameraWrapper(const CameraConfig& config)
     : impl_(std::make_unique<Impl>())
@@ -226,7 +522,7 @@ CameraWrapper::CameraWrapper(const CameraConfig& config)
     , running_(false)
     , frame_count_(0)
     , error_count_(0) {
-    
+
     if (!config_.validate()) {
         throw CameraException("Invalid camera configuration");
     }
@@ -239,10 +535,12 @@ CameraWrapper::~CameraWrapper() {
 
 bool CameraWrapper::init() {
     try {
-        impl_->init_camera();
+        // configure_stream must run before init_camera to set mode flags
         impl_->configure_stream(config_);
-        impl_->allocate_buffers(config_);
-        impl_->create_requests(config_);
+        if (!impl_->init_camera(config_)) {
+            impl_->cleanup();
+            throw CameraException("Camera initialization failed");
+        }
         return true;
     }
     catch (const CameraException& e) {
@@ -255,7 +553,6 @@ bool CameraWrapper::start() {
     if (running_.load(std::memory_order_acquire)) {
         return false;
     }
-    
     running_.store(true, std::memory_order_release);
     return true;
 }
@@ -264,18 +561,26 @@ void CameraWrapper::stop() {
     if (!running_.load(std::memory_order_acquire)) {
         return;
     }
-    
     running_.store(false, std::memory_order_release);
+
+#ifndef AURORE_LAPTOP_BUILD
+    // Signal libcamera shutdown so capture_libcamera() unblocks
+    if (impl_ && impl_->use_libcamera && impl_->lc_camera) {
+        {
+            std::lock_guard<std::mutex> lock(impl_->lc_mutex);
+            impl_->lc_stopped = true;
+        }
+        impl_->lc_cv.notify_all();
+        impl_->lc_camera->stop();
+    }
+#endif
 }
 
 bool CameraWrapper::capture_frame(ZeroCopyFrame& frame, int timeout_ms) {
     if (!running_.load(std::memory_order_acquire)) {
         return false;
     }
-    
-    (void)timeout_ms;  // Unused in stub
-    
-    return impl_->capture_frame_stub(frame);
+    return impl_->capture_frame_stub(frame, timeout_ms);
 }
 
 bool CameraWrapper::try_capture_frame(ZeroCopyFrame& frame) {
@@ -284,151 +589,121 @@ bool CameraWrapper::try_capture_frame(ZeroCopyFrame& frame) {
 
 cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
                                     PixelFormat target_format) {
-    // Security: Validate frame before wrapping
     if (!frame.validate(config_.width, config_.height)) {
-        std::cerr << "wrap_as_mat: Frame validation failed" << std::endl;
+        std::cerr << "wrap_as_mat: Frame validation failed\n";
         return cv::Mat();
     }
-
     if (!frame.is_valid()) {
         return cv::Mat();
     }
 
-    // Development mode: BGR888 frames from test pattern or webcam
+    // Development/webcam: BGR888 frame stored as heap copy
     if (frame.format == PixelFormat::BGR888 && target_format == PixelFormat::BGR888) {
-        // Create a copy since we own the data (will be freed in frame cleanup)
         cv::Mat bgr_img(frame.height, frame.width, CV_8UC3);
         std::memcpy(bgr_img.data, frame.plane_data[0], frame.plane_size[0]);
         return bgr_img;
     }
 
-    // Production mode: RAW10 to BGR888 conversion (Sony IMX708)
+    // Hardware: SGRBG10_CSI2P packed RAW10 → greyscale BGR888
+    // Note: stride = ceil(width*10/8); 4 pixels packed into 5 bytes.
+    // Full colour Bayer demosaicing is a TODO for the vision pipeline.
     if (frame.format == PixelFormat::RAW10 && target_format == PixelFormat::BGR888) {
-        // Create output BGR image
         cv::Mat bgr_img(frame.height, frame.width, CV_8UC3);
+        const uint8_t* raw = static_cast<const uint8_t*>(frame.plane_data[0]);
+        const int stride   = frame.stride[0];
 
-        // Get input RAW10 data
-        const uint16_t* raw_data = static_cast<const uint16_t*>(frame.plane_data[0]);
+        for (int row = 0; row < frame.height; ++row) {
+            const uint8_t* line = raw + row * stride;
+            for (int col = 0; col < frame.width; col += 4) {
+                // SGRBG10_CSI2P: 5 bytes encode 4 × 10-bit pixels
+                const uint16_t p0 = (static_cast<uint16_t>(line[0]) << 2) | (line[4] & 0x03u);
+                const uint16_t p1 = (static_cast<uint16_t>(line[1]) << 2) | ((line[4] >> 2) & 0x03u);
+                const uint16_t p2 = (static_cast<uint16_t>(line[2]) << 2) | ((line[4] >> 4) & 0x03u);
+                const uint16_t p3 = (static_cast<uint16_t>(line[3]) << 2) | ((line[4] >> 6) & 0x03u);
+                line += 5;
 
-        // Find min/max for normalization (simple linear stretch)
-        uint16_t min_val = 65535, max_val = 0;
-        const size_t pixel_count = static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height);
-
-        for (size_t i = 0; i < pixel_count; i++) {
-            // RAW10 is stored in lower 10 bits of 16-bit word
-            const uint16_t pixel = raw_data[i] & 0x03FF;
-            if (pixel < min_val) min_val = pixel;
-            if (pixel > max_val) max_val = pixel;
+                const auto to_u8 = [](uint16_t v) -> uint8_t {
+                    return static_cast<uint8_t>(v >> 2);  // 10→8 bit (drop LSBs)
+                };
+                const int base = row * frame.width + col;
+                if (col     < frame.width) bgr_img.at<cv::Vec3b>(base + 0) = cv::Vec3b(to_u8(p0), to_u8(p0), to_u8(p0));
+                if (col + 1 < frame.width) bgr_img.at<cv::Vec3b>(base + 1) = cv::Vec3b(to_u8(p1), to_u8(p1), to_u8(p1));
+                if (col + 2 < frame.width) bgr_img.at<cv::Vec3b>(base + 2) = cv::Vec3b(to_u8(p2), to_u8(p2), to_u8(p2));
+                if (col + 3 < frame.width) bgr_img.at<cv::Vec3b>(base + 3) = cv::Vec3b(to_u8(p3), to_u8(p3), to_u8(p3));
+            }
         }
-
-        // Convert RAW10 to BGR (grayscale for now - color processing in vision pipeline)
-        const float scale = (max_val > min_val) ? 255.0f / static_cast<float>(max_val - min_val) : 1.0f;
-
-        for (size_t i = 0; i < pixel_count; i++) {
-            const uint16_t pixel = raw_data[i] & 0x03FF;
-            const uint8_t gray = static_cast<uint8_t>((pixel - min_val) * scale);
-            bgr_img.at<cv::Vec3b>(static_cast<int>(i / static_cast<size_t>(frame.width)),
-                                  static_cast<int>(i % static_cast<size_t>(frame.width))) =
-                cv::Vec3b(gray, gray, gray);
-        }
-
         return bgr_img;
     }
 
-    (void)target_format;  // Unused for other formats
+    (void)target_format;
     return cv::Mat();
 }
 
 bool CameraWrapper::set_exposure(int exposure_us) {
-    if (!impl_) {
-        return false;
-    }
-    
-    // Stub: Store exposure value
     (void)exposure_us;
-    return true;
+    return impl_ != nullptr;
 }
 
 bool CameraWrapper::set_gain(float gain) {
-    if (!impl_) {
-        return false;
-    }
-    
-    // Stub: Store gain value
     (void)gain;
-    return true;
+    return impl_ != nullptr;
 }
 
-// FrameBufferAllocator implementation (stub)
+// =============================================================================
+// FrameBufferAllocator (stub — used by tests; real allocation in init_libcamera)
+// =============================================================================
 
-bool FrameBufferAllocator::allocate(int width, int height, PixelFormat format, 
-                                     int count) {
-    width_ = width;
+bool FrameBufferAllocator::allocate(int width, int height, PixelFormat format, int count) {
+    width_  = width;
     height_ = height;
     format_ = format;
-    count_ = count;
-    
-    // Calculate plane sizes based on format
+    count_  = count;
+
     switch (format) {
-        case PixelFormat::RAW10: {
-            stride_[0] = width * 2;  // Aligned to 16 bits
-            plane_size_[0] = static_cast<size_t>(stride_[0]) * height;
+        case PixelFormat::RAW10:
+            stride_[0]     = width * 2;
+            plane_size_[0] = static_cast<size_t>(stride_[0]) * static_cast<size_t>(height);
             break;
-        }
-        
         case PixelFormat::BGR888:
-        case PixelFormat::RGB888: {
-            stride_[0] = width * 3;
-            plane_size_[0] = static_cast<size_t>(stride_[0]) * height;
+        case PixelFormat::RGB888:
+            stride_[0]     = width * 3;
+            plane_size_[0] = static_cast<size_t>(stride_[0]) * static_cast<size_t>(height);
             break;
-        }
-        
-        case PixelFormat::NV12: {
-            stride_[0] = width;  // Y plane
-            plane_size_[0] = static_cast<size_t>(stride_[0]) * height;
-            stride_[1] = width;  // UV plane (subsampled)
-            plane_size_[1] = static_cast<size_t>(stride_[1]) * height / 2;
+        case PixelFormat::NV12:
+            stride_[0]     = width;
+            plane_size_[0] = static_cast<size_t>(stride_[0]) * static_cast<size_t>(height);
+            stride_[1]     = width;
+            plane_size_[1] = static_cast<size_t>(stride_[1]) * static_cast<size_t>(height) / 2u;
             break;
-        }
-        
-        case PixelFormat::YUV420: {
-            stride_[0] = width;  // Y plane
-            plane_size_[0] = static_cast<size_t>(stride_[0]) * height;
-            stride_[1] = width / 2;  // U plane
-            plane_size_[1] = static_cast<size_t>(stride_[1]) * height / 2;
-            stride_[2] = width / 2;  // V plane
-            plane_size_[2] = static_cast<size_t>(stride_[2]) * height / 2;
+        case PixelFormat::YUV420:
+            stride_[0]     = width;
+            plane_size_[0] = static_cast<size_t>(stride_[0]) * static_cast<size_t>(height);
+            stride_[1]     = width / 2;
+            plane_size_[1] = static_cast<size_t>(stride_[1]) * static_cast<size_t>(height) / 2u;
+            stride_[2]     = width / 2;
+            plane_size_[2] = static_cast<size_t>(stride_[2]) * static_cast<size_t>(height) / 2u;
             break;
-        }
     }
-    
-    // Stub: No actual buffer allocation
+
     buffers_.resize(static_cast<size_t>(count));
-    for (int i = 0; i < count; i++) {
-        buffers_[i].fd = -1;
-        buffers_[i].data = nullptr;
-        buffers_[i].size = plane_size_[0];
+    for (int i = 0; i < count; ++i) {
+        buffers_[static_cast<size_t>(i)].fd   = -1;
+        buffers_[static_cast<size_t>(i)].data = nullptr;
+        buffers_[static_cast<size_t>(i)].size = plane_size_[0];
     }
-    
     return true;
 }
 
 void FrameBufferAllocator::free() {
     for (auto& buffer : buffers_) {
-        if (buffer.data) {
-            munmap(buffer.data, buffer.size);
-        }
-        if (buffer.fd >= 0) {
-            close(buffer.fd);
-        }
+        if (buffer.data) { munmap(buffer.data, buffer.size); }
+        if (buffer.fd >= 0) { close(buffer.fd); }
     }
     buffers_.clear();
 }
 
 void* FrameBufferAllocator::get_data(int index, int /*plane*/) {
-    if (index < 0 || index >= count_) {
-        return nullptr;
-    }
+    if (index < 0 || index >= count_) { return nullptr; }
     return buffers_[static_cast<size_t>(index)].data;
 }
 
