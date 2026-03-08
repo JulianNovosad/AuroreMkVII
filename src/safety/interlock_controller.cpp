@@ -165,8 +165,10 @@ void InterlockController::stop() {
     running_.store(false, std::memory_order_release);
     
     // Set inhibit output (safe state)
-    impl_->write_pin(config_.inhibit_pin, config_.active_low ? 0 : 1);
-    impl_->write_pin(config_.status_led_pin, 0);
+    if (impl_ && impl_->gpio_map) {
+        impl_->write_pin(config_.inhibit_pin, config_.active_low ? 0 : 1);
+        impl_->write_pin(config_.status_led_pin, 0);
+    }
     
     std::cout << "Interlock monitoring stopped" << std::endl;
 }
