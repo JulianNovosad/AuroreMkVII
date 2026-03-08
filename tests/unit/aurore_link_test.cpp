@@ -58,7 +58,7 @@ void test_telemetry_client_receives_broadcast() {
     // Read length-prefixed response
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     uint32_t net_len = 0;
-    ssize_t n = ::recv(client, &net_len, 4, MSG_DONTWAIT);
+    [[maybe_unused]] ssize_t n = ::recv(client, &net_len, 4, MSG_DONTWAIT);
     assert(n == 4);
     uint32_t len = ntohl(net_len);
     std::string buf(len, '\0');

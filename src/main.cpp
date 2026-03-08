@@ -41,6 +41,8 @@
 #include "aurore/state_machine.hpp"  // For TrackSolution
 #include "aurore/tracker.hpp"        // For KcfTracker
 #include "aurore/aurore_link_server.hpp"
+#include "aurore/config_loader.hpp"
+#include "aurore/telemetry_writer.hpp"
 #include "aurore.pb.h"
 
 namespace {
@@ -77,7 +79,7 @@ bool configure_rt_thread(const char* name, int priority, int cpu_affinity) {
     // Set CPU affinity
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
-    CPU_SET(cpu_affinity, &cpuset);
+    CPU_SET(static_cast<size_t>(cpu_affinity), &cpuset);
 
     if (pthread_setaffinity_np(thread, sizeof(cpuset), &cpuset) != 0) {
         std::cerr << "Failed to set CPU affinity for " << name
@@ -242,24 +244,40 @@ int main(int argc, char* argv[]) {
     // Setup signal handlers
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
-    
+
     // Configure resource limits
     set_resource_limits();
-    
+
     // Lock memory
     lock_memory();
+
+    // Load configuration
+    aurore::ConfigLoader config("config/config.json");
+    if (!config.is_loaded()) {
+        std::cerr << "Warning: Failed to load config/config.json, using defaults" << std::endl;
+    } else {
+        std::cout << "Loaded config/config.json" << std::endl;
+    }
+
+    // Initialize telemetry writer
+    aurore::TelemetryConfig tel_config;
+    tel_config.log_dir = config.get_string("logging.path", "logs");
+    tel_config.enable_csv = true;
+    tel_config.enable_json = true;
+    aurore::TelemetryWriter telemetry;
+    telemetry.start(tel_config);
     
     // Initialize safety monitor
     aurore::SafetyMonitorConfig safety_config;
+    safety_config.vision_deadline_ns    = static_cast<uint64_t>(config.get_int("safety.vision_deadline_ns", 20000000));
+    safety_config.actuation_deadline_ns = static_cast<uint64_t>(config.get_int("safety.actuation_deadline_ns", 2000000));
+    safety_config.max_consecutive_misses = static_cast<size_t>(config.get_int("safety.max_consecutive_misses", 3));
+
     if (dry_run) {
         // Relaxed deadlines for non-RT laptop
         safety_config.vision_deadline_ns    = 1000000000; // 1s
         safety_config.actuation_deadline_ns = 1000000000; // 1s
         safety_config.max_consecutive_misses = 100;
-    } else {
-        safety_config.vision_deadline_ns    = 20000000;   // 20ms
-        safety_config.actuation_deadline_ns = 2000000;    // 2ms
-        safety_config.max_consecutive_misses = 3;
     }
     
     aurore::SafetyMonitor safety_monitor(safety_config);
@@ -312,8 +330,8 @@ int main(int argc, char* argv[]) {
 
     // Initialize AuroreLink server for remote operator interface
     aurore::AuroreLinkConfig link_cfg;
-    link_cfg.telemetry_port = 9000;
-    link_cfg.command_port = 9002;
+    link_cfg.telemetry_port = static_cast<uint16_t>(config.get_int("network.aurore_link.telemetry_port", 9000));
+    link_cfg.command_port = static_cast<uint16_t>(config.get_int("network.aurore_link.command_port", 9002));
     aurore::AuroreLinkServer link_server(link_cfg);
     link_server.start();
 
@@ -340,6 +358,18 @@ int main(int argc, char* argv[]) {
 
     // State machine for FCS mode management
     aurore::StateMachine state_machine;
+
+    // Set state change callback for telemetry
+    state_machine.set_state_change_callback(
+        [&telemetry]([[maybe_unused]] aurore::FcsState from, aurore::FcsState to) {
+            if (to == aurore::FcsState::FAULT) {
+                telemetry.log_event(
+                    aurore::TelemetryEventId::SAFETY_FAULT,
+                    aurore::TelemetrySeverity::kCritical,
+                    "State machine transitioned to FAULT");
+            }
+        });
+
 
     // Control loop state
     std::atomic<uint64_t> frame_sequence(0);
@@ -437,8 +467,8 @@ int main(int argc, char* argv[]) {
                     // Initialize tracker on first valid frame
                     // Use center crop as initial target (simulating first detection)
                     const cv::Rect2d initial_bbox(
-                        frame.width * 0.4f, frame.height * 0.4f,
-                        frame.width * 0.2f, frame.height * 0.2f
+                        static_cast<float>(frame.width) * 0.4f, static_cast<float>(frame.height) * 0.4f,
+                        static_cast<float>(frame.width) * 0.2f, static_cast<float>(frame.height) * 0.2f
                     );
                     
                     if (tracker.init(bgr_frame, initial_bbox)) {
@@ -453,9 +483,9 @@ int main(int argc, char* argv[]) {
 
                     // Validate solution bounds
                     if (current_solution.centroid_x < 0 ||
-                        current_solution.centroid_x > frame.width ||
+                        current_solution.centroid_x > static_cast<float>(frame.width) ||
                         current_solution.centroid_y < 0 ||
-                        current_solution.centroid_y > frame.height) {
+                        current_solution.centroid_y > static_cast<float>(frame.height)) {
                         current_solution.valid = false;
                         tracker.reset();
                         tracker_initialized = false;
@@ -609,7 +639,13 @@ int main(int argc, char* argv[]) {
     
     // Main loop - monitor system status
     std::cout << "\nSystem running. Press Ctrl+C to stop." << std::endl;
-    
+
+    // Log system boot event
+    telemetry.log_event(
+        aurore::TelemetryEventId::SYSTEM_BOOT,
+        aurore::TelemetrySeverity::kInfo,
+        "Aurore MkVII system booted");
+
     uint64_t last_status_time = aurore::get_timestamp();
     
     while (!g_shutdown_requested.load(std::memory_order_acquire)) {
@@ -629,7 +665,13 @@ int main(int argc, char* argv[]) {
     
     // Shutdown sequence
     std::cout << "\nShutting down..." << std::endl;
-    
+
+    // Log system shutdown event
+    telemetry.log_event(
+        aurore::TelemetryEventId::SYSTEM_SHUTDOWN,
+        aurore::TelemetrySeverity::kInfo,
+        "Aurore MkVII system shutdown");
+
     // Stop threads
     vision_running.store(false);
     track_running.store(false);
@@ -667,7 +709,10 @@ int main(int argc, char* argv[]) {
 
     // Stop safety monitor
     safety_monitor.stop();
-    
+
+    // Stop telemetry writer
+    telemetry.stop();
+
     // Unlock memory
     munlockall();
     

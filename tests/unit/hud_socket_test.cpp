@@ -39,7 +39,7 @@ void test_client_can_connect() {
     addr.sun_family = AF_UNIX;
     std::strncpy(addr.sun_path, kTestSocket, sizeof(addr.sun_path) - 1);
 
-    int rc = ::connect(client, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
+    [[maybe_unused]] int rc = ::connect(client, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
     ::close(client);
     hud.stop();
 

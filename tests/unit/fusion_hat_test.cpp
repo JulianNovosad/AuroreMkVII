@@ -195,14 +195,14 @@ TEST(test_servo_status_structure) {
 
 }  // anonymous namespace
 
-int main(int argc, char* argv[]) {
+int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     std::cout << "Fusion HAT+ Unit Tests" << std::endl;
     std::cout << "======================" << std::endl;
     
     int passed = 0;
     int failed = 0;
     
-    auto run_test = [&](const char* name, void (*test_fn)()) {
+    auto run_test = [&](const char* /*name*/, void (*test_fn)()) {
         try {
             test_fn();
             passed++;

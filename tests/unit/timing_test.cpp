@@ -52,8 +52,8 @@ std::atomic<size_t> g_tests_failed(0);
 // Helper: sleep for specified duration
 void sleep_ns(uint64_t ns) {
     struct timespec ts;
-    ts.tv_sec = ns / 1000000000L;
-    ts.tv_nsec = ns % 1000000000L;
+    ts.tv_sec = static_cast<__time_t>(ns / 1000000000L);
+    ts.tv_nsec = static_cast<__syscall_slong_t>(ns % 1000000000L);
     nanosleep(&ts, nullptr);
 }
 
@@ -175,11 +175,11 @@ TEST(test_thread_timing_deadline_miss_detection) {
     sleep_ns(2000000);  // 2ms - should cause deadline miss
     
     // Next wait should detect the miss
-    bool on_time = timing.wait();
+    [[maybe_unused]] bool on_time = timing.wait();
     
     // May or may not be on time depending on scheduling
     // But deadline_misses should be incremented
-    ASSERT_TRUE(timing.deadline_misses() >= 0);
+    ASSERT_TRUE(timing.deadline_misses());
 }
 
 TEST(test_thread_timing_consecutive_misses) {
@@ -193,7 +193,7 @@ TEST(test_thread_timing_consecutive_misses) {
         timing.wait();
     }
     
-    ASSERT_TRUE(timing.consecutive_misses() >= 0);
+    ASSERT_TRUE(timing.consecutive_misses());
     std::cout << "    Consecutive misses: " << timing.consecutive_misses() << std::endl;
 }
 
@@ -257,7 +257,7 @@ TEST(test_frame_rate_calculator_basic) {
     
     // Record 120 frames at 120Hz (8.333ms apart)
     for (int i = 0; i < 120; i++) {
-        calc.record_frame(now + i * 8333333);
+        calc.record_frame(now + static_cast<uint64_t>(i) * 8333333);
     }
     
     double fps = calc.fps();
@@ -271,7 +271,7 @@ TEST(test_frame_rate_calculator_60hz) {
     
     // Record 60 frames at 60Hz (16.67ms apart)
     for (int i = 0; i < 60; i++) {
-        calc.record_frame(now + i * 16666667);
+        calc.record_frame(now + static_cast<uint64_t>(i) * 16666667);
     }
     
     double fps = calc.fps();
@@ -283,7 +283,7 @@ TEST(test_frame_rate_calculator_reset) {
     
     auto now = aurore::get_timestamp();
     for (int i = 0; i < 10; i++) {
-        calc.record_frame(now + i * 8333333);
+        calc.record_frame(now + static_cast<uint64_t>(i) * 8333333);
     }
     
     ASSERT_TRUE(calc.fps() > 0);
@@ -312,7 +312,7 @@ TEST(test_timing_stress_single_thread) {
         auto actual = aurore::get_timestamp();
         auto jitter = std::abs(timing.calculate_jitter(actual));
         
-        total_jitter += jitter;
+        total_jitter += static_cast<uint64_t>(jitter);
         max_jitter = std::max(max_jitter, static_cast<uint64_t>(jitter));
     }
     
@@ -339,7 +339,7 @@ TEST(test_timing_concurrent_threads) {
     
     for (int t = 0; t < kNumThreads; t++) {
         threads.emplace_back([&, t]() {
-            aurore::ThreadTiming timing(kPeriodNs, t * 500000);  // Staggered phases
+            aurore::ThreadTiming timing(kPeriodNs, static_cast<uint64_t>(t) * 500000);  // Staggered phases
             
             for (int i = 0; i < kCycles; i++) {
                 bool on_time = timing.wait();
@@ -363,7 +363,7 @@ TEST(test_timing_concurrent_threads) {
 // Main
 // ============================================================================
 
-int main(int argc, char* argv[]) {
+int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     std::cout << "Running Timing tests..." << std::endl;
     std::cout << "=====================================" << std::endl;
     

@@ -367,7 +367,7 @@ TEST(test_mpmc_ring_buffer_concurrent) {
 // Main
 // ============================================================================
 
-int main(int argc, char* argv[]) {
+int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     std::cout << "Running LockFreeRingBuffer tests..." << std::endl;
     std::cout << "=====================================" << std::endl;
     

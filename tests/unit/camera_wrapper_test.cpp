@@ -34,7 +34,7 @@ static int g_tests_failed = 0;
         }                                                                   \
     } while (0)
 
-static void run_test(const char* name, void (*fn)()) {
+[[maybe_unused]] static void run_test(const char* name, void (*fn)()) {
     std::printf("[ RUN  ] %s\n", name);
     fn();
     std::printf("[ %s ] %s\n", g_tests_failed == 0 ? " OK " : "FAIL", name);

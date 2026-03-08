@@ -68,7 +68,7 @@ void sleep_ms(int ms) {
 }
 
 // Simulated thread configuration function (mirrors main.cpp)
-bool configure_rt_thread(const char* name, int priority, int cpu_affinity) {
+bool configure_rt_thread(const char* /*name*/, int priority, int cpu_affinity) {
     pthread_t thread = pthread_self();
 
     // Set SCHED_FIFO scheduling
@@ -83,7 +83,7 @@ bool configure_rt_thread(const char* name, int priority, int cpu_affinity) {
     // Set CPU affinity
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
-    CPU_SET(cpu_affinity, &cpuset);
+    CPU_SET(static_cast<size_t>(cpu_affinity), &cpuset);
 
     if (pthread_setaffinity_np(thread, sizeof(cpuset), &cpuset) != 0) {
         return false;
@@ -632,7 +632,7 @@ TEST(test_safety_monitor_integration) {
 
         for (int i = 0; i < 20 && !shutdown_requested.load(); i++) {
             timing.wait();
-            safety_monitor.run_cycle();
+            (void)safety_monitor.run_cycle();
         }
     });
 

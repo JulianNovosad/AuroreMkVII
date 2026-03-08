@@ -19,7 +19,7 @@ void test_detect_on_blank_frame_returns_no_detection() {
     assert(det.is_ready());
 
     cv::Mat frame = cv::Mat::zeros(864, 1536, CV_8UC3);
-    auto result = det.detect(frame);
+    [[maybe_unused]] auto result = det.detect(frame);
     assert(!result.has_value() || result->confidence < 0.7f);
     std::cout << "PASS: no detection on blank frame\n";
 }
@@ -34,7 +34,7 @@ void test_detect_on_matching_frame() {
     cv::Mat frame = cv::Mat::zeros(864, 1536, CV_8UC3);
     tmpl.copyTo(frame(cv::Rect(400, 300, 80, 80)));
 
-    auto result = det.detect(frame);
+    [[maybe_unused]] auto result = det.detect(frame);
     std::cout << "PASS: detect() returns a result on frame with embedded template\n";
 }
 

@@ -114,7 +114,7 @@ TEST(test_safety_monitor_vision_update) {
     ASSERT_TRUE(monitor.is_system_safe());
     
     // Run monitoring cycle
-    monitor.run_cycle();
+    ASSERT_TRUE(monitor.run_cycle());
     ASSERT_TRUE(monitor.is_system_safe());
     
     monitor.stop();
@@ -135,7 +135,7 @@ TEST(test_safety_monitor_actuation_update) {
     
     ASSERT_TRUE(monitor.is_system_safe());
     
-    monitor.run_cycle();
+    ASSERT_TRUE(monitor.run_cycle());
     ASSERT_TRUE(monitor.is_system_safe());
     
     monitor.stop();
@@ -156,11 +156,16 @@ TEST(test_safety_monitor_vision_latency_fault) {
     
     // Run cycle - should detect latency fault
     sleep_ms(10);
-    monitor.run_cycle();
+    bool run_cycle_result = monitor.run_cycle();
+    std::cout << "  run_cycle_result: " << std::boolalpha << run_cycle_result << std::endl; std::fflush(stdout);
+    std::cout << "  is_system_safe: " << std::boolalpha << monitor.is_system_safe() << std::endl; std::fflush(stdout);
+    std::cout << "  current_fault: " << static_cast<int>(monitor.current_fault()) << " (" << aurore::fault_code_to_string(monitor.current_fault()) << ")" << std::endl; std::fflush(stdout);
+    ASSERT_FALSE(run_cycle_result);
     
     // May or may not trigger fault depending on timing
     // Just verify monitor is still running
-    ASSERT_TRUE(monitor.is_running());
+    ASSERT_FALSE(monitor.is_system_safe()); // This should be false if a fault is detected
+    ASSERT_EQ(monitor.current_fault(), aurore::SafetyFaultCode::VISION_LATENCY_EXCEEDED);
     
     monitor.stop();
 }
@@ -218,12 +223,12 @@ TEST(test_safety_monitor_safety_callback) {
     monitor.start();
     
     // Use a static function wrapper for the callback
-    auto* p_invoked = &callback_invoked;
-    auto* p_code = &callback_code;
+    [[maybe_unused]] auto* p_invoked = &callback_invoked;
+    [[maybe_unused]] auto* p_code = &callback_code;
     
     monitor.set_safety_action_callback(
-        [](aurore::SafetyFaultCode code, 
-           const char* reason, void* user_data) {
+        [](aurore::SafetyFaultCode /*code*/, 
+           const char* /*reason*/, void* user_data) {
             auto* invoked = static_cast<std::atomic<bool>*>(user_data);
             invoked->store(true);
         },
@@ -252,7 +257,7 @@ TEST(test_safety_monitor_log_callback) {
     monitor.start();
     
     monitor.set_log_callback(
-        [](const aurore::SafetyEvent& event, void* user_data) {
+        [](const aurore::SafetyEvent& /*event*/, void* user_data) {
             auto* count = static_cast<std::atomic<size_t>*>(user_data);
             count->fetch_add(1);
         },
@@ -315,7 +320,7 @@ TEST(test_safety_monitor_rapid_updates) {
 
     // Run monitoring cycles
     for (int i = 0; i < 100; i++) {
-        monitor.run_cycle();
+        ASSERT_TRUE(monitor.run_cycle());
         std::this_thread::sleep_for(std::chrono::microseconds(100));  // Small delay
     }
 
@@ -346,7 +351,7 @@ TEST(test_safety_monitor_concurrent_access) {
     for (int t = 0; t < kNumThreads; t++) {
         threads.emplace_back([&, t]() {
             for (int i = 0; i < 100; i++) {
-                monitor.update_vision_frame(t * 100 + i, aurore::get_timestamp());
+                monitor.update_vision_frame(static_cast<uint64_t>(t * 100 + i), aurore::get_timestamp());
                 std::this_thread::yield();
             }
         });
@@ -356,7 +361,7 @@ TEST(test_safety_monitor_concurrent_access) {
     for (int t = 0; t < kNumThreads; t++) {
         threads.emplace_back([&, t]() {
             for (int i = 0; i < 100; i++) {
-                monitor.update_actuation_frame(t * 100 + i, aurore::get_timestamp());
+                monitor.update_actuation_frame(static_cast<uint64_t>(t * 100 + i), aurore::get_timestamp());
                 std::this_thread::yield();
             }
         });
@@ -365,7 +370,7 @@ TEST(test_safety_monitor_concurrent_access) {
     // Monitoring thread
     threads.emplace_back([&]() {
         for (int i = 0; i < 500; i++) {
-            monitor.run_cycle();
+            ASSERT_TRUE(monitor.run_cycle());
             std::this_thread::yield();
         }
     });
@@ -474,7 +479,11 @@ TEST(test_software_watchdog_timeout_triggers_fault) {
     sleep_ms(100);
 
     // Run a monitoring cycle to allow watchdog thread to detect timeout
-    monitor.run_cycle();
+    bool run_cycle_result = monitor.run_cycle();
+    std::cout << "  run_cycle_result: " << std::boolalpha << run_cycle_result << std::endl; std::fflush(stdout);
+    std::cout << "  is_system_safe: " << std::boolalpha << monitor.is_system_safe() << std::endl; std::fflush(stdout);
+    std::cout << "  current_fault: " << static_cast<int>(monitor.current_fault()) << " (" << aurore::fault_code_to_string(monitor.current_fault()) << ")" << std::endl; std::fflush(stdout);
+    ASSERT_FALSE(run_cycle_result);
 
     // Should have triggered watchdog fault
     // Note: May need to wait a bit longer for watchdog thread to detect
@@ -482,11 +491,11 @@ TEST(test_software_watchdog_timeout_triggers_fault) {
     
     // Check if fault was triggered (watchdog thread runs at 10ms interval)
     // The fault should be WATCHDOG_FEED_FAILED
-    auto fault = monitor.current_fault();
+    [[maybe_unused]] auto fault = monitor.current_fault();
     
     // Either watchdog triggered or system is still safe (timing dependent)
     // Just verify monitor is still functional
-    ASSERT_TRUE(monitor.is_running());
+    ASSERT_FALSE(monitor.is_system_safe());
 
     monitor.stop();
 }
@@ -565,7 +574,7 @@ TEST(test_software_watchdog_config_defaults) {
 // Main
 // ============================================================================
 
-int main(int argc, char* argv[]) {
+int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     std::cout << "Running SafetyMonitor tests..." << std::endl;
     std::cout << "=====================================" << std::endl;
     

@@ -7,7 +7,7 @@ using namespace aurore;
 
 void test_kinetic_mode_tof_formula() {
     BallisticSolver solver;
-    auto sol = solver.solve_kinetic(1.0f, 0.f, 700.f);
+    [[maybe_unused]] auto sol = solver.solve_kinetic(1.0f, 0.f, 700.f);
     assert(sol.has_value());
     assert(std::abs(sol->el_lead_deg) < 0.5f);
     assert(sol->tof_s < 0.01f);
@@ -16,7 +16,7 @@ void test_kinetic_mode_tof_formula() {
 
 void test_drop_mode_requires_valid_arc() {
     BallisticSolver solver;
-    auto sol = solver.solve_drop(1.5f, -0.5f);
+    [[maybe_unused]] auto sol = solver.solve_drop(1.5f, -0.5f);
     assert(sol.has_value());
     assert(sol->el_lead_deg > 0.f);
     assert(sol->launch_v_m_s > 0.f);
@@ -25,7 +25,7 @@ void test_drop_mode_requires_valid_arc() {
 
 void test_drop_mode_impossible_geometry() {
     BallisticSolver solver;
-    auto sol = solver.solve_drop(3.0f, 2.5f);
+    [[maybe_unused]] auto sol = solver.solve_drop(3.0f, 2.5f);
     std::cout << "PASS: drop mode handles upward target gracefully\n";
 }
 
@@ -45,14 +45,14 @@ void test_monte_carlo_p_hit_perfect_inputs() {
 
 void test_mode_selection_kinetic_for_shallow_target() {
     BallisticSolver solver;
-    EngagementMode mode = solver.select_mode(1.5f, 10.f, 1.0f);
+    [[maybe_unused]] EngagementMode mode = solver.select_mode(1.5f, 10.f, 1.0f);
     assert(mode == EngagementMode::KINETIC);
     std::cout << "PASS: KINETIC mode selected for shallow elevation\n";
 }
 
 void test_mode_selection_drop_for_top_down() {
     BallisticSolver solver;
-    EngagementMode mode = solver.select_mode(1.2f, 5.f, 2.5f);
+    [[maybe_unused]] EngagementMode mode = solver.select_mode(1.2f, 5.f, 2.5f);
     assert(mode == EngagementMode::DROP);
     std::cout << "PASS: DROP mode selected for top-down aspect\n";
 }
