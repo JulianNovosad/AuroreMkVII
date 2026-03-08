@@ -229,7 +229,14 @@ int main(int argc, char* argv[]) {
     std::cout << "=====================================" << std::endl;
     
     // Parse command line arguments
+#ifdef AURORE_LAPTOP_BUILD
+    bool dry_run = true;
+    g_dry_run = true;
+    std::cout << "Laptop build detected: Defaulting to dry-run mode" << std::endl;
+#else
     bool dry_run = false;
+#endif
+
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "--dry-run" || arg == "-n") {
@@ -459,7 +466,10 @@ int main(int argc, char* argv[]) {
     std::atomic<bool> track_running(false);
     std::atomic<bool> actuation_running(false);
     std::atomic<uint64_t> last_track_sequence(0);
-    
+
+    // Signal hardware init complete (BOOT -> IDLE_SAFE)
+    state_machine.on_init_complete();
+
     // Vision pipeline thread
     std::thread vision_thread([&]() {
         if (!configure_rt_thread("vision_pipeline", 90, 2)) {
@@ -531,8 +541,7 @@ int main(int argc, char* argv[]) {
         uint64_t last_frame_ns = aurore::get_timestamp();
         constexpr uint64_t kVisionWatchdogNs = 10000000;  // 10ms timeout
 
-        // Advance state machine at startup
-        state_machine.tick(std::chrono::milliseconds(1));
+        // Request SEARCH mode (IDLE_SAFE -> SEARCH)
         state_machine.request_search();
 
         while (!g_shutdown_requested.load(std::memory_order_acquire) &&

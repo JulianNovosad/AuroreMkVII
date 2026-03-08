@@ -233,6 +233,13 @@ void StateMachine::on_fault(FaultCode code) {
     }
 }
 
+// AM7-L2-MODE-001: BOOT -> IDLE_SAFE transition on hardware init complete
+void StateMachine::on_init_complete() {
+    if (state_ == FcsState::BOOT) {
+        transition(FcsState::IDLE_SAFE);
+    }
+}
+
 // AM7-L2-MODE-003: FREECAM state entry from IDLE_SAFE or SEARCH
 void StateMachine::request_freecam() {
     if (state_ == FcsState::IDLE_SAFE || state_ == FcsState::SEARCH) {

@@ -139,6 +139,9 @@ public:
     // AM7-L3-MODE-011: Fault transition from any state
     void on_fault(FaultCode code);
     
+    // AM7-L2-MODE-001: Hardware init complete signal (BOOT -> IDLE_SAFE)
+    void on_init_complete();
+
     // AM7-L2-MODE-003, AM7-L2-MODE-004: Operator mode requests
     void request_freecam();
     void request_search();
