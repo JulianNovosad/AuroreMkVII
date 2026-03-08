@@ -268,6 +268,7 @@ set(AURORE_SOURCES
 
     # Actuation
     src/actuation/ballistic_solver.cpp
+    src/actuation/gimbal_controller.cpp
 
     # State machine
     src/state_machine/state_machine.cpp
@@ -463,6 +464,16 @@ if(AURORE_ENABLE_TESTS)
     target_link_libraries(ballistics_test PRIVATE Threads::Threads)
     add_test(NAME BallisticsTest COMMAND ballistics_test)
     set_tests_properties(BallisticsTest PROPERTIES TIMEOUT 30)
+
+    # Gimbal controller tests
+    add_executable(gimbal_controller_test
+        tests/unit/gimbal_controller_test.cpp
+        src/actuation/gimbal_controller.cpp
+    )
+    target_include_directories(gimbal_controller_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(gimbal_controller_test PRIVATE Threads::Threads)
+    add_test(NAME GimbalControllerTest COMMAND gimbal_controller_test)
+    set_tests_properties(GimbalControllerTest PROPERTIES TIMEOUT 30)
 
     # Fusion HAT+ I2C driver tests
     add_executable(fusion_hat_test
