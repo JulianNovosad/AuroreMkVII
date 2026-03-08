@@ -469,6 +469,17 @@ if(AURORE_ENABLE_TESTS)
     set_tests_properties(HudSocketTest PROPERTIES TIMEOUT 30)
 endif()
 
+if(AURORE_ENABLE_TESTS)
+    add_executable(telemetry_writer_test
+        tests/unit/telemetry_writer_test.cpp
+        src/common/telemetry_writer.cpp
+    )
+    target_include_directories(telemetry_writer_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(telemetry_writer_test PRIVATE Threads::Threads)
+    add_test(NAME TelemetryWriterTest COMMAND telemetry_writer_test)
+    set_tests_properties(TelemetryWriterTest PROPERTIES TIMEOUT 30)
+endif()
+
 # ============================================================================
 # Integration Tests
 # ============================================================================
