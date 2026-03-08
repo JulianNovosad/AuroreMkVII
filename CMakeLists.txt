@@ -279,6 +279,9 @@ set(AURORE_SOURCES
     src/common/telemetry_writer.cpp
     src/common/hud_socket.cpp
 
+    # Network
+    src/network/aurore_link_server.cpp
+
     # Protobuf generated sources
     ${PROTO_SRCS}
 )
@@ -293,6 +296,7 @@ set(AURORE_HEADERS
     include/aurore/telemetry_types.hpp
     include/aurore/interlock_controller.hpp
     include/aurore/fusion_hat.hpp
+    include/aurore/aurore_link_server.hpp
 )
 
 # Create executable
@@ -522,6 +526,25 @@ if(AURORE_ENABLE_TESTS)
     )
     add_test(NAME CameraWrapperTest COMMAND camera_wrapper_test)
     set_tests_properties(CameraWrapperTest PROPERTIES TIMEOUT 30)
+endif()
+
+if(AURORE_ENABLE_TESTS)
+    # AuroreLink TCP server tests
+    add_executable(aurore_link_test
+        tests/unit/aurore_link_test.cpp
+        src/network/aurore_link_server.cpp
+        ${PROTO_SRCS}
+    )
+    target_include_directories(aurore_link_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}
+        ${Protobuf_INCLUDE_DIRS}
+    )
+    target_link_libraries(aurore_link_test PRIVATE
+        Threads::Threads ${Protobuf_LIBRARIES}
+    )
+    add_test(NAME AuroreLinkTest COMMAND aurore_link_test)
+    set_tests_properties(AuroreLinkTest PROPERTIES TIMEOUT 30)
 endif()
 
 # ============================================================================

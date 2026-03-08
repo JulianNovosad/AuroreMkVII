@@ -14,7 +14,7 @@ enum FcsState {
 }
 
 enum OperatingMode {
-    AUTO    = 0;
+    AUTO         = 0;
     FREECAM_MODE = 1;
 }
 
