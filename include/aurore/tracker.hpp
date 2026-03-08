@@ -26,6 +26,7 @@ public:
     TrackSolution update(const cv::Mat& bgr_frame);
     void reset();
     bool is_valid() const;
+    cv::Rect2d last_bbox() const { return last_bbox_; }
 
     void capture_reference_template(const cv::Mat& bgr_frame, const cv::Rect2d& bbox);
     float redetect(const cv::Mat& bgr_frame) const;

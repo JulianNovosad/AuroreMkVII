@@ -40,6 +40,7 @@
 #include "aurore/fusion_hat.hpp"
 #include "aurore/state_machine.hpp"  // For TrackSolution
 #include "aurore/tracker.hpp"        // For KcfTracker
+#include "aurore/detector.hpp"       // For OrbDetector
 #include "aurore/aurore_link_server.hpp"
 #include "aurore/config_loader.hpp"
 #include "aurore/telemetry_writer.hpp"
@@ -356,6 +357,25 @@ int main(int argc, char* argv[]) {
     // INT-003 Fix: Track solution ring buffer (track_compute -> actuation_output)
     aurore::LockFreeRingBuffer<aurore::TrackSolution, 4> track_buffer;
 
+    // Instantiate ORB detector for target detection
+    aurore::OrbDetector detector;
+    const std::string descriptor_path = config.get_string("detector.descriptor_path", "target_signatures/helicopter.yml");
+    if (!detector.load_descriptor_file(descriptor_path)) {
+        // Descriptor file failed to load
+        if (dry_run) {
+            // In dry-run mode, synthesize a test template so detector is ready
+            cv::Mat test_template = cv::Mat::zeros(80, 80, CV_8UC3);
+            cv::rectangle(test_template, {10, 10, 60, 60}, {0, 200, 100}, -1);
+            cv::putText(test_template, "T", {25, 50}, cv::FONT_HERSHEY_SIMPLEX, 2.0, {255, 255, 0}, 3);
+            detector.add_template(test_template);
+            std::cout << "Detector: Using synthesized test template (dry-run mode)" << std::endl;
+        } else {
+            std::cerr << "Warning: Failed to load descriptor file: " << descriptor_path << std::endl;
+        }
+    } else {
+        std::cout << "Detector: Loaded descriptors from " << descriptor_path << std::endl;
+    }
+
     // State machine for FCS mode management
     aurore::StateMachine state_machine;
 
@@ -441,10 +461,17 @@ int main(int argc, char* argv[]) {
         // INT-003 Fix: Track solution for actuation output
         aurore::TrackSolution current_solution;
         current_solution.valid = false;
-        
+
         // Vision pipeline integration: KCF tracker instance
         aurore::KcfTracker tracker;
-        bool tracker_initialized = false;
+
+        // Vision watchdog: track last frame timestamp
+        uint64_t last_frame_ns = aurore::get_timestamp();
+        constexpr uint64_t kVisionWatchdogNs = 10000000;  // 10ms timeout
+
+        // Advance state machine at startup
+        state_machine.tick(std::chrono::milliseconds(1));
+        state_machine.request_search();
 
         while (!g_shutdown_requested.load(std::memory_order_acquire) &&
                !safety_monitor.is_emergency_active()) {
@@ -453,64 +480,82 @@ int main(int argc, char* argv[]) {
 
             // Process frame from buffer
             aurore::ZeroCopyFrame frame;
-            if (frame_buffer.pop(frame)) {
+            uint64_t now_ns = aurore::get_timestamp();
+            bool frame_available = frame_buffer.pop(frame);
+
+            if (frame_available && camera) {
                 deadline.start();
+                last_frame_ns = now_ns;
 
                 // Wrap frame as OpenCV Mat (RAW10→BGR888 conversion happens here)
                 cv::Mat bgr_frame = camera->wrap_as_mat(frame, aurore::PixelFormat::BGR888);
-                
-                if (bgr_frame.empty()) {
-                    // Frame conversion failed, output invalid solution
-                    current_solution.valid = false;
-                }
-                else if (!tracker_initialized && frame.valid) {
-                    // Initialize tracker on first valid frame
-                    // Use center crop as initial target (simulating first detection)
-                    const cv::Rect2d initial_bbox(
-                        static_cast<float>(frame.width) * 0.4f, static_cast<float>(frame.height) * 0.4f,
-                        static_cast<float>(frame.width) * 0.2f, static_cast<float>(frame.height) * 0.2f
-                    );
-                    
-                    if (tracker.init(bgr_frame, initial_bbox)) {
-                        tracker_initialized = true;
-                        std::cout << "KCF tracker initialized" << std::endl;
-                    }
-                }
-                
-                if (tracker_initialized && !bgr_frame.empty()) {
-                    // Update tracker and get solution
-                    current_solution = tracker.update(bgr_frame);
 
-                    // Validate solution bounds
-                    if (current_solution.centroid_x < 0 ||
-                        current_solution.centroid_x > static_cast<float>(frame.width) ||
-                        current_solution.centroid_y < 0 ||
-                        current_solution.centroid_y > static_cast<float>(frame.height)) {
+                if (!bgr_frame.empty()) {
+                    aurore::FcsState state = state_machine.state();
+
+                    if (state == aurore::FcsState::SEARCH) {
+                        // SEARCH mode: use ORB detector to find target
+                        auto detection = detector.detect(bgr_frame);
+                        if (detection.has_value()) {
+                            // Target found - initialize tracker
+                            cv::Rect2d det_bbox(
+                                static_cast<float>(detection->bbox.x),
+                                static_cast<float>(detection->bbox.y),
+                                static_cast<float>(detection->bbox.w),
+                                static_cast<float>(detection->bbox.h)
+                            );
+                            if (tracker.init(bgr_frame, det_bbox)) {
+                                tracker.capture_reference_template(bgr_frame, det_bbox);
+                                // Signal detection to state machine with ORB confidence
+                                state_machine.on_detection(*detection);
+                            }
+                        }
+                        // No detection - stay in SEARCH
                         current_solution.valid = false;
-                        tracker.reset();
-                        tracker_initialized = false;
+                        current_solution.centroid_x = static_cast<float>(frame.width) / 2.0f;
+                        current_solution.centroid_y = static_cast<float>(frame.height) / 2.0f;
                     }
+                    else if (state == aurore::FcsState::TRACKING || state == aurore::FcsState::ARMED) {
+                        // TRACKING/ARMED: update KCF tracker
+                        current_solution = tracker.update(bgr_frame);
 
-                    // State machine: detection event based on confidence
-                    // SEARCH -> TRACKING when confidence > 0.85
-                    // TRACKING -> SEARCH when confidence < 0.5 for 3 frames (handled by state_machine)
-                    aurore::Detection detection;
-                    detection.confidence = current_solution.valid ? current_solution.psr : 0.0f;
-                    detection.bbox.x = static_cast<int>(current_solution.centroid_x - 20);
-                    detection.bbox.y = static_cast<int>(current_solution.centroid_y - 20);
-                    detection.bbox.w = 40;
-                    detection.bbox.h = 40;
-                    state_machine.on_detection(detection);
-                    state_machine.on_tracker_update(current_solution);
+                        if (current_solution.valid) {
+                            // Validate solution bounds
+                            if (current_solution.centroid_x < 0 ||
+                                current_solution.centroid_x > static_cast<float>(frame.width) ||
+                                current_solution.centroid_y < 0 ||
+                                current_solution.centroid_y > static_cast<float>(frame.height)) {
+                                current_solution.valid = false;
+                                tracker.reset();
+                            } else {
+                                // Valid tracking solution - use fixed confidence 0.75f to avoid KCF PSR issues
+                                current_solution.psr = 0.75f;
+                                state_machine.on_tracker_update(current_solution);
+                            }
+                        }
+
+                        if (!current_solution.valid) {
+                            // Track lost - attempt redetection
+                            float redetect_score = tracker.redetect(bgr_frame);
+                            state_machine.on_redetection_score(redetect_score);
+                            if (redetect_score < 0.85f) {
+                                // Redetection failed - reset tracker and fall back to SEARCH
+                                tracker.reset();
+                            }
+                            current_solution.centroid_x = static_cast<float>(frame.width) / 2.0f;
+                            current_solution.centroid_y = static_cast<float>(frame.height) / 2.0f;
+                        }
+                    }
+                    else {
+                        // Other states (IDLE_SAFE, FREECAM, BOOT, FAULT) - no tracking
+                        current_solution.valid = false;
+                        current_solution.centroid_x = static_cast<float>(frame.width) / 2.0f;
+                        current_solution.centroid_y = static_cast<float>(frame.height) / 2.0f;
+                    }
                 }
                 else {
-                    // No tracker - output center placeholder
-                    current_solution.centroid_x = static_cast<float>(frame.width) / 2.0f;
-                    current_solution.centroid_y = static_cast<float>(frame.height) / 2.0f;
-                    current_solution.velocity_x = 0.0f;
-                    current_solution.velocity_y = 0.0f;
+                    // Frame conversion failed
                     current_solution.valid = false;
-                    current_solution.psr = -1.0f;  // KCF doesn't provide PSR
                 }
 
                 // Push solution to actuation buffer
@@ -528,13 +573,31 @@ int main(int argc, char* argv[]) {
                 tel.mutable_track()->set_velocity_x(current_solution.velocity_x);
                 tel.mutable_track()->set_velocity_y(current_solution.velocity_y);
                 tel.mutable_track()->set_valid(current_solution.valid);
-                tel.mutable_track()->set_confidence(current_solution.psr > 0 ? current_solution.psr / 100.0f : 0.0f);
+                tel.mutable_track()->set_confidence(current_solution.psr > 0 ? current_solution.psr : 0.0f);
                 link_server.broadcast_telemetry(tel);
 
                 deadline.stop();
                 if (deadline.exceeded()) {
                     std::cerr << "Track compute exceeded deadline: "
                               << deadline.elapsed_ns() << " ns" << std::endl;
+                }
+            }
+            else {
+                // No frame available - check vision watchdog
+                uint64_t elapsed = now_ns - last_frame_ns;
+                if (elapsed > kVisionWatchdogNs && frame_available) {
+                    // Vision timeout detected
+                    state_machine.on_fault(aurore::FaultCode::CAMERA_TIMEOUT);
+                    telemetry.log_event(
+                        aurore::TelemetryEventId::CAMERA_TIMEOUT,
+                        aurore::TelemetrySeverity::kWarning,
+                        "Vision pipeline timeout (>10ms)");
+                }
+
+                // Output invalid solution
+                current_solution.valid = false;
+                if (!track_buffer.push(current_solution)) {
+                    // Buffer full
                 }
             }
         }

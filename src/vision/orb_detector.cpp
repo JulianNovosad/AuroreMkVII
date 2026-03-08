@@ -29,8 +29,19 @@ void OrbDetector::add_template(const cv::Mat& bgr) {
     templates_.push_back(std::move(t));  // detect() skips entries with empty descriptors
 }
 
-bool OrbDetector::load_descriptor_file(const std::string& /*path*/) {
-    return false;
+bool OrbDetector::load_descriptor_file(const std::string& path) {
+    cv::FileStorage fs(path, cv::FileStorage::READ);
+    if (!fs.isOpened()) return false;
+
+    Template t;
+    fs["descriptors"] >> t.descriptors;
+    fs["keypoints"] >> t.keypoints;
+    fs.release();
+
+    if (t.descriptors.empty()) return false;
+
+    templates_.push_back(std::move(t));
+    return true;
 }
 
 bool OrbDetector::is_ready() const { return !templates_.empty(); }
@@ -68,8 +79,8 @@ std::optional<Detection> OrbDetector::detect(const cv::Mat& bgr_frame) const {
 
         std::vector<cv::Point2f> src_pts, dst_pts;
         for (auto& m : good) {
-            src_pts.push_back(tmpl.keypoints[m.queryIdx].pt);
-            dst_pts.push_back(frame_kps[m.trainIdx].pt);
+            src_pts.push_back(tmpl.keypoints[static_cast<std::vector<cv::KeyPoint>::size_type>(m.queryIdx)].pt);
+            dst_pts.push_back(frame_kps[static_cast<std::vector<cv::KeyPoint>::size_type>(m.trainIdx)].pt);
         }
         cv::Mat mask;
         // PERF-003: Limit RANSAC iterations to 50 (from default 2000) for faster homography
@@ -86,13 +97,13 @@ std::optional<Detection> OrbDetector::detect(const cv::Mat& bgr_frame) const {
             int n = 0;
             for (int i = 0; i < mask.rows; ++i) {
                 if (mask.at<uint8_t>(i)) {
-                    cx += dst_pts[i].x;
-                    cy += dst_pts[i].y;
+                    cx += dst_pts[static_cast<std::vector<cv::Point_<float> >::size_type>(i)].x;
+                    cy += dst_pts[static_cast<std::vector<cv::Point_<float> >::size_type>(i)].y;
                     ++n;
                 }
             }
             if (n > 0) {
-                cx /= n; cy /= n;
+                cx /= static_cast<float>(n); cy /= static_cast<float>(n);
                 best.confidence = conf;
                 best.bbox = {static_cast<int>(cx - 25), static_cast<int>(cy - 25), 50, 50};
             }
