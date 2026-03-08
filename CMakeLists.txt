@@ -480,6 +480,17 @@ if(AURORE_ENABLE_TESTS)
     set_tests_properties(TelemetryWriterTest PROPERTIES TIMEOUT 30)
 endif()
 
+if(AURORE_ENABLE_TESTS)
+    add_executable(interlock_controller_test
+        tests/unit/interlock_controller_test.cpp
+        src/safety/interlock_controller.cpp
+    )
+    target_include_directories(interlock_controller_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(interlock_controller_test PRIVATE Threads::Threads rt)
+    add_test(NAME InterlockControllerTest COMMAND interlock_controller_test)
+    set_tests_properties(InterlockControllerTest PROPERTIES TIMEOUT 15)
+endif()
+
 # ============================================================================
 # Integration Tests
 # ============================================================================

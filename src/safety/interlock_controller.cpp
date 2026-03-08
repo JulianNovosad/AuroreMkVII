@@ -251,12 +251,14 @@ int InterlockController::read_input_debounced() noexcept {
 }
 
 void InterlockController::update_inhibit_output() noexcept {
+    if (!impl_ || !impl_->gpio_map) return;
     const InterlockState state = state_.load(std::memory_order_acquire);
     const bool inhibit = (state != InterlockState::CLOSED);
     set_inhibit(inhibit);
 }
 
 void InterlockController::update_status_led() noexcept {
+    if (!impl_ || !impl_->gpio_map) return;
     const InterlockState state = state_.load(std::memory_order_acquire);
     
     // LED patterns:
