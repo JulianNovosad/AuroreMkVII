@@ -43,30 +43,30 @@ fi
 
 # Create remote directory
 echo "Creating remote directory..."
-ssh "$RPI_TARGET" "mkdir -p $RPI_APP_DIR"
+ssh -o StrictHostKeyChecking=accept-new "$RPI_TARGET" "mkdir -p $RPI_APP_DIR"
 
 # Deploy binaries
 echo "Deploying binaries..."
-scp "$BUILD_DIR/aurore" "$RPI_TARGET:$RPI_APP_DIR/"
-scp "$BUILD_DIR/config/"*.json* "$RPI_TARGET:$RPI_APP_DIR/" 2>/dev/null || true
+scp -o StrictHostKeyChecking=accept-new "$BUILD_DIR/aurore" "$RPI_TARGET:$RPI_APP_DIR/"
+scp -o StrictHostKeyChecking=accept-new "$BUILD_DIR/config/"*.json* "$RPI_TARGET:$RPI_APP_DIR/" 2>/dev/null || true
 
 # Deploy scripts
 echo "Deploying helper scripts..."
-ssh "$RPI_TARGET" "mkdir -p $RPI_APP_DIR/scripts"
-scp "$SCRIPT_DIR/jitter_monitor.sh" "$RPI_TARGET:$RPI_APP_DIR/scripts/" 2>/dev/null || true
-scp "$SCRIPT_DIR/wcet_analysis.sh" "$RPI_TARGET:$RPI_APP_DIR/scripts/" 2>/dev/null || true
+ssh -o StrictHostKeyChecking=accept-new "$RPI_TARGET" "mkdir -p $RPI_APP_DIR/scripts"
+scp -o StrictHostKeyChecking=accept-new "$SCRIPT_DIR/jitter_monitor.sh" "$RPI_TARGET:$RPI_APP_DIR/scripts/" 2>/dev/null || true
+scp -o StrictHostKeyChecking=accept-new "$SCRIPT_DIR/wcet_analysis.sh" "$RPI_TARGET:$RPI_APP_DIR/scripts/" 2>/dev/null || true
 
 # Set permissions
 echo "Setting permissions..."
-ssh "$RPI_TARGET" "chmod +x $RPI_APP_DIR/aurore"
-ssh "$RPI_TARGET" "chmod +x $RPI_APP_DIR/scripts/"*.sh 2>/dev/null || true
+ssh -o StrictHostKeyChecking=accept-new "$RPI_TARGET" "chmod +x $RPI_APP_DIR/aurore"
+ssh -o StrictHostKeyChecking=accept-new "$RPI_TARGET" "chmod +x $RPI_APP_DIR/scripts/"*.sh 2>/dev/null || true
 
 # Verify deployment
 echo ""
 echo "=== Verifying Deployment ==="
-ssh "$RPI_TARGET" "ls -la $RPI_APP_DIR"
+ssh -o StrictHostKeyChecking=accept-new "$RPI_TARGET" "ls -la $RPI_APP_DIR"
 echo ""
-ssh "$RPI_TARGET" "file $RPI_APP_DIR/aurore"
+ssh -o StrictHostKeyChecking=accept-new "$RPI_TARGET" "file $RPI_APP_DIR/aurore"
 echo ""
 
 # Instructions

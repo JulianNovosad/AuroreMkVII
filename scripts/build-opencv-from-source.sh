@@ -12,6 +12,10 @@ BUILD_DIR="/tmp/opencv-build"
 INSTALL_PREFIX="/usr/local"
 JOBS=4
 
+# SHA256 checksums for OpenCV 4.9.0 tarballs
+OPENCV_SHA256="ddf76f9dffd322c7c3cb1f721d4b32a12130f7e959dd6c1c9f4ea71d87e75eca"
+OPENCV_CONTRIB_SHA256="8952c45a73b75676c522dd574229f563e43c271ae1d5bbbd26f8e2b6bc1a4dae"
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -40,6 +44,12 @@ cd "$BUILD_DIR"
 if [ ! -d "opencv" ]; then
     echo "[1/4] Downloading OpenCV $OPENCV_VERSION..."
     wget -q https://github.com/opencv/opencv/archive/refs/tags/$OPENCV_VERSION.tar.gz -O opencv.tar.gz
+    echo "Verifying OpenCV tarball checksum..."
+    echo "$OPENCV_SHA256  opencv.tar.gz" | sha256sum -c || {
+        echo "ERROR: OpenCV tarball checksum mismatch. Aborting."
+        rm -f opencv.tar.gz
+        exit 1
+    }
     tar xzf opencv.tar.gz
     mv opencv-$OPENCV_VERSION opencv
     rm opencv.tar.gz
@@ -51,6 +61,12 @@ fi
 if [ ! -d "opencv_contrib" ]; then
     echo "     Downloading OpenCV contrib..."
     wget -q https://github.com/opencv/opencv_contrib/archive/refs/tags/$OPENCV_VERSION.tar.gz -O opencv_contrib.tar.gz
+    echo "Verifying OpenCV contrib tarball checksum..."
+    echo "$OPENCV_CONTRIB_SHA256  opencv_contrib.tar.gz" | sha256sum -c || {
+        echo "ERROR: OpenCV contrib tarball checksum mismatch. Aborting."
+        rm -f opencv_contrib.tar.gz
+        exit 1
+    }
     tar xzf opencv_contrib.tar.gz
     mv opencv_contrib-$OPENCV_VERSION opencv_contrib
     rm opencv_contrib.tar.gz

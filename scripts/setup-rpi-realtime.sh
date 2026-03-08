@@ -36,6 +36,8 @@ if [ ! -f "$CMDLINE_FILE" ]; then
 fi
 
 if [ -f "$CMDLINE_FILE" ]; then
+    cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.bak
+    echo "Backed up cmdline.txt to cmdline.txt.bak"
     # Remove any existing isolcpus settings
     sed -i 's/isolcpus=[0-9,-]*//g' "$CMDLINE_FILE"
     sed -i 's/nohz_full=[0-9,-]*//g' "$CMDLINE_FILE"
