@@ -1,0 +1,18 @@
+---
+# Clang-format configuration for Aurore MkVII
+# Based on Google style with project-specific overrides.
+# Run: cmake --build build-native --target format
+
+BasedOnStyle: Google
+IndentWidth: 4
+ColumnLimit: 100
+BreakBeforeBraces: Attach
+
+# Keep Google defaults for everything not explicitly overridden above.
+# Notable effective settings from Google base:
+#   AccessModifierOffset: -1 (relative to class indent)
+#   AlignAfterOpenBracket: Align
+#   AllowShortFunctionsOnASingleLine: All
+#   DerivePointerAlignment: true
+#   SortIncludes: true
+#   Standard: Auto

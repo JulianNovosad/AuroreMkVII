@@ -17,6 +17,7 @@
 #pragma once
 
 #include "aurore/telemetry_types.hpp"
+#include <type_traits>
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -27,6 +28,10 @@
 #include <thread>
 
 namespace aurore {
+
+// CsvLogEntry is queued and copied between threads — it must remain trivially copyable.
+static_assert(std::is_trivially_copyable<CsvLogEntry>::value,
+              "CsvLogEntry must be trivially copyable for safe async queue transfer");
 
 // SEC-010: Backpressure policy options
 enum class BackpressurePolicy : uint8_t {

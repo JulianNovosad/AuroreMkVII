@@ -259,6 +259,11 @@ struct SafetyMonitorConfig {
 
 /**
  * @brief Safety monitor callback types
+ *
+ * IMPORTANT: All callbacks registered with SafetyMonitor MUST be noexcept and
+ * lock-free. They are invoked from real-time threads (SCHED_FIFO) and from the
+ * watchdog thread. Any blocking operation (mutex, heap allocation, I/O) inside
+ * a callback risks priority inversion and missed deadlines.
  */
 using SafetyActionCallback = void(*)(SafetyFaultCode code, const char* reason, void* user_data);
 using LogCallback = void(*)(const SafetyEvent& event, void* user_data);
@@ -663,7 +668,7 @@ public:
      *
      * @return true if system is safe, false if fault detected
      */
-    bool run_cycle() noexcept {
+    [[nodiscard]] bool run_cycle() noexcept {
         if (!running_.load(std::memory_order_acquire)) {
             return true;
         }

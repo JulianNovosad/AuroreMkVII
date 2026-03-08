@@ -326,6 +326,9 @@ else()
         src/main.cpp
 
         # Drivers (real hardware)
+        # NOTE: src/drivers/fusion_hat_i2c.cpp is intentionally NOT compiled.
+        #   It is a legacy I2C driver with a different API from the active
+        #   fusion_hat.cpp (sysfs-based). It is retained for reference only.
         src/drivers/camera_wrapper.cpp
         src/drivers/fusion_hat.cpp
 

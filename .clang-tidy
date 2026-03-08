@@ -1,0 +1,30 @@
+---
+# Clang-tidy configuration for Aurore MkVII
+# Applies to: include/aurore/**  (see HeaderFilterRegex)
+# Checks enabled: modernize-*, readability-*, performance-*, cppcoreguidelines-*
+# Note: modernize-use-trailing-return-type is disabled — conflicts with project style.
+
+Checks: >
+  modernize-*,
+  readability-*,
+  performance-*,
+  cppcoreguidelines-*,
+  -modernize-use-trailing-return-type
+
+HeaderFilterRegex: 'include/aurore/.*'
+
+WarningsAsErrors: ''
+
+CheckOptions:
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstantPrefix
+    value: k
+  - key: readability-identifier-naming.EnumConstantPrefix
+    value: k
+  - key: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor
+    value: true
