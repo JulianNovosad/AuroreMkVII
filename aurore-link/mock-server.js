@@ -88,8 +88,9 @@ const state = {
   frame_count: 12847,
   // Track blob wanders in a Lissajous pattern
   track_t: 0,
-  // Gimbal drifts slowly
-  gimbal_t: 0,
+  // Gimbal position (absolute, accumulated from freecam commands)
+  gimbalYaw: 12.4,
+  gimbalPitch: -3.2,
   // p_hit oscillates
   phit_t: 0,
   // Health
@@ -103,7 +104,6 @@ const state = {
 
 function buildTelemetry() {
   state.track_t += 0.012;
-  state.gimbal_t += 0.004;
   state.phit_t   += 0.021;
   state.frame_count += Math.round(120 * TELEMETRY_INTERVAL_MS / 1000);
 
@@ -111,9 +111,9 @@ function buildTelemetry() {
   const cx = CANVAS_W / 2 + Math.sin(state.track_t * 1.3) * 300;
   const cy = CANVAS_H / 2 + Math.sin(state.track_t * 0.9) * 180;
 
-  // Gimbal drifts
-  const yaw   = 12.4 + Math.sin(state.gimbal_t) * 5.0;
-  const pitch = -3.2 + Math.cos(state.gimbal_t * 0.7) * 2.0;
+  // Gimbal uses accumulated position (not drifting sine wave)
+  const yaw   = state.gimbalYaw;
+  const pitch = state.gimbalPitch;
 
   // p_hit oscillates between 0.55 and 0.95
   const p_hit = 0.75 + Math.sin(state.phit_t) * 0.2;
@@ -327,17 +327,16 @@ wss.on('connection', (ws, req) => {
       case 'freecam': {
         const az = cmd.az;
         const el = cmd.el;
-        if (
-          typeof az !== 'number' || !isFinite(az) ||
-          typeof el !== 'number' || !isFinite(el) ||
-          az < -180 || az > 180 ||
-          el < -90  || el > 90
-        ) {
-          console.warn(`[CMD] freecam validation failed: az=${az} el=${el} — discarding`);
-          break;
-        }
-        console.log(`[CMD] freecam az=${az.toFixed(2)} el=${el.toFixed(2)}`);
-        state.gimbal_t = az * 0.05;
+        // Set absolute position (frontend already accumulated)
+        state.gimbalYaw = az;
+        state.gimbalPitch = el;
+
+        // Clamp to valid ranges (MUST match C++: src/actuation/gimbal_controller.hpp)
+        // Yaw: -90 to 90, Pitch: -10 to 45
+        state.gimbalYaw = Math.max(-90, Math.min(90, state.gimbalYaw));
+        state.gimbalPitch = Math.max(-10, Math.min(45, state.gimbalPitch));
+
+        console.log(`[CMD] freecam az=${az.toFixed(2)} el=${el.toFixed(2)} → yaw=${state.gimbalYaw.toFixed(2)} pitch=${state.gimbalPitch.toFixed(2)}`);
         break;
       }
 

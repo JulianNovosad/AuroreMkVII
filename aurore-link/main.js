@@ -43,12 +43,20 @@ const bracketBR  = document.querySelector('.bracket-br');
 // ---------------------------------------------------------------------------
 const keyState = {};
 const keyTimers = {};
-const keyTapCount = {};
-const TAP_WINDOW_MS = 500;
-const HOLD_INTERVAL_MS = 100; // 10Hz command rate
-const TAP_DELTA = 3;      // Single tap: 3°
+const TAP_WINDOW_MS = 200;  // Double tap window for snappy response
+const TAP_DELTA = 3;        // Single tap: 3°
 const DOUBLE_TAP_DELTA = 15; // Double tap: 15°
-const HOLD_DELTA = 3;     // Hold: 3° per 100ms (30°/sec)
+const HOLD_DELTA = 0.5;     // Hold: 0.5° per 100ms (5°/sec for fine control)
+
+// Accumulated gimbal position (matches C++ gimbal controller)
+let accumulatedYaw = 0;
+let accumulatedPitch = 0;
+
+// Gimbal limits (MUST match C++: src/actuation/gimbal_controller.hpp)
+const GIMBAL_YAW_MIN = -90;
+const GIMBAL_YAW_MAX = 90;
+const GIMBAL_PITCH_MIN = -10;
+const GIMBAL_PITCH_MAX = 45;
 
 let holdInterval = null;
 
@@ -177,16 +185,15 @@ function updateGimbalPipper(gimbal) {
   const H = canvas.height;
   const cx = W / 2;
   const cy = H / 2;
-  
-  // Approximate FOV scaling: assume ~40° horizontal FOV
-  // 1 degree ≈ W/40 pixels
-  const degScaleX = W / 40;
-  const degScaleY = H / 25;
-  
+
+  // RPI Cam Module 3: 66° horizontal FOV, 41° vertical FOV
+  const degScaleX = W / 66;  // pixels per degree horizontal
+  const degScaleY = H / 41;  // pixels per degree vertical
+
   // Gimbal yaw moves horizontally, pitch moves vertically
   const px = cx + gimbal.yaw * degScaleX;
   const py = cy - gimbal.pitch * degScaleY; // pitch up = negative y
-  
+
   // Position pipper (40×40 SVG, center at 20,20)
   pipperLead.style.left = (px - 20) + 'px';
   pipperLead.style.top  = (py - 20) + 'px';
@@ -248,6 +255,7 @@ function updateHUD(s) {
   phitEl.textContent = 'PHIT ' + pct;
   
   // Mode indicator
+  currentMode = s.mode; // Sync with server state
   const modeActive = s.mode === 'AUTO' ? '[X]' : '[ ]';
   modeIndEl.textContent = modeActive + ' AUTO';
   
@@ -477,6 +485,7 @@ function showNotification(message, duration = 4000) {
 // Mode switching
 function switchMode(newMode) {
   if (newMode === 'AUTO' || newMode === 'FREECAM') {
+    currentMode = newMode; // Update local state immediately
     sendCmd({ type: 'mode_switch', mode: newMode });
     showNotification(`MODE: ${newMode} — ${newMode === 'AUTO' ? 'Click to target' : 'WASD to slew, R to center, +/-/wheel zoom'}`);
   }
@@ -484,9 +493,16 @@ function switchMode(newMode) {
 
 // Gimbal control command
 function sendGimbalCommand(azDelta, elDelta) {
-  // Get current gimbal position and apply delta
-  // For now, send absolute position based on accumulated deltas
-  sendCmd({ type: 'freecam', az: azDelta, el: elDelta });
+  // Accumulate deltas for absolute position
+  accumulatedYaw += azDelta;
+  accumulatedPitch += elDelta;
+  
+  // Clamp to gimbal limits (MUST match C++: src/actuation/gimbal_controller.hpp)
+  accumulatedYaw = Math.max(GIMBAL_YAW_MIN, Math.min(GIMBAL_YAW_MAX, accumulatedYaw));
+  accumulatedPitch = Math.max(GIMBAL_PITCH_MIN, Math.min(GIMBAL_PITCH_MAX, accumulatedPitch));
+  
+  // Send absolute position command
+  sendCmd({ type: 'freecam', az: accumulatedYaw, el: accumulatedPitch });
 }
 
 // Key event handlers
@@ -496,25 +512,26 @@ function handleWASDKey(key, isPressed) {
   const now = Date.now();
   
   if (isPressed) {
+    // Stop any existing hold interval first
+    stopHoldSlew();
+    
     keyState[key] = true;
     const lastTap = keyTimers[key];
-    const tapCount = keyTapCount[key] || 0;
     
     if (lastTap && (now - lastTap < TAP_WINDOW_MS)) {
-      // Double tap detected
-      keyTapCount[key] = 0;
-      const delta = DOUBLE_TAP_DELTA;
-      applyGimbalDelta(key, delta);
-      showNotification(`${key}: +${delta}°`);
+      // Double tap detected (within 500ms)
+      keyTimers[key] = 0;
+      applyGimbalDelta(key, DOUBLE_TAP_DELTA);
+      showNotification(`${key}: +${DOUBLE_TAP_DELTA}°`);
     } else {
       // Single tap detected
-      keyTapCount[key] = 1;
       keyTimers[key] = now;
+      applyGimbalDelta(key, TAP_DELTA);
+      showNotification(`${key}: +${TAP_DELTA}°`);
       
-      // Start hold timer
+      // Start hold slew after tap window if still pressing
       setTimeout(() => {
-        if (keyState[key] && keyTapCount[key] === 1) {
-          // Still holding after tap window - start continuous slew
+        if (keyState[key] && keyTimers[key] === now) {
           startHoldSlew(key);
         }
       }, TAP_WINDOW_MS);
@@ -612,6 +629,20 @@ window.addEventListener('keydown', (e) => {
       break;
     case 'KeyR':
       if (currentMode === 'FREECAM') {
+        // Stop all movement first
+        stopHoldSlew();
+        // Reset all key states
+        keyState['KeyW'] = false;
+        keyState['KeyA'] = false;
+        keyState['KeyS'] = false;
+        keyState['KeyD'] = false;
+        keyTimers['KeyW'] = 0;
+        keyTimers['KeyA'] = 0;
+        keyTimers['KeyS'] = 0;
+        keyTimers['KeyD'] = 0;
+        // Reset accumulated position to center
+        accumulatedYaw = 0;
+        accumulatedPitch = 0;
         sendCmd({ type: 'freecam', az: 0, el: 0 });
         showNotification('GIMBAL: CENTERED (0°, 0°)');
       }
