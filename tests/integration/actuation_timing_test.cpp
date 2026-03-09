@@ -488,7 +488,7 @@ class ThreadSyncTestFixture {
             timing.wait();
 
             // Pop from frame buffer
-            uint32_t frame_id;
+            uint32_t frame_id = 0;
             if (!frame_buffer_.pop(frame_id)) {
                 sync_errors_.fetch_add(1, std::memory_order_relaxed);
             }
@@ -512,7 +512,7 @@ class ThreadSyncTestFixture {
             timing.wait();
 
             // Pop from track buffer
-            uint32_t frame_id;
+            uint32_t frame_id = 0;
             if (!track_buffer_.pop(frame_id)) {
                 sync_errors_.fetch_add(1, std::memory_order_relaxed);
             }

@@ -88,12 +88,11 @@ void test_broadcast_delivers_data() {
 
     // Verify we received binary data (at least one 64-byte message)
     assert(n >= 64);  // Minimum: one complete binary message
-    
+
     // Check sync word (0xA7070007 in little-endian)
-    const uint32_t sync_word = *reinterpret_cast<const uint32_t*>(buf);
-    assert(sync_word == 0xA7070007);
-    
-    std::cout << "PASS: HUD broadcast delivers binary messages (received " 
+    assert(*reinterpret_cast<const uint32_t*>(buf) == 0xA7070007);
+
+    std::cout << "PASS: HUD broadcast delivers binary messages (received "
               << n << " bytes)\n";
 }
 
