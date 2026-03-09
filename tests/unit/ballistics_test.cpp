@@ -2,8 +2,177 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <nlohmann/json.hpp>
 
 using namespace aurore;
+
+void test_profile_validation_valid() {
+    BallisticProfile profile;
+    profile.name = "Test";
+    profile.muzzle_velocity_m_s = 900.f;
+    profile.ballistic_coefficient = 0.3f;
+    profile.sight_height_mm = 50.f;
+    profile.zero_range_m = 100.f;
+    
+    assert(profile.validate());
+    std::cout << "PASS: Valid profile passes validation\n";
+}
+
+void test_profile_validation_invalid_velocity() {
+    BallisticProfile profile;
+    profile.muzzle_velocity_m_s = 30.f;  // Too low (< 50 m/s)
+    assert(!profile.validate());
+    
+    profile.muzzle_velocity_m_s = 1600.f;  // Too high (> 1500 m/s)
+    assert(!profile.validate());
+    std::cout << "PASS: Invalid velocity rejected\n";
+}
+
+void test_profile_validation_invalid_bc() {
+    BallisticProfile profile;
+    profile.ballistic_coefficient = 0.01f;  // Too low
+    assert(!profile.validate());
+    
+    profile.ballistic_coefficient = 2.0f;  // Too high
+    assert(!profile.validate());
+    std::cout << "PASS: Invalid ballistic coefficient rejected\n";
+}
+
+void test_profile_load_from_json() {
+    nlohmann::json config = nlohmann::json::parse(R"({
+        "ballistics": {
+            "profiles": [
+                {
+                    "name": "Default",
+                    "muzzle_velocity_mps": 900.0,
+                    "ballistic_coefficient": 0.300,
+                    "sight_height_mm": 50.0,
+                    "zero_range_m": 100.0
+                },
+                {
+                    "name": "Subsonic",
+                    "muzzle_velocity_mps": 300.0,
+                    "ballistic_coefficient": 0.450,
+                    "sight_height_mm": 45.0,
+                    "zero_range_m": 50.0
+                }
+            ]
+        }
+    })");
+
+    BallisticSolver solver;
+    [[maybe_unused]] bool result = solver.loadProfiles(config);
+    assert(result);
+
+    auto profiles = solver.getAvailableProfiles();
+    assert(profiles.size() == 2);
+    assert(profiles[0].name == "Default");
+    assert(profiles[0].muzzle_velocity_m_s == 900.f);
+    assert(profiles[1].name == "Subsonic");
+    assert(profiles[1].muzzle_velocity_m_s == 300.f);
+
+    [[maybe_unused]] auto active = solver.getActiveProfile();
+    assert(active != nullptr);
+    assert(active->name == "Default");
+
+    std::cout << "PASS: Profile load from JSON\n";
+}
+
+void test_profile_set_active() {
+    nlohmann::json config = nlohmann::json::parse(R"({
+        "ballistics": {
+            "profiles": [
+                {
+                    "name": "Profile1",
+                    "muzzle_velocity_mps": 800.0,
+                    "ballistic_coefficient": 0.300,
+                    "sight_height_mm": 50.0,
+                    "zero_range_m": 100.0
+                },
+                {
+                    "name": "Profile2",
+                    "muzzle_velocity_mps": 950.0,
+                    "ballistic_coefficient": 0.350,
+                    "sight_height_mm": 55.0,
+                    "zero_range_m": 150.0
+                }
+            ]
+        }
+    })");
+
+    BallisticSolver solver;
+    solver.loadProfiles(config);
+
+    // Switch to Profile2
+    [[maybe_unused]] bool result = solver.setActiveProfile("Profile2");
+    assert(result);
+
+    [[maybe_unused]] auto active = solver.getActiveProfile();
+    assert(active != nullptr);
+    assert(active->name == "Profile2");
+    assert(active->muzzle_velocity_m_s == 950.f);
+
+    // Try to switch to non-existent profile
+    result = solver.setActiveProfile("NonExistent");
+    assert(!result);
+
+    // Active profile should remain unchanged
+    active = solver.getActiveProfile();
+    assert(active->name == "Profile2");
+
+    std::cout << "PASS: Set active profile\n";
+}
+
+void test_profile_load_invalid_skipped() {
+    nlohmann::json config = nlohmann::json::parse(R"({
+        "ballistics": {
+            "profiles": [
+                {
+                    "name": "Valid",
+                    "muzzle_velocity_mps": 900.0,
+                    "ballistic_coefficient": 0.300,
+                    "sight_height_mm": 50.0,
+                    "zero_range_m": 100.0
+                },
+                {
+                    "name": "Invalid",
+                    "muzzle_velocity_mps": 10.0,
+                    "ballistic_coefficient": 0.300,
+                    "sight_height_mm": 50.0,
+                    "zero_range_m": 100.0
+                }
+            ]
+        }
+    })");
+
+    BallisticSolver solver;
+    [[maybe_unused]] bool result = solver.loadProfiles(config);
+    assert(result);
+
+    auto profiles = solver.getAvailableProfiles();
+    assert(profiles.size() == 1);  // Invalid profile should be skipped
+    assert(profiles[0].name == "Valid");
+
+    std::cout << "PASS: Invalid profiles skipped\n";
+}
+
+void test_profile_load_default_fallback() {
+    nlohmann::json config = nlohmann::json::object();  // No ballistics section
+
+    BallisticSolver solver;
+    [[maybe_unused]] bool result = solver.loadProfiles(config);
+    assert(result);
+
+    auto profiles = solver.getAvailableProfiles();
+    assert(profiles.size() == 1);
+    assert(profiles[0].name == "Default");
+
+    [[maybe_unused]] auto active = solver.getActiveProfile();
+    assert(active != nullptr);
+    assert(active->name == "Default");
+
+    std::cout << "PASS: Default profile fallback\n";
+}
 
 void test_kinetic_mode_tof_formula() {
     BallisticSolver solver;
@@ -176,6 +345,16 @@ void test_g1_drag_drop() {
 }
 
 int main() {
+    // Ballistic profile tests (AM7-L2-BALL-002)
+    test_profile_validation_valid();
+    test_profile_validation_invalid_velocity();
+    test_profile_validation_invalid_bc();
+    test_profile_load_from_json();
+    test_profile_set_active();
+    test_profile_load_invalid_skipped();
+    test_profile_load_default_fallback();
+    
+    // Original ballistics tests
     test_kinetic_mode_tof_formula();
     test_drop_mode_requires_valid_arc();
     test_drop_mode_impossible_geometry();

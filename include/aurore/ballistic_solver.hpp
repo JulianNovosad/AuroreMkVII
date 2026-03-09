@@ -4,19 +4,63 @@
 #include <optional>
 #include <array>
 #include <atomic>
+#include <string>
+#include <vector>
+#include <memory>
+#include <nlohmann/json.hpp>
 #include "aurore/state_machine.hpp"
 
 namespace aurore {
 
 enum class EngagementMode : uint8_t { KINETIC = 0, DROP = 1 };
 
+/**
+ * @brief Ballistic profile per AM7-L2-BALL-002
+ *
+ * Stores projectile-specific parameters for fire control solutions.
+ * Multiple profiles can be loaded from config.json and selected at runtime.
+ */
+struct BallisticProfile {
+    std::string name{};                    ///< Human-readable profile name
+    float muzzle_velocity_m_s{900.0f};     ///< Muzzle velocity in m/s
+    float ballistic_coefficient{0.300f};   ///< Ballistic coefficient (G1 model)
+    float sight_height_mm{50.0f};          ///< Sight height above bore in mm
+    float zero_range_m{100.0f};            ///< Zero range in meters
+
+    /**
+     * @brief Validate profile parameters
+     * @return true if all parameters are within valid ranges
+     */
+    bool validate() const noexcept {
+        // Muzzle velocity: 50-1500 m/s (covers most small arms)
+        if (muzzle_velocity_m_s < 50.f || muzzle_velocity_m_s > 1500.f) {
+            return false;
+        }
+        // Ballistic coefficient: 0.05-1.5 (typical range for G1 model)
+        if (ballistic_coefficient < 0.05f || ballistic_coefficient > 1.5f) {
+            return false;
+        }
+        // Sight height: 0-200mm (reasonable for optics/sights)
+        if (sight_height_mm < 0.f || sight_height_mm > 200.f) {
+            return false;
+        }
+        // Zero range: 10-1000m (practical engagement ranges)
+        if (zero_range_m < 10.f || zero_range_m > 1000.f) {
+            return false;
+        }
+        return true;
+    }
+};
+
 struct KineticSolution {
     float el_lead_deg{0.f};
+    float az_lead_deg{0.f};  // Lead angle for moving targets
     float tof_s{0.f};
 };
 
 struct DropSolution {
     float el_lead_deg{0.f};
+    float az_lead_deg{0.f};  // Lead angle for moving targets
     float launch_v_m_s{0.f};
     float tof_s{0.f};
 };
@@ -65,18 +109,27 @@ public:
     // PERF-005: Initialize lookup table (call once at startup)
     void initialize_lookup_table();
 
+    // AM7-L2-BALL-002: Ballistic profile management
+    bool loadProfiles(const nlohmann::json& config);
+    bool setActiveProfile(const std::string& name);
+    const BallisticProfile* getActiveProfile() const;
+    std::vector<BallisticProfile> getAvailableProfiles() const;
+
     EngagementMode select_mode(float range_m, float gimbal_el_deg, float target_aspect) const;
 
     std::optional<KineticSolution> solve_kinetic(float range_m,
                                                   float height_offset_m,
-                                                  float muzzle_velocity_m_s) const;
+                                                  float muzzle_velocity_m_s,
+                                                  float target_velocity_m_s = 0.f) const;
 
-    std::optional<DropSolution> solve_drop(float range_m, float height_m) const;
+    std::optional<DropSolution> solve_drop(float range_m, float height_m,
+                                           float target_velocity_m_s = 0.f) const;
 
     std::optional<FireControlSolution> solve(float range_m,
                                              float gimbal_el_deg,
                                              float target_aspect,
-                                             float muzzle_velocity_m_s) const;
+                                             float muzzle_velocity_m_s,
+                                             float target_velocity_m_s = 0.f) const;
 
     // PERF-005: Fast lookup table based p_hit calculation
     float get_p_hit_from_table(float range_m, float velocity_m_s, bool kinetic_mode) const;
@@ -108,6 +161,10 @@ private:
     std::array<std::array<float, kLookupTableVelocityBins>, kLookupTableRangeBins> p_hit_table_kinetic_;
     std::array<std::array<float, kLookupTableVelocityBins>, kLookupTableRangeBins> p_hit_table_drop_;
     std::atomic<bool> lookup_table_initialized_{false};
+
+    // AM7-L2-BALL-002: Ballistic profile storage
+    std::vector<BallisticProfile> profiles_;
+    int active_profile_idx_{-1};  // -1 indicates no active profile
 
     static constexpr float kGravity           =  9.81f;
     static constexpr float kDefaultDensity    =  1.225f;
