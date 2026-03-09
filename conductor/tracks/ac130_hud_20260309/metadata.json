@@ -1,0 +1,8 @@
+{
+  "track_id": "ac130_hud_20260309",
+  "type": "feature",
+  "status": "in_progress",
+  "created_at": "2026-03-09T00:00:00Z",
+  "updated_at": "2026-03-09T00:00:00Z",
+  "description": "Complete redesign of aurore-link frontend to match AC-130 gunship HUD aesthetics while preserving all existing WebSocket functionality."
+}
