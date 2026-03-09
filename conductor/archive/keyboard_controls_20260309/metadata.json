@@ -1,0 +1,10 @@
+{
+  "track_id": "keyboard_controls_20260309",
+  "type": "feature",
+  "status": "completed",
+  "created_at": "2026-03-09T21:30:00Z",
+  "updated_at": "2026-03-09T22:00:00Z",
+  "description": "Add keyboard controls to aurore-link web frontend for mode switching, gimbal control (WASD with tap/double-tap/hold sensitivity), zoom, and target assignment.",
+  "completed_at": "2026-03-09T22:00:00Z",
+  "commit": "b0aa210fd"
+}
