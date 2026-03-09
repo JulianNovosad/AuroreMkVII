@@ -47,6 +47,7 @@ const TAP_WINDOW_MS = 200;  // Double tap window for snappy response
 const TAP_DELTA = 3;        // Single tap: 3°
 const DOUBLE_TAP_DELTA = 15; // Double tap: 15°
 const HOLD_DELTA = 0.5;     // Hold: 0.5° per 100ms (5°/sec for fine control)
+const HOLD_INTERVAL_MS = 100; // 10Hz command rate for hold slew
 
 // Accumulated gimbal position (matches C++ gimbal controller)
 let accumulatedYaw = 0;

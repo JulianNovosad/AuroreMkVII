@@ -99,7 +99,7 @@ const state = {
   deadline_misses: 0,
   // HUD socket state
   hud_socket_connected: false,
-  use_hud_socket: true,  // Set to false to disable HUD socket and use mock data only
+  use_hud_socket: false,  // Disabled by default - enable only when C++ HUD socket is available
 };
 
 function buildTelemetry() {
