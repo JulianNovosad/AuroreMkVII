@@ -33,7 +33,7 @@ static int tests_passed = 0;
 // test_initial_state_is_unknown
 // ---------------------------------------------------------------------------
 static bool test_initial_state_is_unknown() {
-    InterlockController ic;
+    InterlockController ic(nullptr);
     CHECK(ic.get_state() == InterlockState::UNKNOWN,
           "freshly constructed controller state should be UNKNOWN");
     return true;
@@ -43,7 +43,7 @@ static bool test_initial_state_is_unknown() {
 // test_force_state_changes_state
 // ---------------------------------------------------------------------------
 static bool test_force_state_changes_state() {
-    InterlockController ic;
+    InterlockController ic(nullptr);
 
     ic.force_state(InterlockState::CLOSED);
     CHECK(ic.get_state() == InterlockState::CLOSED,
@@ -60,7 +60,7 @@ static bool test_force_state_changes_state() {
 // test_actuation_allowed_only_when_closed
 // ---------------------------------------------------------------------------
 static bool test_actuation_allowed_only_when_closed() {
-    InterlockController ic;
+    InterlockController ic(nullptr);
 
     ic.force_state(InterlockState::OPEN);
     CHECK(!ic.is_actuation_allowed(),
@@ -81,7 +81,7 @@ static bool test_actuation_allowed_only_when_closed() {
 // test_get_status_reflects_state
 // ---------------------------------------------------------------------------
 static bool test_get_status_reflects_state() {
-    InterlockController ic;
+    InterlockController ic(nullptr);
 
     ic.force_state(InterlockState::CLOSED);
     {
@@ -110,7 +110,7 @@ static bool test_get_status_reflects_state() {
 static bool test_watchdog_feed_increments_counter() {
     InterlockConfig cfg;
     cfg.enable_watchdog = true;
-    InterlockController ic(cfg);
+    InterlockController ic(nullptr, cfg);
 
     const uint64_t before = ic.get_status().watchdog_feeds;
     ic.watchdog_feed();

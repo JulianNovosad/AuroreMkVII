@@ -180,16 +180,120 @@ TEST(test_command_counting) {
 
 TEST(test_servo_status_structure) {
     std::cout << "Running test_servo_status_structure..." << std::endl;
-    
+
     aurore::FusionHat hat;
-    
+
     auto status = hat.get_servo_status(0);
-    
+
     // Verify structure fields exist and have sensible defaults
     ASSERT_EQ(status.channel, 0);
     ASSERT_FALSE(status.enabled);
     ASSERT_FALSE(status.endstop_active);
-    
+
+    std::cout << "  PASS" << std::endl;
+}
+
+TEST(test_i2c_retry_config) {
+    std::cout << "Running test_i2c_retry_config..." << std::endl;
+
+    aurore::FusionHatConfig config;
+
+    // Verify default retry configuration
+    ASSERT_EQ(config.i2c_timeout_ms, 10);
+    ASSERT_EQ(config.max_i2c_retries, 3);
+    ASSERT_EQ(config.error_threshold, 10);
+
+    // Test custom configuration
+    config.i2c_timeout_ms = 20;
+    config.max_i2c_retries = 5;
+    config.error_threshold = 20;
+
+    ASSERT_TRUE(config.validate());
+    ASSERT_EQ(config.i2c_timeout_ms, 20);
+    ASSERT_EQ(config.max_i2c_retries, 5);
+    ASSERT_EQ(config.error_threshold, 20);
+
+    std::cout << "  PASS" << std::endl;
+}
+
+TEST(test_i2c_error_counters) {
+    std::cout << "Running test_i2c_error_counters..." << std::endl;
+
+    aurore::FusionHat hat;
+
+    // Initial counters should be zero
+    ASSERT_EQ(hat.get_error_count(), 0);
+    ASSERT_EQ(hat.get_i2c_timeout_count(), 0);
+    ASSERT_EQ(hat.get_i2c_nack_count(), 0);
+    ASSERT_FALSE(hat.is_error_threshold_exceeded());
+
+    // Test error threshold check with default config (threshold=10)
+    // Note: Without hardware, we can't actually trigger I2C errors through
+    // normal operations, but we can verify the counter accessors work
+
+    std::cout << "  PASS" << std::endl;
+}
+
+TEST(test_i2c_timeout_config_validation) {
+    std::cout << "Running test_i2c_timeout_config_validation..." << std::endl;
+
+    aurore::FusionHatConfig config;
+
+    // Invalid: zero timeout
+    config.i2c_timeout_ms = 0;
+    ASSERT_FALSE(config.validate());
+
+    // Invalid: negative retries
+    config.i2c_timeout_ms = 10;
+    config.max_i2c_retries = -1;
+    ASSERT_FALSE(config.validate());
+
+    // Valid: minimum timeout
+    config.i2c_timeout_ms = 1;
+    config.max_i2c_retries = 0;
+    ASSERT_TRUE(config.validate());
+
+    std::cout << "  PASS" << std::endl;
+}
+
+TEST(test_error_threshold_detection) {
+    std::cout << "Running test_error_threshold_detection..." << std::endl;
+
+    // Create config with low threshold for testing
+    aurore::FusionHatConfig config;
+    config.error_threshold = 5;
+
+    aurore::FusionHat hat(config);
+
+    // Without hardware, error count starts at 0
+    ASSERT_EQ(hat.get_error_count(), 0);
+    ASSERT_FALSE(hat.is_error_threshold_exceeded());
+
+    // Note: In a real hardware test, we would inject I2C faults here
+    // and verify the threshold is detected. For now, we verify the
+    // threshold logic is in place by checking the method exists and
+    // returns the expected result for zero errors.
+
+    std::cout << "  PASS" << std::endl;
+}
+
+TEST(test_reset_error_counters) {
+    std::cout << "Running test_reset_error_counters..." << std::endl;
+
+    aurore::FusionHat hat;
+
+    // Initial state
+    ASSERT_EQ(hat.get_error_count(), 0);
+    ASSERT_EQ(hat.get_i2c_timeout_count(), 0);
+    ASSERT_EQ(hat.get_i2c_nack_count(), 0);
+
+    // Reset should not change anything (already zero)
+    hat.reset_error_counters();
+
+    ASSERT_EQ(hat.get_error_count(), 0);
+    ASSERT_EQ(hat.get_i2c_timeout_count(), 0);
+    ASSERT_EQ(hat.get_i2c_nack_count(), 0);
+
     std::cout << "  PASS" << std::endl;
 }
 
@@ -221,6 +325,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     run_test("test_error_counting", test_error_counting);
     run_test("test_command_counting", test_command_counting);
     run_test("test_servo_status_structure", test_servo_status_structure);
+    run_test("test_i2c_retry_config", test_i2c_retry_config);
+    run_test("test_i2c_error_counters", test_i2c_error_counters);
+    run_test("test_i2c_timeout_config_validation", test_i2c_timeout_config_validation);
+    run_test("test_error_threshold_detection", test_error_threshold_detection);
+    run_test("test_reset_error_counters", test_reset_error_counters);
     
     std::cout << std::endl;
     std::cout << "======================" << std::endl;

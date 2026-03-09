@@ -31,6 +31,7 @@ namespace aurore {
 // Sysfs Helper Functions
 // ============================================================================
 
+// Simple static versions for use in const methods (no retry, no logging)
 bool FusionHat::write_sysfs(const std::string& path, int value) {
     std::ofstream file(path);
     if (!file.is_open()) {
@@ -51,6 +52,153 @@ int FusionHat::read_sysfs(const std::string& path) {
         return -1;
     }
     return value;
+}
+
+// Retry-enabled versions with timeout monitoring and error logging
+bool FusionHat::write_sysfs_with_retry(const std::string& path, int value) {
+    // Apply retry logic with timeout monitoring
+    const uint64_t timeout_ns = config_.i2c_timeout_ms * 1000000ULL;  // Convert ms to ns
+    int attempt = 0;
+
+    while (attempt <= config_.max_i2c_retries) {
+        const uint64_t start_ns = get_timestamp();
+
+        std::ofstream file(path);
+        if (!file.is_open()) {
+            // File open failure - could be temporary
+            const uint64_t elapsed_ns = get_timestamp() - start_ns;
+
+            if (elapsed_ns > timeout_ns) {
+                i2c_timeout_count_.fetch_add(1, std::memory_order_relaxed);
+                error_count_.fetch_add(1, std::memory_order_relaxed);
+                std::cerr << "FusionHat: I2C timeout on write to " << path
+                          << " (elapsed: " << (elapsed_ns / 1000000) << "ms, attempt: "
+                          << (attempt + 1) << "/" << (config_.max_i2c_retries + 1) << ")" << std::endl;
+                return false;
+            }
+
+            attempt++;
+            if (attempt <= config_.max_i2c_retries) {
+                std::cerr << "FusionHat: I2C NACK on write to " << path
+                          << " (attempt: " << attempt << "/" << (config_.max_i2c_retries + 1) << ")" << std::endl;
+                i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
+                continue;  // Retry
+            }
+
+            error_count_.fetch_add(1, std::memory_order_relaxed);
+            return false;
+        }
+
+        file << value;
+        const bool success = file.good();
+        const uint64_t elapsed_ns = get_timestamp() - start_ns;
+
+        if (!success) {
+            if (elapsed_ns > timeout_ns) {
+                i2c_timeout_count_.fetch_add(1, std::memory_order_relaxed);
+                error_count_.fetch_add(1, std::memory_order_relaxed);
+                std::cerr << "FusionHat: I2C timeout on write to " << path
+                          << " (elapsed: " << (elapsed_ns / 1000000) << "ms, attempt: "
+                          << (attempt + 1) << "/" << (config_.max_i2c_retries + 1) << ")" << std::endl;
+                return false;
+            }
+
+            attempt++;
+            if (attempt <= config_.max_i2c_retries) {
+                i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
+                continue;  // Retry
+            }
+
+            error_count_.fetch_add(1, std::memory_order_relaxed);
+            return false;
+        }
+
+        // Check for timeout even on success
+        if (elapsed_ns > timeout_ns) {
+            i2c_timeout_count_.fetch_add(1, std::memory_order_relaxed);
+            error_count_.fetch_add(1, std::memory_order_relaxed);
+            std::cerr << "FusionHat: I2C slow response on write to " << path
+                      << " (elapsed: " << (elapsed_ns / 1000000) << "ms > "
+                      << config_.i2c_timeout_ms << "ms threshold)" << std::endl;
+            return false;
+        }
+
+        return true;  // Success
+    }
+
+    return false;  // All retries exhausted
+}
+
+int FusionHat::read_sysfs_with_retry(const std::string& path) {
+    // Apply retry logic with timeout monitoring
+    const uint64_t timeout_ns = config_.i2c_timeout_ms * 1000000ULL;  // Convert ms to ns
+    int attempt = 0;
+
+    while (attempt <= config_.max_i2c_retries) {
+        const uint64_t start_ns = get_timestamp();
+
+        std::ifstream file(path);
+        if (!file.is_open()) {
+            const uint64_t elapsed_ns = get_timestamp() - start_ns;
+
+            if (elapsed_ns > timeout_ns) {
+                i2c_timeout_count_.fetch_add(1, std::memory_order_relaxed);
+                error_count_.fetch_add(1, std::memory_order_relaxed);
+                std::cerr << "FusionHat: I2C timeout on read from " << path
+                          << " (elapsed: " << (elapsed_ns / 1000000) << "ms, attempt: "
+                          << (attempt + 1) << "/" << (config_.max_i2c_retries + 1) << ")" << std::endl;
+                return -1;
+            }
+
+            attempt++;
+            if (attempt <= config_.max_i2c_retries) {
+                i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
+                continue;  // Retry
+            }
+
+            error_count_.fetch_add(1, std::memory_order_relaxed);
+            return -1;
+        }
+
+        int value;
+        file >> value;
+        const bool success = !file.fail();
+        const uint64_t elapsed_ns = get_timestamp() - start_ns;
+
+        if (!success) {
+            if (elapsed_ns > timeout_ns) {
+                i2c_timeout_count_.fetch_add(1, std::memory_order_relaxed);
+                error_count_.fetch_add(1, std::memory_order_relaxed);
+                std::cerr << "FusionHat: I2C timeout on read from " << path
+                          << " (elapsed: " << (elapsed_ns / 1000000) << "ms, attempt: "
+                          << (attempt + 1) << "/" << (config_.max_i2c_retries + 1) << ")" << std::endl;
+                return -1;
+            }
+
+            attempt++;
+            if (attempt <= config_.max_i2c_retries) {
+                i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
+                continue;  // Retry
+            }
+
+            error_count_.fetch_add(1, std::memory_order_relaxed);
+            return -1;
+        }
+
+        // Check for timeout even on success
+        if (elapsed_ns > timeout_ns) {
+            i2c_timeout_count_.fetch_add(1, std::memory_order_relaxed);
+            error_count_.fetch_add(1, std::memory_order_relaxed);
+            std::cerr << "FusionHat: I2C slow response on read from " << path
+                      << " (elapsed: " << (elapsed_ns / 1000000) << "ms > "
+                      << config_.i2c_timeout_ms << "ms threshold)" << std::endl;
+            return -1;
+        }
+
+        return value;  // Success
+    }
+
+    return -1;  // All retries exhausted
 }
 
 std::string FusionHat::read_sysfs_string(const std::string& path) {
@@ -137,29 +285,29 @@ bool FusionHat::init() {
     // Initialize all PWM channels
     for (int ch = 0; ch < 12; ch++) {
         std::string pwm_path = get_pwm_path(ch);
-        
+
         // Enable PWM channel
-        if (!write_sysfs(pwm_path + "/enable", 1)) {
+        if (!write_sysfs_with_retry(pwm_path + "/enable", 1)) {
             std::cerr << "FusionHat: Failed to enable channel " << ch << std::endl;
-            error_count_.fetch_add(1, std::memory_order_relaxed);
+            // Error already counted by write_sysfs_with_retry
             continue;
         }
-        
+
         // Set period (20000μs = 50Hz)
         int period_us = 1000000 / config_.servo_freq_hz;
-        if (!write_sysfs(pwm_path + "/period", period_us)) {
+        if (!write_sysfs_with_retry(pwm_path + "/period", period_us)) {
             std::cerr << "FusionHat: Failed to set period for channel " << ch << std::endl;
-            error_count_.fetch_add(1, std::memory_order_relaxed);
+            // Error already counted by write_sysfs_with_retry
             continue;
         }
-        
+
         // Set initial duty cycle to 0 (servo off)
-        if (!write_sysfs(pwm_path + "/duty_cycle", 0)) {
+        if (!write_sysfs_with_retry(pwm_path + "/duty_cycle", 0)) {
             std::cerr << "FusionHat: Failed to set duty cycle for channel " << ch << std::endl;
-            error_count_.fetch_add(1, std::memory_order_relaxed);
+            // Error already counted by write_sysfs_with_retry
             continue;
         }
-        
+
         channels_[static_cast<size_t>(ch)].enabled.store(false, std::memory_order_release);
         channels_[static_cast<size_t>(ch)].current_pulse_width.store(1500, std::memory_order_release);  // Center
         channels_[static_cast<size_t>(ch)].current_angle.store(0.0f, std::memory_order_release);
@@ -264,26 +412,26 @@ bool FusionHat::set_servo_pulse_width(int channel, int pulse_width_us) {
     if (!initialized_.load(std::memory_order_acquire)) {
         return false;
     }
-    
+
     if (channel < 0 || channel >= 12) {
         error_count_.fetch_add(1, std::memory_order_relaxed);
         return false;
     }
-    
+
     // Validate pulse width
-    if (pulse_width_us < config_.min_pulse_width_us || 
+    if (pulse_width_us < config_.min_pulse_width_us ||
         pulse_width_us > config_.max_pulse_width_us) {
         error_count_.fetch_add(1, std::memory_order_relaxed);
         return false;
     }
-    
+
     std::string pwm_path = get_pwm_path(channel);
-    
-    if (!write_sysfs(pwm_path + "/duty_cycle", pulse_width_us)) {
-        error_count_.fetch_add(1, std::memory_order_relaxed);
+
+    if (!write_sysfs_with_retry(pwm_path + "/duty_cycle", pulse_width_us)) {
+        // Error already counted by write_sysfs_with_retry
         return false;
     }
-    
+
     command_count_.fetch_add(1, std::memory_order_relaxed);
     return true;
 }
@@ -292,23 +440,23 @@ int FusionHat::get_pulse_width(int channel) const {
     if (channel < 0 || channel >= 12) {
         return -1;
     }
-    
+
     std::string pwm_path = get_pwm_path(channel);
-    return read_sysfs(pwm_path + "/duty_cycle");
+    return read_sysfs(pwm_path + "/duty_cycle");  // Const method - use simple read
 }
 
 bool FusionHat::set_servo_enabled(int channel, bool enable) {
     if (channel < 0 || channel >= 12) {
         return false;
     }
-    
+
     std::string pwm_path = get_pwm_path(channel);
-    
-    if (!write_sysfs(pwm_path + "/enable", enable ? 1 : 0)) {
-        error_count_.fetch_add(1, std::memory_order_relaxed);
+
+    if (!write_sysfs_with_retry(pwm_path + "/enable", enable ? 1 : 0)) {
+        // Error already counted by write_sysfs_with_retry
         return false;
     }
-    
+
     channels_[static_cast<size_t>(channel)].enabled.store(enable, std::memory_order_release);
     return true;
 }
@@ -368,24 +516,24 @@ bool FusionHat::set_pwm_duty_cycle(int channel, int duty_percent) {
     if (channel < 0 || channel >= 12 || duty_percent < 0 || duty_percent > 100) {
         return false;
     }
-    
+
     int period = get_pwm_period(channel);
     if (period <= 0) {
         return false;
     }
-    
+
     int duty_cycle = (period * duty_percent) / 100;
-    return write_sysfs(get_pwm_path(channel) + "/duty_cycle", duty_cycle);
+    return write_sysfs_with_retry(get_pwm_path(channel) + "/duty_cycle", duty_cycle);
 }
 
 int FusionHat::get_pwm_duty_cycle(int channel) const {
     int period = get_pwm_period(channel);
-    int duty_cycle = read_sysfs(get_pwm_path(channel) + "/duty_cycle");
-    
+    int duty_cycle = read_sysfs(get_pwm_path(channel) + "/duty_cycle");  // Const method
+
     if (period <= 0 || duty_cycle < 0) {
         return -1;
     }
-    
+
     return (duty_cycle * 100) / period;
 }
 
@@ -393,15 +541,15 @@ bool FusionHat::set_pwm_period(int channel, int period_us) {
     if (channel < 0 || channel >= 12 || period_us <= 0) {
         return false;
     }
-    
-    return write_sysfs(get_pwm_path(channel) + "/period", period_us);
+
+    return write_sysfs_with_retry(get_pwm_path(channel) + "/period", period_us);
 }
 
 int FusionHat::get_pwm_period(int channel) const {
     if (channel < 0 || channel >= 12) {
         return -1;
     }
-    return read_sysfs(get_pwm_path(channel) + "/period");
+    return read_sysfs(get_pwm_path(channel) + "/period");  // Const method
 }
 
 // ============================================================================
