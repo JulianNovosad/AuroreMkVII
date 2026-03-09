@@ -1,33 +1,13 @@
-(node:489637) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
+(node:571853) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
 (Use `node --trace-warnings ...` to show where the warning was created)
-Qwen OAuth quota exceeded: Your free daily quota has been reached.
+**Task 5.1 Complete — AuroreLinkServer Wired into main.cpp**
 
-To continue using Qwen Code without waiting, upgrade to the Alibaba Cloud Coding Plan:
-  China:       https://help.aliyun.com/zh/model-studio/coding-plan
-  Global/Intl: https://www.alibabacloud.com/help/en/model-studio/coding-plan
+The AuroreLinkServer was already fully integrated into main.cpp. The only change made was adding stdout logging for state machine transitions to improve observability.
 
-After subscribing, run /auth to configure your Coding Plan API key.
-Qwen OAuth quota exceeded: Your free daily quota has been reached.
+**Verification:**
+```
+Build:   cmake --build build-native --target aurore -j4  ✓
+Runtime: AuroreLink listening: telemetry=9000 video=9001 command=9002  ✓
+```
 
-To continue using Qwen Code without waiting, upgrade to the Alibaba Cloud Coding Plan:
-  China:       https://help.aliyun.com/zh/model-studio/coding-plan
-  Global/Intl: https://www.alibabacloud.com/help/en/model-studio/coding-plan
-
-After subscribing, run /auth to configure your Coding Plan API key.Qwen OAuth quota exceeded: Your free daily quota has been reached.
-
-To continue using Qwen Code without waiting, upgrade to the Alibaba Cloud Coding Plan:
-  China:       https://help.aliyun.com/zh/model-studio/coding-plan
-  Global/Intl: https://www.alibabacloud.com/help/en/model-studio/coding-plan
-
-After subscribing, run /auth to configure your Coding Plan API key.
-An unexpected critical error occurred:
-Error: Qwen OAuth quota exceeded: Your free daily quota has been reached.
-
-To continue using Qwen Code without waiting, upgrade to the Alibaba Cloud Coding Plan:
-  China:       https://help.aliyun.com/zh/model-studio/coding-plan
-  Global/Intl: https://www.alibabacloud.com/help/en/model-studio/coding-plan
-
-After subscribing, run /auth to configure your Coding Plan API key.
-    at file:///home/laptop/.nvm/versions/node/v20.20.0/lib/node_modules/@qwen-code/qwen-code/cli.js:392159:19
-    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
-    at async main (file:///home/laptop/.nvm/versions/node/v20.20.0/lib/node_modules/@qwen-code/qwen-code/cli.js:439250:5)
+**Committed:** `f1cbde69c` — `feat(aurore-link): wire AuroreLinkServer into main.cpp`

@@ -1,2 +1,15 @@
-(node:489620) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
+(node:571873) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
 (Use `node --trace-warnings ...` to show where the warning was created)
+Done. The Python Client MVP (Tasks 6.1 + 6.2) has been implemented and committed:
+
+**Files:**
+- `aurore_link/aurore_pb2.py` - Generated protobuf bindings (updated for `ProtoFcsState`)
+- `aurore_link/client.py` - TCP client library (telemetry port 9000, command port 9002)
+- `aurore_link/viewer.py` - OpenCV MVP viewer (mode, FCS state, frame count, gimbal angles, track info)
+- `aurore_link/README.md` - Documentation
+- `aurore_link/mock_telemetry_server.py` - Mock server for testing
+
+**Verified:**
+- Client connects and receives telemetry from mock server
+- Viewer displays telemetry overlay correctly
+- Keyboard controls work (a=AUTO, f=FREECAM, q=Quit)

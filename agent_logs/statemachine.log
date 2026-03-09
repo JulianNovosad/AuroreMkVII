@@ -1,2 +1,26 @@
-(node:489627) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
+(node:571864) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
 (Use `node --trace-warnings ...` to show where the warning was created)
+**Task Complete.**
+
+## Summary
+
+Successfully wired `StateMachine` into the main.cpp pipeline:
+
+### Changes Made:
+1. **`include/aurore/state_machine.hpp`**: Added `on_init_complete()` method declaration for BOOT → IDLE_SAFE transition
+2. **`src/state_machine/state_machine.cpp`**: Implemented `on_init_complete()` to handle hardware initialization complete signal
+3. **`src/main.cpp`**: 
+   - Call `state_machine.on_init_complete()` after hardware initialization
+   - Call `state_machine.request_search()` from track_compute thread to transition IDLE_SAFE → SEARCH
+4. **`include/aurore/security.hpp`**: Fixed compiler warning (pre-existing issue)
+
+### State Machine Integration Points (already implemented):
+- **SEARCH → TRACKING**: `on_detection()` called when ORB detector finds target with confidence ≥ 0.7
+- **TRACKING → SEARCH**: `on_tracker_update()` called when tracker loses lock (`!sol.valid`)
+- **TRACKING → ARMED**: `on_ballistics_solution()` + `on_gimbal_status()` when p_hit ≥ 0.95 and gimbal settled
+- **ARMED → TRACKING**: Timeout (100ms) in `tick()` method
+
+### Verification:
+- Build: ✅ `cmake --build build-native --target aurore -j4` succeeds
+- Tests: ✅ All 18 unit tests pass
+- State transitions: ✅ BOOT → IDLE_SAFE → SEARCH confirmed in dry-run output
