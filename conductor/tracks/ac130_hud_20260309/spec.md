@@ -74,11 +74,13 @@ Redesign the aurore-link frontend to match real AC-130 gunship HUD aesthetics wh
 - Stroke width: 1.5px
 - Position: Tight to target bounding box
 
-#### Ballistic Pipper
+#### Ballistic Pipper (Gimbal Position Indicator)
 - 40×40 offset crosshair
 - Stroke width: 1px
 - No center dot
-- Positioned based on az/el lead mrad
+- **Position shows gimbal pointing location relative to camera center**
+- Driven by gimbal.yaw and gimbal.pitch
+- Visual feedback for where laser is pointing
 
 #### Analog Dial
 - 150px diameter

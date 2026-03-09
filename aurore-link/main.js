@@ -1,17 +1,56 @@
 /**
  * Aurore MkVII — Remote Control Station
- * main.js: WebSocket client, canvas animation, SVG HUD, telemetry panel, controls
+ * AC-130 Military HUD Aesthetic
+ * main.js: WebSocket client, canvas animation, HUD updates
  */
 
 'use strict';
 
 // ---------------------------------------------------------------------------
-// DOM refs
+// DOM refs — Video / Canvas
 // ---------------------------------------------------------------------------
 const canvas  = document.getElementById('video');
 const ctx     = canvas.getContext('2d');
-const hudSvg  = document.getElementById('hud');
-const sidebar = document.getElementById('sidebar');
+
+// ---------------------------------------------------------------------------
+// DOM refs — HUD Overlay Quadrants
+// ---------------------------------------------------------------------------
+const fcsStateEl     = document.getElementById('fcs-state');
+const phitEl         = document.getElementById('phit');
+const modeIndEl      = document.getElementById('mode-ind');
+const timestampEl    = document.getElementById('timestamp');
+const sensorTempEl   = document.getElementById('sensor-temp');
+const sensorGainEl   = document.getElementById('sensor-gain');
+const rangeEl        = document.getElementById('range');
+const trkConfEl      = document.getElementById('trk-conf');
+const altitudeEl     = document.getElementById('altitude');
+const lnkStatusEl    = document.getElementById('lnk-status');
+const gimbalCoordsEl = document.getElementById('gimbal-coords');
+const sensorParamsEl = document.getElementById('sensor-params');
+const gimbalNeedle   = document.getElementById('gimbal-needle');
+
+// ---------------------------------------------------------------------------
+// DOM refs — Reticle / Pipper / Brackets
+// ---------------------------------------------------------------------------
+const pipperLead = document.getElementById('hud-pipper-lead');
+const bracketTL  = document.querySelector('.bracket-tl');
+const bracketTR  = document.querySelector('.bracket-tr');
+const bracketBL  = document.querySelector('.bracket-bl');
+const bracketBR  = document.querySelector('.bracket-br');
+
+// ---------------------------------------------------------------------------
+// Keyboard Controls State
+// ---------------------------------------------------------------------------
+const keyState = {};
+const keyTimers = {};
+const keyTapCount = {};
+const TAP_WINDOW_MS = 500;
+const HOLD_INTERVAL_MS = 100; // 10Hz command rate
+const TAP_DELTA = 3;      // Single tap: 3°
+const DOUBLE_TAP_DELTA = 15; // Double tap: 15°
+const HOLD_DELTA = 3;     // Hold: 3° per 100ms (30°/sec)
+
+let holdInterval = null;
 
 // ---------------------------------------------------------------------------
 // Canvas sizing — match display size for crisp render
@@ -24,9 +63,6 @@ function resizeCanvas() {
   const rect = area.getBoundingClientRect();
   canvas.width  = rect.width;
   canvas.height = rect.height;
-  hudSvg.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
-  hudSvg.setAttribute('width',  rect.width);
-  hudSvg.setAttribute('height', rect.height);
 }
 
 window.addEventListener('resize', resizeCanvas);
@@ -37,7 +73,7 @@ function scaleX(x) { return x * canvas.width  / SCENE_W; }
 function scaleY(y) { return y * canvas.height / SCENE_H; }
 
 // ---------------------------------------------------------------------------
-// Canvas — fake thermal video
+// Canvas — fake thermal video (mock for development)
 // ---------------------------------------------------------------------------
 
 // Simple LCG noise
@@ -75,7 +111,7 @@ function drawThermal(timestamp) {
   }
   ctx.putImageData(imgData, 0, 0);
 
-  // Draw blobs
+  // Draw blobs — crisper, less glow
   blobs.forEach((b, idx) => {
     const t = blobT + b.phase;
     let bx, by;
@@ -89,11 +125,10 @@ function drawThermal(timestamp) {
       by = (b.py + Math.sin(t * b.fy) * b.ay * 0.5) * H;
     }
 
-    const radius = W * 0.04;
+    const radius = W * 0.03; // Smaller radius for crisper look
     const grad = ctx.createRadialGradient(bx, by, 0, bx, by, radius);
-    grad.addColorStop(0,   'rgba(255, 255, 240, 0.95)');
-    grad.addColorStop(0.3, 'rgba(200, 230, 200, 0.6)');
-    grad.addColorStop(0.7, 'rgba(100, 160, 100, 0.2)');
+    grad.addColorStop(0,   'rgba(255, 255, 240, 0.9)');
+    grad.addColorStop(0.4, 'rgba(180, 200, 180, 0.4)');
     grad.addColorStop(1,   'rgba(0, 0, 0, 0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
@@ -109,173 +144,159 @@ function animationLoop(ts) {
 requestAnimationFrame(animationLoop);
 
 // ---------------------------------------------------------------------------
-// SVG HUD — create elements once, update in-place
+// HUD Update Functions
 // ---------------------------------------------------------------------------
 
-function svgEl(tag, attrs) {
-  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
-  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-  return el;
+// Track state for FAULT blink
+let currentFcsState = 'BOOT';
+let faultBlinkState = false;
+
+// FAULT blink — 3s cycle (1.5s on, 1.5s off)
+setInterval(() => {
+  faultBlinkState = !faultBlinkState;
+  if (currentFcsState === 'FAULT') {
+    fcsStateEl.style.opacity = faultBlinkState ? 1.0 : 0.3;
+  } else {
+    fcsStateEl.style.opacity = 1.0;
+  }
+}, 1500);
+
+function updateFcsState(state) {
+  currentFcsState = state;
+  fcsStateEl.textContent = 'SYS: ' + state;
+  // Reset opacity when state changes away from FAULT
+  if (state !== 'FAULT') {
+    fcsStateEl.style.opacity = 1.0;
+  }
 }
 
-// Crosshair
-const chTop    = svgEl('line', { stroke: '#00ff41', 'stroke-width': 1, opacity: 0.7 });
-const chBot    = svgEl('line', { stroke: '#00ff41', 'stroke-width': 1, opacity: 0.7 });
-const chLeft   = svgEl('line', { stroke: '#00ff41', 'stroke-width': 1, opacity: 0.7 });
-const chRight  = svgEl('line', { stroke: '#00ff41', 'stroke-width': 1, opacity: 0.7 });
-const chCenter = svgEl('circle', { r: 3, fill: 'none', stroke: '#00ff41', 'stroke-width': 1, opacity: 0.7 });
-
-// Track box
-const trackBox  = svgEl('rect', { fill: 'none', stroke: '#00ff41', 'stroke-width': 1.5, display: 'none' });
-// Velocity vector
-const velLine   = svgEl('line', { stroke: '#ff9900', 'stroke-width': 1.5, display: 'none' });
-// Confidence ring
-const confRing  = svgEl('circle', { fill: 'none', stroke: '#00aaff', 'stroke-width': 2,
-                                    'stroke-dasharray': '0 999', display: 'none' });
-// Ballistic lead dot
-const leadDot   = svgEl('circle', { r: 5, fill: 'none', stroke: '#ff3333', 'stroke-width': 1.5, display: 'none' });
-const leadLine  = svgEl('line', { stroke: '#ff3333', 'stroke-width': 1, 'stroke-dasharray': '4 3', display: 'none' });
-// P_hit label
-const phitLabel = svgEl('text', { fill: '#ff3333', 'font-size': 11, 'font-family': 'monospace', display: 'none' });
-
-[chTop, chBot, chLeft, chRight, chCenter,
- trackBox, velLine, confRing, leadDot, leadLine, phitLabel].forEach(el => hudSvg.appendChild(el));
-
-function updateHUD(s) {
+function updateGimbalPipper(gimbal) {
+  // Offset crosshair shows gimbal pointing position relative to camera center
+  // Gimbal yaw/pitch in degrees; convert to pixel offset
   const W = canvas.width;
   const H = canvas.height;
   const cx = W / 2;
   const cy = H / 2;
-  const arm = 20;
+  
+  // Approximate FOV scaling: assume ~40° horizontal FOV
+  // 1 degree ≈ W/40 pixels
+  const degScaleX = W / 40;
+  const degScaleY = H / 25;
+  
+  // Gimbal yaw moves horizontally, pitch moves vertically
+  const px = cx + gimbal.yaw * degScaleX;
+  const py = cy - gimbal.pitch * degScaleY; // pitch up = negative y
+  
+  // Position pipper (40×40 SVG, center at 20,20)
+  pipperLead.style.left = (px - 20) + 'px';
+  pipperLead.style.top  = (py - 20) + 'px';
+}
 
-  // Crosshair
-  chTop.setAttribute('x1', cx); chTop.setAttribute('y1', cy - arm - 8);
-  chTop.setAttribute('x2', cx); chTop.setAttribute('y2', cy - 8);
-  chBot.setAttribute('x1', cx); chBot.setAttribute('y1', cy + 8);
-  chBot.setAttribute('x2', cx); chBot.setAttribute('y2', cy + arm + 8);
-  chLeft.setAttribute('x1', cx - arm - 8); chLeft.setAttribute('y1', cy);
-  chLeft.setAttribute('x2', cx - 8);       chLeft.setAttribute('y2', cy);
-  chRight.setAttribute('x1', cx + 8);      chRight.setAttribute('y1', cy);
-  chRight.setAttribute('x2', cx + arm + 8); chRight.setAttribute('y2', cy);
-  chCenter.setAttribute('cx', cx); chCenter.setAttribute('cy', cy);
+function updateTrackBrackets(track) {
+  if (!track || !track.valid) {
+    // Hide all brackets
+    bracketTL.style.display = 'none';
+    bracketTR.style.display = 'none';
+    bracketBL.style.display = 'none';
+    bracketBR.style.display = 'none';
+    return;
+  }
+  
+  const W = canvas.width;
+  const H = canvas.height;
+  const tx = scaleX(track.cx);
+  const ty = scaleY(track.cy);
+  const tw = scaleX(track.w);
+  const th = scaleY(track.h);
+  
+  const halfW = tw / 2;
+  const halfH = th / 2;
+  const bracketSize = 20; // SVG bracket size
+  
+  // Top-Left bracket (position at corner, bracket extends inward)
+  bracketTL.style.display = 'block';
+  bracketTL.style.left = (tx - halfW) + 'px';
+  bracketTL.style.top  = (ty - halfH) + 'px';
+  
+  // Top-Right bracket
+  bracketTR.style.display = 'block';
+  bracketTR.style.left = (tx + halfW - bracketSize) + 'px';
+  bracketTR.style.top  = (ty - halfH) + 'px';
+  
+  // Bottom-Left bracket
+  bracketBL.style.display = 'block';
+  bracketBL.style.left = (tx - halfW) + 'px';
+  bracketBL.style.top  = (ty + halfH - bracketSize) + 'px';
+  
+  // Bottom-Right bracket
+  bracketBR.style.display = 'block';
+  bracketBR.style.left = (tx + halfW - bracketSize) + 'px';
+  bracketBR.style.top  = (ty + halfH - bracketSize) + 'px';
+}
 
-  const track = s.track;
-  const bal   = s.ballistic;
+function updateGimbalDial(yaw) {
+  // Rotate needle based on yaw (0° = up/N, clockwise positive)
+  gimbalNeedle.style.transform = `rotate(${yaw}deg)`;
+}
 
-  if (track && track.valid) {
-    const tx = scaleX(track.cx);
-    const ty = scaleY(track.cy);
-    const tw = scaleX(track.w);
-    const th = scaleY(track.h);
+function updateHUD(s) {
+  // FCS State
+  updateFcsState(s.fcs_state);
+  
+  // P_hit
+  const pct = (s.ballistic.p_hit * 100).toFixed(0);
+  phitEl.textContent = 'PHIT ' + pct;
+  
+  // Mode indicator
+  const modeActive = s.mode === 'AUTO' ? '[X]' : '[ ]';
+  modeIndEl.textContent = modeActive + ' AUTO';
+  
+  // Timestamp (HH:MM:SS)
+  const date = new Date(s.ts);
+  const hh = String(date.getUTCHours()).padStart(2, '0');
+  const mm = String(date.getUTCMinutes()).padStart(2, '0');
+  const ss = String(date.getUTCSeconds()).padStart(2, '0');
+  timestampEl.textContent = `${hh}:${mm}:${ss}`;
+  
+  // Sensor temp / gain (mapped from health data)
+  sensorTempEl.textContent = 'WHT ' + s.health.cpu_temp.toFixed(0) + 'C';
+  sensorGainEl.textContent = 'GAIN ' + s.health.cpu_pct.toFixed(0);
+  
+  // Range / Track confidence
+  if (s.track && s.track.valid) {
+    rangeEl.textContent = 'RNG ' + s.track.range_m.toFixed(0) + 'M';
+    const confPct = (s.track.confidence * 100).toFixed(0);
+    trkConfEl.textContent = 'TRK ' + confPct;
 
-    trackBox.setAttribute('x', tx - tw / 2);
-    trackBox.setAttribute('y', ty - th / 2);
-    trackBox.setAttribute('width',  tw);
-    trackBox.setAttribute('height', th);
-    trackBox.setAttribute('display', '');
+    // Update track brackets
+    updateTrackBrackets(s.track);
 
-    // Velocity vector — scale px per frame * display factor
-    const vScale = 15;
-    const vx2 = tx + track.vx * vScale;
-    const vy2 = ty + track.vy * vScale;
-    velLine.setAttribute('x1', tx); velLine.setAttribute('y1', ty);
-    velLine.setAttribute('x2', vx2); velLine.setAttribute('y2', vy2);
-    velLine.setAttribute('display', '');
-
-    // Confidence ring — circumscribed circle around track box, dashed by confidence
-    const r = Math.max(tw, th) * 0.6;
-    const circ = 2 * Math.PI * r;
-    const dash = circ * track.confidence;
-    confRing.setAttribute('cx', tx); confRing.setAttribute('cy', ty);
-    confRing.setAttribute('r', r);
-    confRing.setAttribute('stroke-dasharray', `${dash.toFixed(1)} ${(circ - dash).toFixed(1)}`);
-    confRing.setAttribute('display', '');
-
-    // Ballistic lead dot — offset from crosshair by mrad * scale (1 mrad ≈ 8px at scene size)
-    const mradScale = (W / SCENE_W) * 8;
-    const ldx = cx + bal.az_lead_mrad * mradScale;
-    const ldy = cy - bal.el_lead_mrad * mradScale; // el up = negative y
-    leadDot.setAttribute('cx', ldx); leadDot.setAttribute('cy', ldy);
-    leadDot.setAttribute('display', '');
-    leadLine.setAttribute('x1', cx); leadLine.setAttribute('y1', cy);
-    leadLine.setAttribute('x2', ldx); leadLine.setAttribute('y2', ldy);
-    leadLine.setAttribute('display', '');
-    phitLabel.setAttribute('x', ldx + 8); phitLabel.setAttribute('y', ldy - 8);
-    phitLabel.textContent = `p=${(bal.p_hit * 100).toFixed(0)}%`;
-    phitLabel.setAttribute('display', '');
-
-    // Update blob snap
-    trackState = { valid: true, cx: track.cx, cy: track.cy };
+    // Update blob snap for thermal viz
+    trackState = { valid: true, cx: s.track.cx, cy: s.track.cy };
   } else {
-    [trackBox, velLine, confRing, leadDot, leadLine, phitLabel].forEach(el =>
-      el.setAttribute('display', 'none'));
+    rangeEl.textContent = 'RNG ---M';
+    trkConfEl.textContent = 'TRK --';
+    updateTrackBrackets({ valid: false });
     trackState.valid = false;
   }
-}
 
-// ---------------------------------------------------------------------------
-// Telemetry panel
-// ---------------------------------------------------------------------------
+  // Update gimbal pipper (offset crosshair shows gimbal position)
+  updateGimbalPipper(s.gimbal);
 
-function tempClass(t) {
-  if (t < 70) return 'temp-ok';
-  if (t < 80) return 'temp-warm';
-  return 'temp-hot';
-}
-
-const stateColors = {
-  TRACKING: 'state-TRACKING', ARMED: 'state-ARMED', FREECAM: 'state-FREECAM',
-  SEARCH: 'state-SEARCH', FAULT: 'state-FAULT', IDLE_SAFE: 'state-IDLE_SAFE', BOOT: 'state-BOOT',
-};
-
-function updatePanel(s) {
-  // FCS state
-  const stEl = document.getElementById('fcs-state');
-  stEl.textContent = s.fcs_state;
-  stEl.className = stateColors[s.fcs_state] || '';
-
-  // Mode buttons
-  document.getElementById('btn-auto').className  = 'mode-btn' + (s.mode === 'AUTO'    ? ' active-auto' : '');
-  document.getElementById('btn-free').className  = 'mode-btn' + (s.mode === 'FREECAM' ? ' active-free' : '');
-
-  // Gimbal
-  document.getElementById('val-yaw').textContent   = s.gimbal.yaw.toFixed(2) + '°';
-  document.getElementById('val-pitch').textContent = s.gimbal.pitch.toFixed(2) + '°';
-
-  // Track
-  if (s.track.valid) {
-    document.getElementById('val-range').textContent = s.track.range_m.toFixed(0) + ' m';
-    document.getElementById('val-conf').textContent  = (s.track.confidence * 100).toFixed(0) + '%';
-  } else {
-    document.getElementById('val-range').textContent = '—';
-    document.getElementById('val-conf').textContent  = '—';
-  }
-
-  // Ballistic
-  document.getElementById('val-az').textContent    = s.ballistic.az_lead_mrad.toFixed(2) + ' mrad';
-  document.getElementById('val-el').textContent    = s.ballistic.el_lead_mrad.toFixed(2) + ' mrad';
-  const pct = (s.ballistic.p_hit * 100).toFixed(0);
-  document.getElementById('val-phit').textContent  = pct + '%';
-  document.getElementById('bar-phit').style.width  = pct + '%';
-
-  // Health
-  const tEl = document.getElementById('val-temp');
-  tEl.textContent = s.health.cpu_temp.toFixed(1) + '°C';
-  tEl.className   = 'telem-value ' + tempClass(s.health.cpu_temp);
-  document.getElementById('val-cpu').textContent  = s.health.cpu_pct.toFixed(1) + '%';
-  document.getElementById('val-frames').textContent = s.health.deadline_misses;
-
-  // Timestamp
-  document.getElementById('ts-badge').textContent = new Date(s.ts).toISOString().slice(11, 23);
-}
-
-// ---------------------------------------------------------------------------
-// Main render function
-// ---------------------------------------------------------------------------
-
-function render(s) {
-  updateHUD(s);
-  updatePanel(s);
+  // Altitude (placeholder — not in current telemetry)
+  altitudeEl.textContent = 'ALT ---M';
+  
+  // Link status (derived from WebSocket state)
+  // Updated separately by connection handler
+  
+  // Gimbal coords
+  gimbalCoordsEl.textContent = 'AZ ' + s.gimbal.yaw.toFixed(1) + '° EL ' + s.gimbal.pitch.toFixed(1) + '°';
+  
+  // Update analog dial
+  updateGimbalDial(s.gimbal.yaw);
+  
+  // Sensor params (placeholder — not in current telemetry)
+  sensorParamsEl.textContent = 'WHOT BRT -- CNT --';
 }
 
 // ---------------------------------------------------------------------------
@@ -285,35 +306,33 @@ function render(s) {
 let ws = null;
 let reconnectDelay = 2000;
 
-function setConnBadge(state) {
-  const el = document.getElementById('conn-badge');
-  el.className = state;
-  el.textContent = state.toUpperCase();
+function updateLinkStatus(connected) {
+  lnkStatusEl.textContent = connected ? 'LNK: UP' : 'LNK: DOWN';
 }
 
 function connect() {
-  setConnBadge('reconnecting');
+  updateLinkStatus(false);
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host || 'localhost:8080';
   const wsUrl = `${protocol}//${host}/ws`;
   ws = new WebSocket(wsUrl);
 
   ws.addEventListener('open', () => {
-    setConnBadge('connected');
+    updateLinkStatus(true);
     reconnectDelay = 2000;
   });
 
   ws.addEventListener('message', (ev) => {
     try {
       const s = JSON.parse(ev.data);
-      render(s);
+      updateHUD(s);
     } catch (err) {
       console.warn('Bad telemetry JSON:', err);
     }
   });
 
   ws.addEventListener('close', () => {
-    setConnBadge('disconnected');
+    updateLinkStatus(false);
     setTimeout(connect, reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 1.5, 10000);
   });
@@ -330,18 +349,7 @@ function sendCmd(cmd) {
 }
 
 // ---------------------------------------------------------------------------
-// Controls — mode switch
-// ---------------------------------------------------------------------------
-
-document.getElementById('btn-auto').addEventListener('click', () => {
-  sendCmd({ type: 'mode_switch', mode: 'AUTO' });
-});
-document.getElementById('btn-free').addEventListener('click', () => {
-  sendCmd({ type: 'mode_switch', mode: 'FREECAM' });
-});
-
-// ---------------------------------------------------------------------------
-// Controls — virtual joystick
+// Controls — virtual joystick (invisible but functional)
 // ---------------------------------------------------------------------------
 
 const joystick = document.getElementById('joystick');
@@ -379,7 +387,7 @@ function updateJoyDot(clientX, clientY) {
 
   joyAz = (dx / maxR) * JOY_MAX_AZ;
   joyEl = -(dy / maxR) * JOY_MAX_EL; // up = positive elevation
-  joyReadout.textContent = `AZ ${joyAz.toFixed(1)}° EL ${joyEl.toFixed(1)}°`;
+  joyReadout.textContent = 'AZ ' + joyAz.toFixed(1) + '° EL ' + joyEl.toFixed(1) + '°';
 }
 
 function joyReset() {
@@ -421,23 +429,240 @@ window.addEventListener('touchmove', (e) => {
 window.addEventListener('touchend', () => { if (joyActive) joyReset(); });
 
 // ---------------------------------------------------------------------------
-// Phone view toggle
+// Keyboard Controls Implementation
 // ---------------------------------------------------------------------------
 
-const app = document.getElementById('app');
-document.getElementById('phone-toggle').addEventListener('click', () => {
-  app.classList.toggle('phone-view');
-  resizeCanvas();
+// Notification system
+let notificationTimeout = null;
+
+function showNotification(message, duration = 4000) {
+  // Create notification element if it doesn't exist
+  let notif = document.getElementById('keyboard-notification');
+  if (!notif) {
+    notif = document.createElement('div');
+    notif.id = 'keyboard-notification';
+    notif.style.cssText = `
+      position: absolute;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid #ffffff;
+      color: #ffffff;
+      padding: 12px 24px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 18px;
+      z-index: 200;
+      pointer-events: none;
+      opacity: 1;
+      transition: opacity 0.5s ease-out;
+    `;
+    document.getElementById('video-area').appendChild(notif);
+  }
+  
+  notif.textContent = message;
+  notif.style.opacity = '1';
+  
+  // Clear existing timeout
+  if (notificationTimeout) {
+    clearTimeout(notificationTimeout);
+  }
+  
+  // Fade out after duration
+  notificationTimeout = setTimeout(() => {
+    notif.style.opacity = '0';
+  }, duration);
+}
+
+// Mode switching
+function switchMode(newMode) {
+  if (newMode === 'AUTO' || newMode === 'FREECAM') {
+    sendCmd({ type: 'mode_switch', mode: newMode });
+    showNotification(`MODE: ${newMode} — ${newMode === 'AUTO' ? 'Click to target' : 'WASD to slew, R to center, +/-/wheel zoom'}`);
+  }
+}
+
+// Gimbal control command
+function sendGimbalCommand(azDelta, elDelta) {
+  // Get current gimbal position and apply delta
+  // For now, send absolute position based on accumulated deltas
+  sendCmd({ type: 'freecam', az: azDelta, el: elDelta });
+}
+
+// Key event handlers
+function handleWASDKey(key, isPressed) {
+  if (currentMode !== 'FREECAM') return;
+  
+  const now = Date.now();
+  
+  if (isPressed) {
+    keyState[key] = true;
+    const lastTap = keyTimers[key];
+    const tapCount = keyTapCount[key] || 0;
+    
+    if (lastTap && (now - lastTap < TAP_WINDOW_MS)) {
+      // Double tap detected
+      keyTapCount[key] = 0;
+      const delta = DOUBLE_TAP_DELTA;
+      applyGimbalDelta(key, delta);
+      showNotification(`${key}: +${delta}°`);
+    } else {
+      // Single tap detected
+      keyTapCount[key] = 1;
+      keyTimers[key] = now;
+      
+      // Start hold timer
+      setTimeout(() => {
+        if (keyState[key] && keyTapCount[key] === 1) {
+          // Still holding after tap window - start continuous slew
+          startHoldSlew(key);
+        }
+      }, TAP_WINDOW_MS);
+    }
+  } else {
+    keyState[key] = false;
+    stopHoldSlew();
+  }
+}
+
+function applyGimbalDelta(key, delta) {
+  switch(key) {
+    case 'KeyW': sendGimbalCommand(0, delta); break;      // Pitch up
+    case 'KeyS': sendGimbalCommand(0, -delta); break;     // Pitch down
+    case 'KeyA': sendGimbalCommand(-delta, 0); break;     // Yaw left
+    case 'KeyD': sendGimbalCommand(delta, 0); break;      // Yaw right
+  }
+}
+
+function startHoldSlew(key) {
+  if (!keyState[key]) return;
+  
+  const deltaMap = {
+    'KeyW': [0, HOLD_DELTA],
+    'KeyS': [0, -HOLD_DELTA],
+    'KeyA': [-HOLD_DELTA, 0],
+    'KeyD': [HOLD_DELTA, 0]
+  };
+  
+  const [azDelta, elDelta] = deltaMap[key];
+  
+  // Send commands at 10Hz while holding
+  holdInterval = setInterval(() => {
+    if (!keyState[key]) {
+      stopHoldSlew();
+      return;
+    }
+    sendGimbalCommand(azDelta, elDelta);
+  }, HOLD_INTERVAL_MS);
+}
+
+function stopHoldSlew() {
+  if (holdInterval) {
+    clearInterval(holdInterval);
+    holdInterval = null;
+  }
+}
+
+// Zoom control
+let currentZoom = 1.0;
+
+function adjustZoom(delta) {
+  currentZoom = Math.max(0.5, Math.min(3.0, currentZoom + delta));
+  showNotification(`ZOOM: ${(currentZoom * 100).toFixed(0)}%`);
+  // TODO: Apply zoom to canvas/video when zoom feature is implemented
+}
+
+// Target assignment
+function assignTargetAtPosition(screenX, screenY) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = SCENE_W / rect.width;
+  const scaleY = SCENE_H / rect.height;
+  
+  const frameX = (screenX - rect.left) * scaleX;
+  const frameY = (screenY - rect.top) * scaleY;
+  
+  // TODO: Send target assignment command when backend supports it
+  showNotification(`TARGET: (${frameX.toFixed(0)}, ${frameY.toFixed(0)})`);
+}
+
+function clearTarget() {
+  // TODO: Send clear target command when backend supports it
+  showNotification('TARGET: CLEARED');
+}
+
+// Global keyboard event listener
+window.addEventListener('keydown', (e) => {
+  // Prevent default for control keys
+  if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'Digit1', 'Digit2', 'Equal', 'Minus'].includes(e.code)) {
+    e.preventDefault();
+  }
+  
+  switch(e.code) {
+    case 'Digit1':
+      switchMode('AUTO');
+      break;
+    case 'Digit2':
+      switchMode('FREECAM');
+      break;
+    case 'KeyW':
+    case 'KeyA':
+    case 'KeyS':
+    case 'KeyD':
+      handleWASDKey(e.code, true);
+      break;
+    case 'KeyR':
+      if (currentMode === 'FREECAM') {
+        sendCmd({ type: 'freecam', az: 0, el: 0 });
+        showNotification('GIMBAL: CENTERED (0°, 0°)');
+      }
+      break;
+    case 'Equal':
+    case 'NumpadAdd':
+      adjustZoom(0.1);
+      break;
+    case 'Minus':
+    case 'NumpadSubtract':
+      adjustZoom(-0.1);
+      break;
+  }
 });
 
-// Auto-set phone view on narrow screens
-const mq = window.matchMedia('(max-width: 640px)');
-mq.addEventListener('change', (e) => {
-  if (e.matches) app.classList.add('phone-view');
-  else app.classList.remove('phone-view');
-  resizeCanvas();
+window.addEventListener('keyup', (e) => {
+  if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
+    handleWASDKey(e.code, false);
+  }
 });
-if (mq.matches) app.classList.add('phone-view');
+
+// Mouse wheel zoom
+window.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? -0.05 : 0.05;
+  adjustZoom(delta);
+}, { passive: false });
+
+// Click-to-target
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button === 0) { // Left click
+    if (currentMode === 'AUTO') {
+      assignTargetAtPosition(e.clientX, e.clientY);
+    }
+  } else if (e.button === 2) { // Right click
+    e.preventDefault();
+    clearTarget();
+  }
+});
+
+// Block context menu on canvas
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+});
+
+// Track current mode
+let currentMode = 'AUTO';
+
+// Override mode indicator update to track mode
+const originalUpdateHUD = typeof updateHUD !== 'undefined' ? updateHUD : null;
+
 
 // ---------------------------------------------------------------------------
 // Boot

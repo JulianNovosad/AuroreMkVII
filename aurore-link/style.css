@@ -1,21 +1,17 @@
 /* ============================================================
    Aurore MkVII — Remote Control Station
+   AC-130 Military HUD Aesthetic
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
 
 /* --- Variables -------------------------------------------- */
 :root {
-  --green:  #00ff41;
-  --amber:  #ff9900;
-  --red:    #ff3333;
-  --blue:   #00aaff;
-  --grey:   #888;
-  --bg:     #0a0a0a;
-  --panel:  #111;
-  --border: #222;
-  --font:   'JetBrains Mono', 'Courier New', monospace;
-  --sidebar-w: 280px;
+  --ac130-white: #ffffff;
+  --ac130-dim: rgba(255, 255, 255, 0.7);
+  --ac130-faint: rgba(255, 255, 255, 0.4);
+  --scanline-opacity: 0.10;
+  --bg: #0a0a0a;
 }
 
 /* --- Reset ------------------------------------------------ */
@@ -24,21 +20,21 @@
 html, body {
   width: 100%; height: 100%;
   background: var(--bg);
-  color: var(--green);
-  font-family: var(--font);
-  font-size: 13px;
+  color: var(--ac130-white);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 16px;
   overflow: hidden;
   user-select: none;
 }
 
-/* --- App layout — laptop (default) ----------------------- */
+/* --- App layout ------------------------------------------ */
 #app {
-  display: grid;
-  grid-template-areas: "video sidebar";
-  grid-template-columns: 1fr var(--sidebar-w);
-  grid-template-rows: 100vh;
   width: 100vw;
   height: 100vh;
+  display: grid;
+  grid-template-areas: "video";
+  grid-template-columns: 1fr;
+  grid-template-rows: 100vh;
 }
 
 /* --- Video area ------------------------------------------ */
@@ -56,244 +52,298 @@ html, body {
   object-fit: contain;
 }
 
-#hud {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-/* Scanline overlay */
-#video-area::after {
-  content: '';
+/* --- Scanline overlay (video layer only) ---------------- */
+.video-overlay-noise {
   position: absolute;
   inset: 0;
   background: repeating-linear-gradient(
     0deg,
     transparent,
     transparent 2px,
-    rgba(0, 0, 0, 0.08) 2px,
-    rgba(0, 0, 0, 0.08) 4px
+    rgba(0, 0, 0, var(--scanline-opacity)) 2px,
+    rgba(0, 0, 0, var(--scanline-opacity)) 4px
   );
   pointer-events: none;
-  z-index: 10;
-}
-
-/* Green vignette */
-#video-area::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse at center,
-    transparent 60%,
-    rgba(0, 20, 0, 0.5) 100%
-  );
-  pointer-events: none;
-  z-index: 11;
-}
-
-/* --- Connection badge ------------------------------------ */
-#conn-badge {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 20;
-  padding: 3px 10px;
-  border: 1px solid currentColor;
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  pointer-events: none;
-}
-#conn-badge.connected    { color: var(--green); border-color: var(--green); }
-#conn-badge.disconnected { color: var(--red);   border-color: var(--red); }
-#conn-badge.reconnecting { color: var(--amber); border-color: var(--amber); }
-
-/* --- Timestamp badge ------------------------------------- */
-#ts-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 20;
-  font-size: 11px;
-  color: var(--grey);
-  pointer-events: none;
-}
-
-/* --- Sidebar -------------------------------------------- */
-#sidebar {
-  grid-area: sidebar;
-  background: var(--panel);
-  border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 12px;
-  gap: 14px;
   z-index: 5;
 }
 
-/* --- Panel sections ------------------------------------- */
-.section {
-  border: 1px solid var(--border);
-  padding: 8px 10px;
-}
-
-.section-title {
-  font-size: 10px;
-  letter-spacing: 0.15em;
-  color: var(--grey);
+/* --- HUD Overlay — Full-screen grid --------------------- */
+.hud-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 280px 1fr 280px;
+  grid-template-rows: 120px 1fr 140px;
+  pointer-events: none;
+  z-index: 10;
+  
+  /* Global HUD aliasing */
+  font-family: 'Share Tech Mono', monospace;
   text-transform: uppercase;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 4px;
+  color: var(--ac130-white);
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+  font-smooth: never;
+  font-synthesis: none;
+  image-rendering: pixelated;
+  text-rendering: optimizeSpeed;
 }
 
-/* --- FCS state badge ------------------------------------ */
+/* --- Quadrant positioning ------------------------------- */
+.hud-quadrant {
+  pointer-events: none;
+  padding: 12px;
+}
+
+.hud-top-left {
+  grid-column: 1;
+  grid-row: 1;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.hud-top-center {
+  grid-column: 2;
+  grid-row: 1;
+  text-align: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.hud-top-right {
+  grid-column: 3;
+  grid-row: 1;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.hud-mid-left {
+  grid-column: 1;
+  grid-row: 2;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.hud-mid-right {
+  grid-column: 3;
+  grid-row: 2;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.hud-bottom-left {
+  grid-column: 1;
+  grid-row: 3;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.hud-bottom-center {
+  grid-column: 2;
+  grid-row: 3;
+  text-align: center;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 16px;
+}
+
+.hud-bottom-right {
+  grid-column: 3;
+  grid-row: 3;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+/* --- FCS State ------------------------------------------ */
 #fcs-state {
-  display: inline-block;
-  padding: 4px 12px;
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
+
+/* FAULT blink — 3s cycle (1.5s on, 1.5s off) */
+.state-fault {
+  animation: fault-blink 3s steps(1) infinite;
+}
+
+@keyframes fault-blink {
+  0%, 50%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* --- Mode indicator ------------------------------------- */
+#mode-ind {
+  font-size: 16px;
+  color: var(--ac130-dim);
+}
+
+/* --- P_hit ---------------------------------------------- */
+#phit {
+  font-size: 18px;
+}
+
+/* --- Timestamp ------------------------------------------ */
+#timestamp {
+  font-size: 28px;
+  letter-spacing: 0.05em;
+}
+
+/* --- Sensor temp / gain --------------------------------- */
+#sensor-temp, #sensor-gain {
+  font-size: 16px;
+  display: block;
+}
+
+/* --- Range / Track / Alt -------------------------------- */
+#range, #trk-conf, #altitude {
+  font-size: 18px;
+  display: block;
+}
+
+/* --- Gimbal coords -------------------------------------- */
+#gimbal-coords {
+  font-size: 22px;
+  letter-spacing: 0.03em;
+}
+
+/* --- Sensor params -------------------------------------- */
+#sensor-params {
+  font-size: 16px;
+}
+
+/* --- Link status ---------------------------------------- */
+#lnk-status {
   font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  border: 1px solid currentColor;
-  margin-bottom: 4px;
 }
-.state-TRACKING  { color: var(--green); }
-.state-ARMED     { color: var(--red);   }
-.state-FREECAM   { color: var(--blue);  }
-.state-SEARCH    { color: var(--amber); }
-.state-FAULT     { color: var(--red);   background: rgba(255,51,51,0.15); }
-.state-IDLE_SAFE { color: var(--grey);  }
-.state-BOOT      { color: var(--grey);  }
 
-/* --- Telemetry rows ------------------------------------- */
-.telem-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 2px 0;
-  gap: 8px;
+/* --- Analog Gimbal Dial --------------------------------- */
+.gimbal-dial-wrap {
+  width: 140px;
+  height: 140px;
 }
-.telem-label { color: var(--grey); font-size: 11px; flex-shrink: 0; }
-.telem-value { font-size: 12px; text-align: right; }
 
-/* --- P_hit bar ----------------------------------------- */
-.bar-outer {
+#gimbal-dial {
   width: 100%;
-  height: 6px;
-  background: #1a1a1a;
-  border: 1px solid var(--border);
-  margin-top: 4px;
-}
-.bar-inner {
   height: 100%;
-  background: var(--green);
-  transition: width 0.15s;
 }
 
-/* --- CPU temp color ------------------------------------ */
-.temp-ok     { color: var(--green); }
-.temp-warm   { color: var(--amber); }
-.temp-hot    { color: var(--red); }
-
-/* --- Mode toggle buttons ------------------------------- */
-.mode-buttons {
-  display: flex;
-  gap: 8px;
+#gimbal-needle {
+  transform-origin: 75px 75px;
+  transition: transform 0s; /* Instant update, no easing */
 }
-.mode-btn {
-  flex: 1;
-  padding: 7px 0;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--grey);
-  font-family: var(--font);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: border-color 0.1s, color 0.1s;
-}
-.mode-btn:hover       { border-color: var(--green); color: var(--green); }
-.mode-btn.active-auto { border-color: var(--green); color: var(--green); }
-.mode-btn.active-free { border-color: var(--blue);  color: var(--blue); }
 
-/* --- Virtual joystick ---------------------------------- */
+/* --- Main Reticle --------------------------------------- */
+#hud-reticle-main {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* --- Ballistic Pipper ----------------------------------- */
+#hud-pipper-lead {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40px;
+  height: 40px;
+  pointer-events: none;
+  z-index: 21;
+  /* Positioned via JS: left/top */
+}
+
+/* --- Target Corner Brackets ----------------------------- */
+.track-bracket {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+  z-index: 30;
+  display: none; /* Hidden by default, shown when track.valid */
+}
+
+/* --- Invisible Joystick ------------------------------- */
 #joystick-wrap {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  z-index: 100;
+  opacity: 0; /* Invisible but functional */
+  pointer-events: auto;
 }
+
 #joystick {
   width: 140px;
   height: 140px;
   border-radius: 50%;
-  border: 1px solid var(--border);
-  background: #0d0d0d;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.01);
   position: relative;
   cursor: crosshair;
   touch-action: none;
 }
-#joystick.active { border-color: var(--blue); }
+
+#joystick.active {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
 #joy-dot {
   position: absolute;
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--blue);
+  background: rgba(255, 255, 255, 0.3);
   transform: translate(-50%, -50%);
-  left: 50%; top: 50%;
+  left: 50%;
+  top: 50%;
   pointer-events: none;
-  transition: background 0.1s;
 }
+
 #joy-label {
-  font-size: 10px;
-  color: var(--grey);
+  font-size: 13px;
+  color: var(--ac130-faint);
   letter-spacing: 0.08em;
-}
-#joy-readout {
-  font-size: 11px;
-  color: var(--blue);
-}
-
-/* --- Phone toggle --------------------------------------- */
-#phone-toggle {
-  padding: 7px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--grey);
-  font-family: var(--font);
-  font-size: 11px;
-  cursor: pointer;
   text-align: center;
-  letter-spacing: 0.06em;
-}
-#phone-toggle:hover { color: var(--green); border-color: var(--green); }
-
-/* ============================================================
-   PHONE LAYOUT
-   Triggered by ≤640px or .phone-view class on #app
-   ============================================================ */
-@media (max-width: 640px) {
-  #app { grid-template-areas: "video" "sidebar"; grid-template-columns: 1fr; grid-template-rows: auto; overflow-y: auto; }
-  #video-area { height: 56vw; min-height: 200px; }
-  #sidebar { border-left: none; border-top: 1px solid var(--border); }
-  body { overflow: auto; }
 }
 
-#app.phone-view {
-  grid-template-areas: "video" "sidebar" !important;
-  grid-template-columns: 1fr !important;
-  grid-template-rows: auto !important;
-  overflow-y: auto;
+#joy-readout {
+  font-size: 14px;
+  color: var(--ac130-dim);
 }
-#app.phone-view #video-area { height: 56vw; min-height: 200px; }
-#app.phone-view #sidebar    { border-left: none; border-top: 1px solid var(--border); }
-#app.phone-view body        { overflow: auto; }
 
-/* Scrollbar styling */
+/* --- Scrollbar ------------------------------------------ */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: #0a0a0a; }
 ::-webkit-scrollbar-thumb { background: #333; }

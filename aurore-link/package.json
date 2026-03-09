@@ -4,7 +4,9 @@
   "description": "Aurore MkVII web remote control station (mock MVP)",
   "main": "mock-server.js",
   "scripts": {
-    "start": "node mock-server.js"
+    "start": "node mock-server.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "ws": "^8.0.0"

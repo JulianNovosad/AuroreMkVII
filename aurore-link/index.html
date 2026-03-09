@@ -4,7 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Aurore MkVII — Remote Control Station</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
   <div id="app">
@@ -15,111 +18,220 @@
     <div id="video-area">
       <canvas id="video"></canvas>
 
-      <svg id="hud" xmlns="http://www.w3.org/2000/svg"></svg>
+      <!-- Scanline overlay (video layer only) -->
+      <div class="video-overlay-noise"></div>
 
-      <div id="conn-badge" class="reconnecting">RECONNECTING</div>
-      <div id="ts-badge">--:--:--.---</div>
+      <!-- ====================================================
+           HUD OVERLAY — Full-screen grid
+      ===================================================== -->
+      <div class="hud-overlay">
+
+        <!-- Top-Left: Tactical (FCS state, P_hit, Mode) -->
+        <div class="hud-quadrant hud-top-left">
+          <div id="fcs-state">SYS: BOOT</div>
+          <div id="phit">PHIT --</div>
+          <div id="mode-ind">[ ] AUTO</div>
+        </div>
+
+        <!-- Top-Center: Timestamp -->
+        <div class="hud-quadrant hud-top-center">
+          <span id="timestamp">--:--:--</span>
+        </div>
+
+        <!-- Top-Right: Sensor Diagnostics -->
+        <div class="hud-quadrant hud-top-right">
+          <span id="sensor-temp">WHT --C</span>
+          <span id="sensor-gain">GAIN --</span>
+        </div>
+
+        <!-- Middle-Left: Range / Track -->
+        <div class="hud-quadrant hud-mid-left">
+          <span id="range">RNG ---M</span>
+          <span id="trk-conf">TRK --</span>
+        </div>
+
+        <!-- Middle-Right: Altitude (placeholder) -->
+        <div class="hud-quadrant hud-mid-right">
+          <span id="altitude">ALT ---M</span>
+        </div>
+
+        <!-- Bottom-Left: System + Analog Gimbal Dial -->
+        <div class="hud-quadrant hud-bottom-left">
+          <div id="lnk-status">LNK: --</div>
+          <div class="gimbal-dial-wrap">
+            <svg id="gimbal-dial" viewBox="0 0 150 150" xmlns="http://www.w3.org/2000/svg">
+              <!-- Outer ring -->
+              <circle cx="75" cy="75" r="70" stroke="#ffffff" stroke-width="1" fill="none"/>
+              <!-- Degree tick marks -->
+              <g stroke="#ffffff" stroke-width="1">
+                <!-- Every 5 degrees (small ticks) -->
+                <line x1="75" y1="8" x2="75" y2="14"/>
+                <line x1="75" y1="136" x2="75" y2="142"/>
+                <line x1="8" y1="75" x2="14" y2="75"/>
+                <line x1="136" y1="75" x2="142" y2="75"/>
+                <!-- 15 degree ticks -->
+                <line x1="94.4" y1="10.6" x2="93.5" y2="17.5"/>
+                <line x1="55.6" y1="10.6" x2="56.5" y2="17.5"/>
+                <line x1="94.4" y1="139.4" x2="93.5" y2="132.5"/>
+                <line x1="55.6" y1="139.4" x2="56.5" y2="132.5"/>
+                <line x1="139.4" y1="55.6" x2="132.5" y2="56.5"/>
+                <line x1="139.4" y1="94.4" x2="132.5" y2="93.5"/>
+                <line x1="10.6" y1="55.6" x2="17.5" y2="56.5"/>
+                <line x1="10.6" y1="94.4" x2="17.5" y2="93.5"/>
+                <!-- 45 degree ticks (medium) -->
+                <line x1="125" y1="25" x2="121" y2="29"/>
+                <line x1="25" y1="25" x2="29" y2="29"/>
+                <line x1="125" y1="125" x2="121" y2="121"/>
+                <line x1="25" y1="125" x2="29" y2="121"/>
+              </g>
+              <!-- Cardinal labels -->
+              <text x="75" y="24" text-anchor="middle" fill="#ffffff" font-size="12">0</text>
+              <text x="128" y="79" text-anchor="middle" fill="#ffffff" font-size="12">90</text>
+              <text x="75" y="148" text-anchor="middle" fill="#ffffff" font-size="12">180</text>
+              <text x="24" y="79" text-anchor="middle" fill="#ffffff" font-size="12">270</text>
+              <!-- Rotating needle (bound to yaw) -->
+              <line id="gimbal-needle" x1="75" y1="75" x2="75" y2="12" stroke="#ffffff" stroke-width="1.5"/>
+              <circle id="gimbal-hub" cx="75" cy="75" r="5" fill="#ffffff"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Bottom-Center: Gimbal Coordinates -->
+        <div class="hud-quadrant hud-bottom-center">
+          <span id="gimbal-coords">AZ ---.-° EL ---.-°</span>
+        </div>
+
+        <!-- Bottom-Right: Sensor Params -->
+        <div class="hud-quadrant hud-bottom-right">
+          <span id="sensor-params">WHOT BRT -- CNT --</span>
+        </div>
+
+      </div>
+
+      <!-- ====================================================
+           MAIN RETICLE — Full-screen stadia with mil-hashes
+           ViewBox matches 1920×1080 reference resolution
+           Central gap: 900px (lines stop 450px from center)
+           Stroke: 3px for main stadia, 2px for hashes
+      ===================================================== -->
+      <svg id="hud-reticle-main" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <g stroke="#ffffff" fill="none">
+          <!-- Vertical stadia (with central gap ~900px - lines stop 450px from center) -->
+          <line x1="960" y1="0" x2="960" y2="90" stroke-width="3"/>
+          <line x1="960" y1="990" x2="960" y2="1080" stroke-width="3"/>
+
+          <!-- Horizontal stadia (with central gap ~900px) -->
+          <line x1="0" y1="540" x2="510" y2="540" stroke-width="3"/>
+          <line x1="1410" y1="540" x2="1920" y2="540" stroke-width="3"/>
+
+          <!-- Vertical mil-hash marks (every 50px, 16px tall, 2px wide) -->
+          <line x1="952" y1="50" x2="968" y2="50" stroke-width="2"/>
+          <line x1="952" y1="100" x2="968" y2="100" stroke-width="2"/>
+          <line x1="952" y1="150" x2="968" y2="150" stroke-width="2"/>
+          <line x1="952" y1="200" x2="968" y2="200" stroke-width="2"/>
+          <line x1="952" y1="250" x2="968" y2="250" stroke-width="2"/>
+          <line x1="952" y1="300" x2="968" y2="300" stroke-width="2"/>
+          <line x1="952" y1="350" x2="968" y2="350" stroke-width="2"/>
+          <line x1="952" y1="400" x2="968" y2="400" stroke-width="2"/>
+          <line x1="952" y1="680" x2="968" y2="680" stroke-width="2"/>
+          <line x1="952" y1="730" x2="968" y2="730" stroke-width="2"/>
+          <line x1="952" y1="780" x2="968" y2="780" stroke-width="2"/>
+          <line x1="952" y1="830" x2="968" y2="830" stroke-width="2"/>
+          <line x1="952" y1="880" x2="968" y2="880" stroke-width="2"/>
+          <line x1="952" y1="930" x2="968" y2="930" stroke-width="2"/>
+          <line x1="952" y1="980" x2="968" y2="980" stroke-width="2"/>
+          <line x1="952" y1="1030" x2="968" y2="1030" stroke-width="2"/>
+
+          <!-- Horizontal mil-hash marks (every 50px, 16px tall, 2px wide) -->
+          <line x1="50" y1="532" x2="50" y2="548" stroke-width="2"/>
+          <line x1="100" y1="532" x2="100" y2="548" stroke-width="2"/>
+          <line x1="150" y1="532" x2="150" y2="548" stroke-width="2"/>
+          <line x1="200" y1="532" x2="200" y2="548" stroke-width="2"/>
+          <line x1="250" y1="532" x2="250" y2="548" stroke-width="2"/>
+          <line x1="300" y1="532" x2="300" y2="548" stroke-width="2"/>
+          <line x1="350" y1="532" x2="350" y2="548" stroke-width="2"/>
+          <line x1="400" y1="532" x2="400" y2="548" stroke-width="2"/>
+          <line x1="450" y1="532" x2="450" y2="548" stroke-width="2"/>
+          <line x1="500" y1="532" x2="500" y2="548" stroke-width="2"/>
+          <line x1="1400" y1="532" x2="1400" y2="548" stroke-width="2"/>
+          <line x1="1450" y1="532" x2="1450" y2="548" stroke-width="2"/>
+          <line x1="1500" y1="532" x2="1500" y2="548" stroke-width="2"/>
+          <line x1="1550" y1="532" x2="1550" y2="548" stroke-width="2"/>
+          <line x1="1600" y1="532" x2="1600" y2="548" stroke-width="2"/>
+          <line x1="1650" y1="532" x2="1650" y2="548" stroke-width="2"/>
+          <line x1="1700" y1="532" x2="1700" y2="548" stroke-width="2"/>
+          <line x1="1750" y1="532" x2="1750" y2="548" stroke-width="2"/>
+          <line x1="1800" y1="532" x2="1800" y2="548" stroke-width="2"/>
+          <line x1="1850" y1="532" x2="1850" y2="548" stroke-width="2"/>
+
+          <!-- Center reticle circle (AC-130 style) -->
+          <circle cx="960" cy="540" r="30" stroke="#ffffff" stroke-width="2" fill="none"/>
+          <circle cx="960" cy="540" r="2" fill="#ffffff"/>
+          
+          <!-- Center gap markers (small ticks at gap edge) -->
+          <line x1="960" y1="490" x2="960" y2="510" stroke-width="2"/>
+          <line x1="960" y1="570" x2="960" y2="590" stroke-width="2"/>
+          <line x1="510" y1="540" x2="530" y2="540" stroke-width="2"/>
+          <line x1="1390" y1="540" x2="1410" y2="540" stroke-width="2"/>
+        </g>
+      </svg>
+
+      <!-- ====================================================
+           BALLISTIC PIPPER — Offset crosshair for lead
+           Smaller (40x40), 1px stroke, no center dot
+      ===================================================== -->
+      <svg id="hud-pipper-lead" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+        <g stroke="#ffffff" stroke-width="1" fill="none">
+          <line x1="20" y1="0" x2="20" y2="16"/>
+          <line x1="20" y1="24" x2="20" y2="40"/>
+          <line x1="0" y1="20" x2="16" y2="20"/>
+          <line x1="24" y1="20" x2="40" y2="20"/>
+        </g>
+      </svg>
+
+      <!-- ====================================================
+           TARGET CORNER BRACKETS — 4 separate L-shaped corners
+           1.5px stroke, 20px arms, pure L-shape
+      ===================================================== -->
+      <!-- Top-Left: ⌝ (lines go right and down from corner) -->
+      <svg class="track-bracket bracket-tl" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+        <line x1="0" y1="0" x2="18" y2="0" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="0" y1="0" x2="0" y2="18" stroke="#ffffff" stroke-width="1.5"/>
+      </svg>
+
+      <!-- Top-Right: ⌞ (lines go left and down from corner) -->
+      <svg class="track-bracket bracket-tr" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+        <line x1="20" y1="0" x2="2" y2="0" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="20" y1="0" x2="20" y2="18" stroke="#ffffff" stroke-width="1.5"/>
+      </svg>
+
+      <!-- Bottom-Left: ⌜ (lines go right and up from corner) -->
+      <svg class="track-bracket bracket-bl" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+        <line x1="0" y1="20" x2="18" y2="20" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="0" y1="20" x2="0" y2="2" stroke="#ffffff" stroke-width="1.5"/>
+      </svg>
+
+      <!-- Bottom-Right: ⌟ (lines go left and up from corner) -->
+      <svg class="track-bracket bracket-br" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+        <line x1="20" y1="20" x2="2" y2="20" stroke="#ffffff" stroke-width="1.5"/>
+        <line x1="20" y1="20" x2="20" y2="2" stroke="#ffffff" stroke-width="1.5"/>
+      </svg>
+
+      <!-- ====================================================
+           INVISIBLE JOYSTICK — Functional but hidden
+      ===================================================== -->
+      <div id="joystick-wrap">
+        <div id="joystick">
+          <div id="joy-dot"></div>
+        </div>
+        <div id="joy-label">DRAG TO SLEW</div>
+        <div id="joy-readout">AZ 0.0° EL 0.0°</div>
+      </div>
+
     </div>
 
-    <!-- ====================================================
-         SIDEBAR
-    ===================================================== -->
-    <aside id="sidebar">
-
-      <!-- FCS State -->
-      <div class="section">
-        <div class="section-title">System Status</div>
-        <div id="fcs-state" class="state-BOOT">BOOT</div>
-      </div>
-
-      <!-- Mode Control -->
-      <div class="section">
-        <div class="section-title">Mode</div>
-        <div class="mode-buttons">
-          <button id="btn-auto" class="mode-btn active-auto">AUTO</button>
-          <button id="btn-free" class="mode-btn">FREECAM</button>
-        </div>
-      </div>
-
-      <!-- Gimbal -->
-      <div class="section">
-        <div class="section-title">Gimbal</div>
-        <div class="telem-row">
-          <span class="telem-label">YAW</span>
-          <span class="telem-value" id="val-yaw">—</span>
-        </div>
-        <div class="telem-row">
-          <span class="telem-label">PITCH</span>
-          <span class="telem-value" id="val-pitch">—</span>
-        </div>
-      </div>
-
-      <!-- Track -->
-      <div class="section">
-        <div class="section-title">Track</div>
-        <div class="telem-row">
-          <span class="telem-label">RANGE</span>
-          <span class="telem-value" id="val-range">—</span>
-        </div>
-        <div class="telem-row">
-          <span class="telem-label">CONF</span>
-          <span class="telem-value" id="val-conf">—</span>
-        </div>
-      </div>
-
-      <!-- Ballistic -->
-      <div class="section">
-        <div class="section-title">Ballistic</div>
-        <div class="telem-row">
-          <span class="telem-label">AZ LEAD</span>
-          <span class="telem-value" id="val-az">—</span>
-        </div>
-        <div class="telem-row">
-          <span class="telem-label">EL LEAD</span>
-          <span class="telem-value" id="val-el">—</span>
-        </div>
-        <div class="telem-row">
-          <span class="telem-label">P_HIT</span>
-          <span class="telem-value" id="val-phit">—</span>
-        </div>
-        <div class="bar-outer"><div class="bar-inner" id="bar-phit" style="width:0%"></div></div>
-      </div>
-
-      <!-- Health -->
-      <div class="section">
-        <div class="section-title">Health</div>
-        <div class="telem-row">
-          <span class="telem-label">CPU TEMP</span>
-          <span class="telem-value temp-ok" id="val-temp">—</span>
-        </div>
-        <div class="telem-row">
-          <span class="telem-label">CPU</span>
-          <span class="telem-value" id="val-cpu">—</span>
-        </div>
-        <div class="telem-row">
-          <span class="telem-label">DL MISS</span>
-          <span class="telem-value" id="val-frames">—</span>
-        </div>
-      </div>
-
-      <!-- FREECAM joystick -->
-      <div class="section">
-        <div class="section-title">FREECAM Control</div>
-        <div id="joystick-wrap">
-          <div id="joystick">
-            <div id="joy-dot"></div>
-          </div>
-          <div id="joy-label">DRAG TO SLEW</div>
-          <div id="joy-readout">AZ 0.0° EL 0.0°</div>
-        </div>
-      </div>
-
-      <!-- Phone toggle -->
-      <button id="phone-toggle">PHONE VIEW</button>
-
-    </aside>
   </div>
 
-  <script src="main.js"></script>
+  <script src="main.js?v=2"></script>
 </body>
 </html>
