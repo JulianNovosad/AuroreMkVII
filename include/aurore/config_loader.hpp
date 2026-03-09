@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <string>
+#include <nlohmann/json.hpp>
 
 namespace aurore {
 
@@ -13,6 +14,9 @@ public:
     bool get_bool(const std::string& key, bool default_value = false) const;
     std::string get_string(const std::string& key, const std::string& default_value = "") const;
     bool is_loaded() const { return loaded_; }
+    
+    // AM7-L2-BALL-002: Get raw JSON for ballistic profile loading
+    const nlohmann::json& get_json() const;
 
 private:
     struct Impl;

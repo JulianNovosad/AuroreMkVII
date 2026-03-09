@@ -6,21 +6,23 @@
  */
 
 #include "aurore/telemetry_writer.hpp"
+
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <chrono>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <sys/stat.h>
-#include <time.h>
-#include <unistd.h>
+
+#include "aurore/security.hpp"
 
 namespace aurore {
 
-TelemetryWriter::~TelemetryWriter() {
-    stop();
-}
+TelemetryWriter::~TelemetryWriter() { stop(); }
 
 bool TelemetryWriter::start(const TelemetryConfig& config) {
     if (running_.load(std::memory_order_acquire)) {
@@ -46,8 +48,7 @@ bool TelemetryWriter::start(const TelemetryConfig& config) {
     auto time_t_now = std::chrono::system_clock::to_time_t(now);
     std::stringstream ss;
     ss << config_.log_dir << "/" << config_.session_prefix << "_"
-       << std::put_time(std::localtime(&time_t_now), "%Y%m%d_%H%M%S")
-       << ".csv";
+       << std::put_time(std::localtime(&time_t_now), "%Y%m%d_%H%M%S") << ".csv";
     session_csv_path_ = ss.str();
 
     // Open CSV file
@@ -105,12 +106,22 @@ void TelemetryWriter::stop() {
 
     std::cout << "TelemetryWriter stopped. Entries written: "
               << entries_written_.load(std::memory_order_acquire)
-              << ", dropped: " << entries_dropped_.load(std::memory_order_acquire)
-              << std::endl;
+              << ", dropped: " << entries_dropped_.load(std::memory_order_acquire) << std::endl;
 }
 
 // SEC-010: Enqueue with backpressure handling
 bool TelemetryWriter::enqueue_entry(const CsvLogEntry& entry) {
+    CsvLogEntry entry_to_queue = entry;
+
+    // SEC-003: Compute HMAC for entry if key is provided (ICD-004)
+    if (!config_.hmac_key.empty()) {
+        // Clear HMAC field before computation
+        std::memset(entry_to_queue.hmac, 0, sizeof(entry_to_queue.hmac));
+        security::compute_hmac_sha256_raw(config_.hmac_key, &entry_to_queue,
+                                          sizeof(CsvLogEntry) - sizeof(entry_to_queue.hmac),
+                                          entry_to_queue.hmac);
+    }
+
     std::unique_lock<std::mutex> lock(queue_mutex_);
 
     size_t current_depth = queue_depth_.load(std::memory_order_acquire);
@@ -145,7 +156,7 @@ bool TelemetryWriter::enqueue_entry(const CsvLogEntry& entry) {
     }
 
     // Queue the entry
-    entry_queue_.push(entry);
+    entry_queue_.push(entry_to_queue);
     size_t new_depth = queue_depth_.fetch_add(1, std::memory_order_acq_rel) + 1;
     entries_enqueued_.fetch_add(1, std::memory_order_relaxed);
 
@@ -160,8 +171,8 @@ bool TelemetryWriter::enqueue_entry(const CsvLogEntry& entry) {
 void TelemetryWriter::update_high_water_mark(size_t current_depth) {
     size_t current_hwm = high_water_mark_.load(std::memory_order_acquire);
     while (current_depth > current_hwm) {
-        if (high_water_mark_.compare_exchange_weak(current_hwm, current_depth,
-                std::memory_order_acq_rel, std::memory_order_acquire)) {
+        if (high_water_mark_.compare_exchange_weak(
+                current_hwm, current_depth, std::memory_order_acq_rel, std::memory_order_acquire)) {
             break;
         }
     }
@@ -176,19 +187,14 @@ void TelemetryWriter::check_backpressure_state(size_t current_depth) {
         backpressure_active_.store(should_be_active, std::memory_order_release);
 
         if (should_be_active) {
-            std::cerr << "TelemetryWriter: BACKPRESSURE ACTIVE - queue depth "
-                      << current_depth << " >= high-water " << queue_high_water_
-                      << std::endl;
+            std::cerr << "TelemetryWriter: BACKPRESSURE ACTIVE - queue depth " << current_depth
+                      << " >= high-water " << queue_high_water_ << std::endl;
         }
     }
 }
 
-void TelemetryWriter::log_frame(
-    const DetectionData& detection,
-    const TrackData& track,
-    const ActuationData& actuation,
-    const SystemHealthData& health) {
-
+void TelemetryWriter::log_frame(const DetectionData& detection, const TrackData& track,
+                                const ActuationData& actuation, const SystemHealthData& health) {
     if (!running_.load(std::memory_order_acquire)) {
         return;
     }
@@ -198,8 +204,8 @@ void TelemetryWriter::log_frame(
 
     // Timestamps
     auto now = std::chrono::system_clock::now();
-    auto epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        now.time_since_epoch()).count();
+    auto epoch_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
     entry.produced_ts_epoch_ms = static_cast<uint64_t>(epoch_ms);
     entry.call_ts_epoch_ms = static_cast<uint64_t>(epoch_ms);
 
@@ -258,11 +264,8 @@ void TelemetryWriter::log_frame(
     frame_count_++;
 }
 
-void TelemetryWriter::log_event(
-    TelemetryEventId event_id,
-    TelemetrySeverity severity,
-    const std::string& message) {
-
+void TelemetryWriter::log_event(TelemetryEventId event_id, TelemetrySeverity severity,
+                                const std::string& message) {
     if (!running_.load(std::memory_order_acquire)) {
         return;
     }
@@ -278,15 +281,25 @@ void TelemetryWriter::log_event(
 
     const char* severity_str = "";
     switch (severity) {
-        case TelemetrySeverity::kDebug: severity_str = "DEBUG"; break;
-        case TelemetrySeverity::kInfo: severity_str = "INFO"; break;
-        case TelemetrySeverity::kWarning: severity_str = "WARNING"; break;
-        case TelemetrySeverity::kError: severity_str = "ERROR"; break;
-        case TelemetrySeverity::kCritical: severity_str = "CRITICAL"; break;
+        case TelemetrySeverity::kDebug:
+            severity_str = "DEBUG";
+            break;
+        case TelemetrySeverity::kInfo:
+            severity_str = "INFO";
+            break;
+        case TelemetrySeverity::kWarning:
+            severity_str = "WARNING";
+            break;
+        case TelemetrySeverity::kError:
+            severity_str = "ERROR";
+            break;
+        case TelemetrySeverity::kCritical:
+            severity_str = "CRITICAL";
+            break;
     }
 
-    std::cout << "[" << severity_str << "] Event "
-              << static_cast<int>(event_id) << ": " << truncated_message << std::endl;
+    std::cout << "[" << severity_str << "] Event " << static_cast<int>(event_id) << ": "
+              << truncated_message << std::endl;
 }
 
 void TelemetryWriter::writer_loop() {
@@ -299,11 +312,9 @@ void TelemetryWriter::writer_loop() {
             std::unique_lock<std::mutex> lock(queue_mutex_);
 
             // Wait with timeout to allow checking running_ flag
-            if (queue_cv_.wait_for(lock, std::chrono::milliseconds(100),
-                                   [this] {
-                                       return !entry_queue_.empty() ||
-                                              !running_.load(std::memory_order_acquire);
-                                   })) {
+            if (queue_cv_.wait_for(lock, std::chrono::milliseconds(100), [this] {
+                    return !entry_queue_.empty() || !running_.load(std::memory_order_acquire);
+                })) {
                 if (!entry_queue_.empty()) {
                     entry = entry_queue_.front();
                     entry_queue_.pop();
@@ -365,36 +376,33 @@ void TelemetryWriter::write_csv_header() {
               << "det_x,det_y,det_width,det_height,det_confidence,det_target_class,"
               << "track_id,track_x,track_y,track_z,track_hit_streak,track_confidence,"
               << "servo_azimuth,servo_elevation,servo_command_sent,"
-              << "cpu_temp_c,cpu_usage_percent\n";
+              << "cpu_temp_c,cpu_usage_percent,hmac_signature\n";
 }
 
 void TelemetryWriter::write_csv_entry(const CsvLogEntry& entry) {
     // Calculate monotonic ms from start
-    uint64_t monotonic_ms = (entry.call_ts_epoch_ms -
-                            (start_time_ns_ / 1000000));
+    uint64_t monotonic_ms = (entry.call_ts_epoch_ms - (start_time_ns_ / 1000000));
 
-    csv_file_ << entry.produced_ts_epoch_ms << ","
-              << monotonic_ms << ","
-              << entry.module << ","
-              << entry.event << ","
-              << entry.cam_frame_id << ","
-              << entry.det_x << ","
-              << entry.det_y << ","
-              << entry.det_width << ","
-              << entry.det_height << ","
-              << entry.det_confidence << ","
-              << static_cast<int>(entry.det_target_class) << ","
-              << entry.track_id << ","
-              << entry.track_x << ","
-              << entry.track_y << ","
-              << entry.track_z << ","
-              << entry.track_hit_streak << ","
-              << entry.track_confidence << ","
-              << entry.servo_azimuth << ","
-              << entry.servo_elevation << ","
-              << (entry.servo_command_sent ? "1" : "0") << ","
-              << entry.cpu_temp_c << ","
-              << entry.cpu_usage_percent << "\n";
+    std::stringstream ss;
+    ss << entry.produced_ts_epoch_ms << "," << monotonic_ms << "," << entry.module << ","
+       << entry.event << "," << entry.cam_frame_id << "," << entry.det_x << "," << entry.det_y
+       << "," << entry.det_width << "," << entry.det_height << "," << entry.det_confidence << ","
+       << static_cast<int>(entry.det_target_class) << "," << entry.track_id << "," << entry.track_x
+       << "," << entry.track_y << "," << entry.track_z << "," << entry.track_hit_streak << ","
+       << entry.track_confidence << "," << entry.servo_azimuth << "," << entry.servo_elevation
+       << "," << (entry.servo_command_sent ? "1" : "0") << "," << entry.cpu_temp_c << ","
+       << entry.cpu_usage_percent;
+
+    std::string row_data = ss.str();
+
+    // Use pre-computed binary HMAC (ICD-004)
+    std::stringstream hmac_ss;
+    for (int i = 0; i < 32; i++) {
+        hmac_ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(entry.hmac[i]);
+    }
+    std::string signature = hmac_ss.str();
+
+    csv_file_ << row_data << "," << signature << "\n";
 
     // Flush periodically (every 100 entries) for debugging
     if (entries_written_.load(std::memory_order_relaxed) % 100 == 0) {
@@ -403,8 +411,7 @@ void TelemetryWriter::write_csv_entry(const CsvLogEntry& entry) {
 }
 
 void TelemetryWriter::write_json_summary() {
-    std::string json_path = config_.log_dir + "/" +
-                           config_.session_prefix + "_summary.json";
+    std::string json_path = config_.log_dir + "/" + config_.session_prefix + "_summary.json";
 
     std::ofstream json_file(json_path);
     if (!json_file.is_open()) {
@@ -414,8 +421,7 @@ void TelemetryWriter::write_json_summary() {
     // Calculate statistics
     uint64_t duration_ns = last_frame_time_ns_ - first_frame_time_ns_;
     double duration_sec = static_cast<double>(duration_ns) / 1e9;
-    double avg_fps = (duration_sec > 0) ?
-                     static_cast<double>(frame_count_) / duration_sec : 0.0;
+    double avg_fps = (duration_sec > 0) ? static_cast<double>(frame_count_) / duration_sec : 0.0;
 
     // SEC-010: Include backpressure statistics
     TelemetryQueueStats queue_stats = get_queue_stats();
@@ -424,18 +430,17 @@ void TelemetryWriter::write_json_summary() {
     json_file << "  \"session_id\": " << session_id_ << ",\n";
     json_file << "  \"session_file\": \"" << session_csv_path_ << "\",\n";
     json_file << "  \"start_time_ns\": " << start_time_ns_ << ",\n";
-    json_file << "  \"duration_sec\": " << std::fixed << std::setprecision(3)
-              << duration_sec << ",\n";
+    json_file << "  \"duration_sec\": " << std::fixed << std::setprecision(3) << duration_sec
+              << ",\n";
     json_file << "  \"frame_count\": " << frame_count_ << ",\n";
     json_file << "  \"entries_written\": " << entries_written_.load() << ",\n";
     json_file << "  \"entries_dropped\": " << entries_dropped_.load() << ",\n";
-    json_file << "  \"avg_fps\": " << std::fixed << std::setprecision(2)
-              << avg_fps << ",\n";
+    json_file << "  \"avg_fps\": " << std::fixed << std::setprecision(2) << avg_fps << ",\n";
     // SEC-010: Backpressure stats
     json_file << "  \"queue_max_depth\": " << queue_stats.max_depth << ",\n";
     json_file << "  \"queue_high_water_mark\": " << queue_stats.high_water_mark << ",\n";
-    json_file << "  \"backpressure_events\": "
-              << (queue_stats.total_dropped > 0 ? "true" : "false") << "\n";
+    json_file << "  \"backpressure_events\": " << (queue_stats.total_dropped > 0 ? "true" : "false")
+              << "\n";
     json_file << "}\n";
 
     json_file.close();
@@ -453,8 +458,7 @@ void TelemetryWriter::rotate_logs() {
 uint64_t TelemetryWriter::get_timestamp_ns() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-    return static_cast<uint64_t>(ts.tv_sec) * 1000000000UL +
-           static_cast<uint64_t>(ts.tv_nsec);
+    return static_cast<uint64_t>(ts.tv_sec) * 1000000000UL + static_cast<uint64_t>(ts.tv_nsec);
 }
 
-} // namespace aurore
+}  // namespace aurore

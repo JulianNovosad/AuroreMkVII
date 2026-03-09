@@ -10,9 +10,8 @@
 
 #include <fstream>
 #include <iostream>
-#include <sstream>
-
 #include <nlohmann/json.hpp>
+#include <sstream>
 
 namespace aurore {
 
@@ -26,7 +25,7 @@ struct ConfigLoader::Impl {
 
     /**
      * @brief Get nested JSON value by dot-notation path
-     * 
+     *
      * @param path Dot-separated path (e.g., "system.frame_rate_hz")
      * @return Pointer to value if found, nullptr otherwise
      */
@@ -63,20 +62,17 @@ struct ConfigLoader::Impl {
             loaded = true;
             std::cout << "ConfigLoader: Loaded " << path << std::endl;
             return true;
-        }
-        catch (const nlohmann::json::parse_error& e) {
+        } catch (const nlohmann::json::parse_error& e) {
             std::cerr << "ConfigLoader: JSON parse error: " << e.what() << std::endl;
             return false;
-        }
-        catch (const std::exception& e) {
+        } catch (const std::exception& e) {
             std::cerr << "ConfigLoader: Error loading config: " << e.what() << std::endl;
             return false;
         }
     }
 };
 
-ConfigLoader::ConfigLoader(const std::string& path)
-    : impl_(std::make_shared<Impl>()) {
+ConfigLoader::ConfigLoader(const std::string& path) : impl_(std::make_shared<Impl>()) {
     if (!path.empty()) {
         load(path);
     }
@@ -103,8 +99,7 @@ int ConfigLoader::get_int(const std::string& key, int default_value) const {
 
     try {
         return value->get<int>();
-    }
-    catch (const nlohmann::json::type_error& e) {
+    } catch (const nlohmann::json::type_error& e) {
         std::cerr << "ConfigLoader: Type error for key '" << key << "': " << e.what() << std::endl;
     }
 
@@ -123,8 +118,7 @@ float ConfigLoader::get_float(const std::string& key, float default_value) const
 
     try {
         return value->get<float>();
-    }
-    catch (const nlohmann::json::type_error& e) {
+    } catch (const nlohmann::json::type_error& e) {
         std::cerr << "ConfigLoader: Type error for key '" << key << "': " << e.what() << std::endl;
     }
 
@@ -143,15 +137,15 @@ bool ConfigLoader::get_bool(const std::string& key, bool default_value) const {
 
     try {
         return value->get<bool>();
-    }
-    catch (const nlohmann::json::type_error& e) {
+    } catch (const nlohmann::json::type_error& e) {
         std::cerr << "ConfigLoader: Type error for key '" << key << "': " << e.what() << std::endl;
     }
 
     return default_value;
 }
 
-std::string ConfigLoader::get_string(const std::string& key, const std::string& default_value) const {
+std::string ConfigLoader::get_string(const std::string& key,
+                                     const std::string& default_value) const {
     if (!impl_ || !impl_->loaded) {
         return default_value;
     }
@@ -163,12 +157,19 @@ std::string ConfigLoader::get_string(const std::string& key, const std::string& 
 
     try {
         return value->get<std::string>();
-    }
-    catch (const nlohmann::json::type_error& e) {
+    } catch (const nlohmann::json::type_error& e) {
         std::cerr << "ConfigLoader: Type error for key '" << key << "': " << e.what() << std::endl;
     }
 
     return default_value;
+}
+
+const nlohmann::json& ConfigLoader::get_json() const {
+    static const nlohmann::json empty_json = nlohmann::json::object();
+    if (!impl_ || !impl_->loaded) {
+        return empty_json;
+    }
+    return impl_->config_data;
 }
 
 }  // namespace aurore

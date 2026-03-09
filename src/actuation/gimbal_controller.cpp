@@ -2,11 +2,9 @@
 
 namespace aurore {
 
-GimbalController::GimbalController(const CameraIntrinsics& cam)
-    : cam_(cam) {}
+GimbalController::GimbalController(const CameraIntrinsics& cam) : cam_(cam) {}
 
-GimbalCommand GimbalController::command_from_pixel(
-    float centroid_x, float centroid_y, float gain) {
+GimbalCommand GimbalController::command_from_pixel(float centroid_x, float centroid_y, float gain) {
     // Compute pixel offset from image center
     const float dx = centroid_x - cam_.cx;
     const float dy = centroid_y - cam_.cy;  // positive dy = target below center
@@ -15,8 +13,10 @@ GimbalCommand GimbalController::command_from_pixel(
     // delta_theta = atan2(offset_px, focal_length_px) * (180 / PI)
     // Note: Pixel Y increases downward, but elevation increases upward
     // Therefore we negate dy to get correct elevation direction
-    const float delta_az = std::atan2(dx, cam_.focal_length_px) * (180.0f / static_cast<float>(M_PI));
-    const float delta_el = std::atan2(-dy, cam_.focal_length_px) * (180.0f / static_cast<float>(M_PI));
+    const float delta_az =
+        std::atan2(dx, cam_.focal_length_px) * (180.0f / static_cast<float>(M_PI));
+    const float delta_el =
+        std::atan2(-dy, cam_.focal_length_px) * (180.0f / static_cast<float>(M_PI));
 
     // AUTO mode: accumulate delta onto current angle
     float new_az = az_.load(std::memory_order_relaxed) + delta_az * gain;

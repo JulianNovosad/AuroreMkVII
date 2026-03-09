@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include "aurore/telemetry_types.hpp"
-#include <type_traits>
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -26,6 +24,9 @@
 #include <queue>
 #include <string>
 #include <thread>
+#include <type_traits>
+
+#include "aurore/telemetry_types.hpp"
 
 namespace aurore {
 
@@ -35,9 +36,9 @@ static_assert(std::is_trivially_copyable<CsvLogEntry>::value,
 
 // SEC-010: Backpressure policy options
 enum class BackpressurePolicy : uint8_t {
-    kDropOldest = 0,    // Drop oldest entries when queue full
-    kDropNewest = 1,    // Drop new entries when queue full
-    kBlock = 2          // Block producer (not recommended for real-time)
+    kDropOldest = 0,  // Drop oldest entries when queue full
+    kDropNewest = 1,  // Drop new entries when queue full
+    kBlock = 2        // Block producer (not recommended for real-time)
 };
 
 /**
@@ -58,18 +59,21 @@ struct TelemetryQueueStats {
  * SEC-010: Added backpressure configuration
  */
 struct TelemetryConfig {
-    std::string log_dir = "logs";           ///< Log directory
-    std::string session_prefix = "run";     ///< Session file prefix
-    size_t max_file_size_mb = 100;          ///< Rotate after N MB
-    size_t max_sessions = 10;               ///< Keep N sessions max
-    bool enable_csv = true;                 ///< Write CSV logs
-    bool enable_json = true;                ///< Write JSON summary
-    bool enable_console = false;            ///< Mirror to stdout
+    std::string log_dir = "logs";        ///< Log directory
+    std::string session_prefix = "run";  ///< Session file prefix
+    size_t max_file_size_mb = 100;       ///< Rotate after N MB
+    size_t max_sessions = 10;            ///< Keep N sessions max
+    bool enable_csv = true;              ///< Write CSV logs
+    bool enable_json = true;             ///< Write JSON summary
+    bool enable_console = false;         ///< Mirror to stdout
 
     // SEC-010: Backpressure configuration
-    size_t max_queue_size = 100;            ///< Max entries in queue
-    size_t queue_high_water_pct = 80;       ///< High-water mark as % of max
+    size_t max_queue_size = 100;       ///< Max entries in queue
+    size_t queue_high_water_pct = 80;  ///< High-water mark as % of max
     BackpressurePolicy backpressure_policy = BackpressurePolicy::kDropOldest;
+
+    // SEC-003: HMAC-SHA256 key for log signing (empty = disabled)
+    std::string hmac_key = "";
 };
 
 /**
@@ -90,7 +94,7 @@ struct TelemetryConfig {
  * SEC-010: Implements backpressure to prevent queue overflow DoS
  */
 class TelemetryWriter {
-public:
+   public:
     TelemetryWriter() = default;
     ~TelemetryWriter();
 
@@ -117,19 +121,14 @@ public:
      * Thread-safe, non-blocking (queues entry for async write)
      * SEC-010: Implements backpressure when queue is full
      */
-    void log_frame(
-        const DetectionData& detection,
-        const TrackData& track,
-        const ActuationData& actuation,
-        const SystemHealthData& health);
+    void log_frame(const DetectionData& detection, const TrackData& track,
+                   const ActuationData& actuation, const SystemHealthData& health);
 
     /**
      * @brief Log a telemetry event
      */
-    void log_event(
-        TelemetryEventId event_id,
-        TelemetrySeverity severity,
-        const std::string& message);
+    void log_event(TelemetryEventId event_id, TelemetrySeverity severity,
+                   const std::string& message);
 
     /**
      * @brief Get current session file path
@@ -147,9 +146,7 @@ public:
     /**
      * @brief Get current queue depth
      */
-    size_t get_queue_depth() const {
-        return queue_depth_.load(std::memory_order_acquire);
-    }
+    size_t get_queue_depth() const { return queue_depth_.load(std::memory_order_acquire); }
 
     /**
      * @brief Check if backpressure is currently active
@@ -170,7 +167,7 @@ public:
         return entries_dropped_.load(std::memory_order_acquire);
     }
 
-private:
+   private:
     /**
      * @brief Writer thread main loop
      */
@@ -254,4 +251,4 @@ private:
     uint64_t frame_count_ = 0;
 };
 
-} // namespace aurore
+}  // namespace aurore

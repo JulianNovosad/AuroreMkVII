@@ -1,9 +1,12 @@
-#include "aurore/tracker.hpp"
 #include <opencv2/imgproc.hpp>
+
+#include "aurore/tracker.hpp"
 
 namespace aurore {
 
 KcfTracker::KcfTracker() = default;
+
+void KcfTracker::set_camera(CameraWrapper* camera) { camera_ = camera; }
 
 bool KcfTracker::init(const cv::Mat& bgr_frame, const cv::Rect2d& bbox) {
     // AM7-L2-VIS-008: KCF tracker for 120Hz continuous tracking
@@ -44,7 +47,8 @@ TrackSolution KcfTracker::update(const cv::Mat& bgr_frame) {
     // Area change sanity check (drift detection)
     double prev_area = last_bbox_.width * last_bbox_.height;
     double curr_area = static_cast<double>(bbox.width) * bbox.height;
-    if (prev_area > 0 && std::abs(curr_area - prev_area) / prev_area > static_cast<double>(kAreaChangeMaxRatio)) {
+    if (prev_area > 0 &&
+        std::abs(curr_area - prev_area) / prev_area > static_cast<double>(kAreaChangeMaxRatio)) {
         valid_ = false;
         return sol;
     }
@@ -76,42 +80,85 @@ void KcfTracker::reset() {
     tracker_.reset();
     valid_ = false;
     have_prev_ = false;
-    ref_template_ = cv::Mat{};
+
+    // Zero-copy: release the stored DMA buffer back to camera pool
+    if (ref_frame_.is_valid() && camera_) {
+        camera_->release_frame(ref_frame_);
+    }
+    ref_frame_ = ZeroCopyFrame{};
+    ref_roi_ = cv::Rect2d{};
 }
 
 bool KcfTracker::is_valid() const { return valid_; }
 
-void KcfTracker::capture_reference_template(const cv::Mat& bgr_frame, const cv::Rect2d& bbox) {
-    cv::Rect roi(static_cast<int>(bbox.x), static_cast<int>(bbox.y),
-                 static_cast<int>(bbox.width), static_cast<int>(bbox.height));
-    roi &= cv::Rect(0, 0, bgr_frame.cols, bgr_frame.rows);
-    if (roi.empty()) return;
-    // Note: clone() performs memcpy - for zero-copy, use DMA buffer wrapping
-    cv::Mat crop = bgr_frame(roi).clone();
-    cv::cvtColor(crop, ref_template_, cv::COLOR_BGR2GRAY);
+void KcfTracker::capture_reference_template(const ZeroCopyFrame& frame, const cv::Rect2d& bbox) {
+    // AM7-L3-VIS-001: Zero-copy reference template capture
+    // Store the ZeroCopyFrame descriptor (DMA buffer reference), NOT a pixel copy.
+    // The frame is held until reset() or next capture_reference_template() call.
+
+    if (!frame.is_valid()) {
+        return;
+    }
+
+    // Release previous reference frame if still held
+    if (ref_frame_.is_valid() && camera_) {
+        camera_->release_frame(ref_frame_);
+    }
+
+    // Store the frame descriptor (zero-copy - no memcpy performed)
+    ref_frame_ = frame;
+    ref_roi_ = bbox;
 }
 
 float KcfTracker::redetect(const cv::Mat& bgr_frame) const {
-    if (ref_template_.empty()) return 0.f;
+    // AM7-L3-VIS-001: Zero-copy redetection
+    // Wrap the stored ZeroCopyFrame as cv::Mat (no memcpy) and extract ROI
 
+    if (!ref_frame_.is_valid() || !camera_) {
+        return 0.f;
+    }
+
+    // Wrap stored DMA buffer as cv::Mat (zero-copy operation)
+    cv::Mat ref_bgr = camera_->wrap_as_mat(ref_frame_, PixelFormat::BGR888);
+    if (ref_bgr.empty()) {
+        return 0.f;
+    }
+
+    // Extract ROI from reference frame
+    cv::Rect ref_roi(static_cast<int>(ref_roi_.x), static_cast<int>(ref_roi_.y),
+                     static_cast<int>(ref_roi_.width), static_cast<int>(ref_roi_.height));
+    ref_roi &= cv::Rect(0, 0, ref_bgr.cols, ref_bgr.rows);
+    if (ref_roi.empty()) {
+        return 0.f;
+    }
+
+    // Convert reference ROI to grayscale for template matching
+    cv::Mat ref_gray;
+    cv::cvtColor(ref_bgr(ref_roi), ref_gray, cv::COLOR_BGR2GRAY);
+
+    // Convert current frame to grayscale
     cv::Mat gray;
     cv::cvtColor(bgr_frame, gray, cv::COLOR_BGR2GRAY);
 
+    // Search region with margin around last known position
     int margin = 100;
-    cv::Rect search_roi(
-        static_cast<int>(std::max(0.0, last_bbox_.x - margin)),
-        static_cast<int>(std::max(0.0, last_bbox_.y - margin)),
-        static_cast<int>(last_bbox_.width + 2 * margin),
-        static_cast<int>(last_bbox_.height + 2 * margin)
-    );
+    cv::Rect search_roi(static_cast<int>(std::max(0.0, last_bbox_.x - margin)),
+                        static_cast<int>(std::max(0.0, last_bbox_.y - margin)),
+                        static_cast<int>(last_bbox_.width + 2 * margin),
+                        static_cast<int>(last_bbox_.height + 2 * margin));
     search_roi &= cv::Rect(0, 0, gray.cols, gray.rows);
-    if (search_roi.empty()) return 0.f;
+    if (search_roi.empty()) {
+        return 0.f;
+    }
 
     cv::Mat region = gray(search_roi);
-    if (region.cols < ref_template_.cols || region.rows < ref_template_.rows) return 0.f;
+    if (region.cols < ref_gray.cols || region.rows < ref_gray.rows) {
+        return 0.f;
+    }
 
+    // Template matching with normalized cross-correlation
     cv::Mat result;
-    cv::matchTemplate(region, ref_template_, result, cv::TM_CCOEFF_NORMED);
+    cv::matchTemplate(region, ref_gray, result, cv::TM_CCOEFF_NORMED);
 
     double min_val, max_val;
     cv::minMaxLoc(result, &min_val, &max_val);

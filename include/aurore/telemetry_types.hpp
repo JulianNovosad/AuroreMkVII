@@ -69,7 +69,8 @@ enum class TelemetryEventId : uint16_t {
     CAMERA_TIMEOUT = 0x0501,
     GIMBAL_TIMEOUT = 0x0502,
     TEMPERATURE_WARNING = 0x0503,
-    TEMPERATURE_CRITICAL = 0x0504
+    TEMPERATURE_CRITICAL = 0x0504,
+    I2C_FAULT = 0x0505,
 };
 
 /**
@@ -124,27 +125,26 @@ inline bool validate_string_fits(const char* str, size_t buffer_size) {
  * SEC-009: All fields validated before use
  */
 struct DetectionData {
-    uint32_t frame_id = 0;          ///< Frame sequence number
-    uint64_t timestamp_ns = 0;      ///< Timestamp (CLOCK_MONOTONIC_RAW)
+    uint32_t frame_id = 0;      ///< Frame sequence number
+    uint64_t timestamp_ns = 0;  ///< Timestamp (CLOCK_MONOTONIC_RAW)
 
     // Bounding box (pixel coordinates)
-    float x = 0.0f;                 ///< Center X in pixels
-    float y = 0.0f;                 ///< Center Y in pixels
-    float width = 0.0f;             ///< Width in pixels
-    float height = 0.0f;            ///< Height in pixels
+    float x = 0.0f;       ///< Center X in pixels
+    float y = 0.0f;       ///< Center Y in pixels
+    float width = 0.0f;   ///< Width in pixels
+    float height = 0.0f;  ///< Height in pixels
 
     // Detection confidence
-    float confidence = 0.0f;        ///< 0.0 - 1.0
+    float confidence = 0.0f;  ///< 0.0 - 1.0
 
     // Target classification
-    uint8_t target_class = 0;       ///< 0=unknown, 1=calibration, 2=helicopter
+    uint8_t target_class = 0;  ///< 0=unknown, 1=calibration, 2=helicopter
 
     // SEC-009: Validation method
     bool is_valid() const {
         // Check for NaN/Inf
-        if (!std::isfinite(x) || !std::isfinite(y) ||
-            !std::isfinite(width) || !std::isfinite(height) ||
-            !std::isfinite(confidence)) {
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(width) ||
+            !std::isfinite(height) || !std::isfinite(confidence)) {
             return false;
         }
 
@@ -164,13 +164,13 @@ struct DetectionData {
  * SEC-009: All fields validated before use
  */
 struct TrackData {
-    uint32_t track_id = 0;          ///< Unique track identifier
-    uint64_t timestamp_ns = 0;      ///< Timestamp (CLOCK_MONOTONIC_RAW)
+    uint32_t track_id = 0;      ///< Unique track identifier
+    uint64_t timestamp_ns = 0;  ///< Timestamp (CLOCK_MONOTONIC_RAW)
 
     // 3D position estimate (meters)
     float x = 0.0f;
     float y = 0.0f;
-    float z = 0.0f;                 ///< Range (estimated from target size)
+    float z = 0.0f;  ///< Range (estimated from target size)
 
     // Velocity estimate (m/s)
     float vx = 0.0f;
@@ -178,24 +178,23 @@ struct TrackData {
     float vz = 0.0f;
 
     // Track quality
-    uint32_t hit_streak = 0;        ///< Consecutive successful updates
-    uint32_t missed_frames = 0;     ///< Frames without detection
-    float confidence = 0.0f;        ///< Track confidence 0.0 - 1.0
+    uint32_t hit_streak = 0;     ///< Consecutive successful updates
+    uint32_t missed_frames = 0;  ///< Frames without detection
+    float confidence = 0.0f;     ///< Track confidence 0.0 - 1.0
 
     // Bounding box (for visualization)
-    float bbox_x = 0.0f;            ///< Top-left X in pixels
-    float bbox_y = 0.0f;            ///< Top-left Y in pixels
-    float bbox_width = 0.0f;        ///< Width in pixels
-    float bbox_height = 0.0f;       ///< Height in pixels
+    float bbox_x = 0.0f;       ///< Top-left X in pixels
+    float bbox_y = 0.0f;       ///< Top-left Y in pixels
+    float bbox_width = 0.0f;   ///< Width in pixels
+    float bbox_height = 0.0f;  ///< Height in pixels
 
     // SEC-009: Validation method
     bool is_valid() const {
         // Check for NaN/Inf in all float fields
-        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
-            !std::isfinite(vx) || !std::isfinite(vy) || !std::isfinite(vz) ||
-            !std::isfinite(confidence) ||
-            !std::isfinite(bbox_x) || !std::isfinite(bbox_y) ||
-            !std::isfinite(bbox_width) || !std::isfinite(bbox_height)) {
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || !std::isfinite(vx) ||
+            !std::isfinite(vy) || !std::isfinite(vz) || !std::isfinite(confidence) ||
+            !std::isfinite(bbox_x) || !std::isfinite(bbox_y) || !std::isfinite(bbox_width) ||
+            !std::isfinite(bbox_height)) {
             return false;
         }
 
@@ -215,23 +214,23 @@ struct TrackData {
  * SEC-009: All fields validated before use
  */
 struct ActuationData {
-    uint32_t sequence = 0;          ///< Command sequence number
-    uint64_t timestamp_ns = 0;      ///< Timestamp (CLOCK_MONOTONIC_RAW)
+    uint32_t sequence = 0;      ///< Command sequence number
+    uint64_t timestamp_ns = 0;  ///< Timestamp (CLOCK_MONOTONIC_RAW)
 
     // Commanded position (degrees)
-    float azimuth_deg = 0.0f;       ///< -90° to +90°
-    float elevation_deg = 0.0f;     ///< -10° to +45°
+    float azimuth_deg = 0.0f;    ///< -90° to +90°
+    float elevation_deg = 0.0f;  ///< -10° to +45°
 
     // Command velocity (deg/s)
-    float velocity_dps = 0.0f;      ///< Max 60°/s per AM7-L2-ACT-002
+    float velocity_dps = 0.0f;  ///< Max 60°/s per AM7-L2-ACT-002
 
     // Execution status
     bool command_sent = false;
     bool limit_violation = false;
 
     // Latency tracking
-    uint64_t compute_time_ns = 0;   ///< Time when command was computed
-    uint64_t write_time_ns = 0;     ///< Time when I2C write completed
+    uint64_t compute_time_ns = 0;  ///< Time when command was computed
+    uint64_t write_time_ns = 0;    ///< Time when I2C write completed
 
     // SEC-009: Validation method
     bool is_valid() const {
@@ -261,19 +260,19 @@ struct ActuationData {
  * SEC-009: All fields validated before use
  */
 struct SystemHealthData {
-    uint64_t timestamp_ns = 0;      ///< Timestamp
+    uint64_t timestamp_ns = 0;  ///< Timestamp
 
     // CPU metrics
-    float cpu_temp_c = 0.0f;        ///< CPU temperature (°C)
-    float cpu_usage_percent = 0.0f; ///< CPU usage (0-100%)
+    float cpu_temp_c = 0.0f;         ///< CPU temperature (°C)
+    float cpu_usage_percent = 0.0f;  ///< CPU usage (0-100%)
 
     // Memory metrics
-    uint32_t mem_used_mb = 0;       ///< Memory used (MB)
-    uint32_t mem_total_mb = 0;      ///< Total memory (MB)
+    uint32_t mem_used_mb = 0;   ///< Memory used (MB)
+    uint32_t mem_total_mb = 0;  ///< Total memory (MB)
 
     // Frame rate
-    float frame_rate = 0.0f;        ///< Actual FPS
-    float jitter_percent = 0.0f;    ///< Jitter as % of frame period
+    float frame_rate = 0.0f;      ///< Actual FPS
+    float jitter_percent = 0.0f;  ///< Jitter as % of frame period
 
     // SEC-009: Validation method
     bool is_valid() const {
@@ -343,46 +342,40 @@ struct CsvLogEntry {
     char module[kModule_name_max] = {};
     char event[kEvent_name_max] = {};
 
+    // ICD-004: HMAC-SHA256 for entry integrity
+    uint8_t hmac[32] = {};
+
     /**
      * @brief SEC-009: Safe string copy for module name
      */
-    void set_module(const char* name) {
-        safe_string_copy(module, name, kModule_name_max);
-    }
+    void set_module(const char* name) { safe_string_copy(module, name, kModule_name_max); }
 
     /**
      * @brief SEC-009: Safe string copy for event name
      */
-    void set_event(const char* name) {
-        safe_string_copy(event, name, kEvent_name_max);
-    }
+    void set_event(const char* name) { safe_string_copy(event, name, kEvent_name_max); }
 
     /**
      * @brief SEC-009: Safe string copy from std::string for module
      */
-    void set_module(const std::string& name) {
-        safe_string_copy(module, name, kModule_name_max);
-    }
+    void set_module(const std::string& name) { safe_string_copy(module, name, kModule_name_max); }
 
     /**
      * @brief SEC-009: Safe string copy from std::string for event
      */
-    void set_event(const std::string& name) {
-        safe_string_copy(event, name, kEvent_name_max);
-    }
+    void set_event(const std::string& name) { safe_string_copy(event, name, kEvent_name_max); }
 
     /**
      * @brief SEC-009: Validate all float fields are finite
      */
     bool is_valid() const {
         // Check all float fields for NaN/Inf
-        if (!std::isfinite(det_x) || !std::isfinite(det_y) ||
-            !std::isfinite(det_width) || !std::isfinite(det_height) ||
-            !std::isfinite(det_confidence) ||
-            !std::isfinite(track_x) || !std::isfinite(track_y) ||
-            !std::isfinite(track_z) || !std::isfinite(track_confidence) ||
-            !std::isfinite(servo_azimuth) || !std::isfinite(servo_elevation) ||
-            !std::isfinite(cpu_temp_c) || !std::isfinite(cpu_usage_percent)) {
+        if (!std::isfinite(det_x) || !std::isfinite(det_y) || !std::isfinite(det_width) ||
+            !std::isfinite(det_height) || !std::isfinite(det_confidence) ||
+            !std::isfinite(track_x) || !std::isfinite(track_y) || !std::isfinite(track_z) ||
+            !std::isfinite(track_confidence) || !std::isfinite(servo_azimuth) ||
+            !std::isfinite(servo_elevation) || !std::isfinite(cpu_temp_c) ||
+            !std::isfinite(cpu_usage_percent)) {
             return false;
         }
 
@@ -402,9 +395,7 @@ struct CsvLogEntry {
 };
 
 // SEC-009: Compile-time size checks
-static_assert(sizeof(CsvLogEntry::module) == kModule_name_max,
-              "module buffer size mismatch");
-static_assert(sizeof(CsvLogEntry::event) == kEvent_name_max,
-              "event buffer size mismatch");
+static_assert(sizeof(CsvLogEntry::module) == kModule_name_max, "module buffer size mismatch");
+static_assert(sizeof(CsvLogEntry::event) == kEvent_name_max, "event buffer size mismatch");
 
-} // namespace aurore
+}  // namespace aurore
