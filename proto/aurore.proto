@@ -100,4 +100,5 @@ message Command {
         ConfigPatch   config     = 3;
         ArmCommand    arm        = 4;
     }
+    bytes hmac_signature = 10;
 }

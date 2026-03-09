@@ -3,58 +3,304 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <cstring>
+#include <atomic>
+#include <thread>
+#include <functional>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <iomanip>
 #include <sstream>
+
+// Suppress deprecation warnings for SHA256_* functions (they're faster than EVP API)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 namespace aurore {
 namespace security {
 
 /**
- * @brief Computes HMAC-SHA256 signature for a given message using a secret key.
- * 
- * @param key The secret key for signing.
- * @param message The message to sign.
- * @return std::string The hexadecimal representation of the HMAC signature.
+ * @brief Computes SHA256 hash of a raw binary buffer.
+ *
+ * Uses legacy SHA256_* API for performance (EVP API is 10x slower).
+ *
+ * @param data Pointer to the data buffer.
+ * @param len Length of the data buffer.
+ * @param out_hash Pointer to a buffer where the 32-byte hash will be stored.
  */
-inline std::string compute_hmac_sha256(const std::string& key, const std::string& message) {
-    unsigned char hash[EVP_MAX_MD_SIZE];
-    unsigned int len = 0;
-
-    HMAC(EVP_sha256(), 
-         key.c_str(), static_cast<int>(key.length()),
-         reinterpret_cast<const unsigned char*>(message.c_str()), message.length(),
-         hash, &len);
-
-    std::stringstream ss;
-    for (unsigned int i = 0; i < len; i++) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
-    }
-    return ss.str();
+inline void compute_sha256_raw(const void* data, size_t len, unsigned char* out_hash) {
+    SHA256_CTX ctx;
+    SHA256_Init(&ctx);
+    SHA256_Update(&ctx, data, len);
+    SHA256_Final(out_hash, &ctx);
 }
 
 /**
- * @brief Verifies an HMAC-SHA256 signature.
- * 
- * @param key The secret key.
- * @param message The message to verify.
- * @param signature The received signature to verify against.
- * @return true if the signature is valid, false otherwise.
+ * @brief Computes SHA256 hash of a raw binary buffer (thread-safe version).
+ *
+ * Uses legacy SHA256_* API for performance (EVP API is 10x slower).
+ * Each call creates a new context for thread safety.
+ *
+ * @param data Pointer to the data buffer.
+ * @param len Length of the data buffer.
+ * @param out_hash Pointer to a buffer where the 32-byte hash will be stored.
  */
-inline bool verify_hmac_sha256(const std::string& key, const std::string& message, const std::string& signature) {
-    std::string computed = compute_hmac_sha256(key, message);
-    // Constant-time comparison to prevent timing attacks
-    if (computed.length() != signature.length()) {
-        return false;
+inline void compute_sha256_raw_threadsafe(const void* data, size_t len, unsigned char* out_hash) {
+    SHA256_CTX ctx;
+    SHA256_Init(&ctx);
+    SHA256_Update(&ctx, data, len);
+    SHA256_Final(out_hash, &ctx);
+}
+
+/**
+ * @brief Computes HMAC-SHA256 signature for a raw binary buffer.
+ *
+ * @param key The secret key for signing.
+ * @param data Pointer to the data buffer.
+ * @param len Length of the data buffer.
+ * @param out_hmac Pointer to a buffer where the 32-byte HMAC will be stored.
+ */
+inline void compute_hmac_sha256_raw(const std::string& key, const void* data, size_t len, unsigned char* out_hmac) {
+    unsigned int hmac_len = 0;
+    HMAC(EVP_sha256(),
+         key.c_str(), static_cast<int>(key.length()),
+         reinterpret_cast<const unsigned char*>(data), len,
+         out_hmac, &hmac_len);
+}
+
+/**
+ * @brief Computes HMAC-SHA256 signature for a raw binary buffer (thread-safe version).
+ *
+ * @param key The secret key for signing.
+ * @param data Pointer to the data buffer.
+ * @param len Length of the data buffer.
+ * @param out_hmac Pointer to a buffer where the 32-byte HMAC will be stored.
+ */
+inline void compute_hmac_sha256_raw_threadsafe(const std::string& key, const void* data, size_t len, unsigned char* out_hmac) {
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) return;
+    
+    unsigned char key_buf[EVP_MAX_KEY_LENGTH];
+    std::memcpy(key_buf, key.c_str(), std::min(key.length(), static_cast<size_t>(EVP_MAX_KEY_LENGTH)));
+    
+    EVP_PKEY* pkey = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, nullptr, key_buf, static_cast<int>(key.length()));
+    if (!pkey) {
+        EVP_MD_CTX_free(ctx);
+        return;
+    }
+    
+    EVP_DigestSignInit(ctx, nullptr, EVP_sha256(), nullptr, pkey);
+    EVP_DigestSignUpdate(ctx, data, len);
+    size_t hmac_len = 0;
+    EVP_DigestSignFinal(ctx, out_hmac, &hmac_len);
+    
+    EVP_PKEY_free(pkey);
+    EVP_MD_CTX_free(ctx);
+}
+
+/**
+ * @brief Verifies a raw HMAC-SHA256 signature using constant-time comparison.
+ *
+ * @param key The secret key.
+ * @param data Pointer to the data.
+ * @param len Length of the data.
+ * @param signature Pointer to the 32-byte signature to verify.
+ * @return true if valid, false otherwise.
+ */
+inline bool verify_hmac_sha256_raw(const std::string& key, const void* data, size_t len, const unsigned char* signature) {
+    unsigned char computed[32];
+    compute_hmac_sha256_raw(key, data, len, computed);
+
+    unsigned char diff = 0;
+    for (int i = 0; i < 32; i++) {
+        diff |= static_cast<unsigned char>(computed[i] ^ signature[i]);
+    }
+    return diff == 0;
+}
+
+/**
+ * @brief RFC 1982 sequence number comparison (wrap-aware).
+ *
+ * Implements RFC 1982 "Serial Number Arithmetic" for 32-bit sequence numbers.
+ * Handles wrap-around correctly for sequence numbers in the range [0, 2^32-1].
+ *
+ * @param current The received sequence number
+ * @param expected The expected next sequence number
+ * @return true if current is valid (>= expected, accounting for wrap)
+ */
+bool verify_sequence_number(uint32_t current, uint32_t expected);
+
+/**
+ * @brief Detect sequence gaps with configurable threshold.
+ *
+ * Checks if the gap between old and new sequence numbers exceeds threshold.
+ * Handles wrap-around correctly using RFC 1982 arithmetic.
+ *
+ * @param old_seq The previous sequence number
+ * @param new_seq The new sequence number
+ * @param threshold Maximum allowed gap before triggering alert
+ * @return true if gap > threshold (security concern)
+ */
+bool is_sequence_gap(uint32_t old_seq, uint32_t new_seq, uint32_t threshold);
+
+/**
+ * @brief Async frame authentication helper.
+ * 
+ * Computes SHA256 hash and HMAC-SHA256 asynchronously to avoid blocking
+ * the critical path. Uses a background thread for hash computation.
+ * 
+ * Usage:
+ * @code
+ *     AsyncFrameAuthenticator auth(hmac_key);
+ *     
+ *     // After frame capture, submit for async authentication
+ *     auth.authenticate_frame(pixel_data, pixel_size, frame_header, frame);
+ *     
+ *     // Wait for completion (optional, with timeout)
+ *     if (auth.wait_for_completion(std::chrono::milliseconds(8))) {
+ *         // Frame is authenticated
+ *     }
+ * @endcode
+ */
+class AsyncFrameAuthenticator {
+public:
+    /**
+     * @brief Construct authenticator with HMAC key.
+     * 
+     * @param hmac_key 256-bit HMAC key (32 bytes recommended)
+     */
+    explicit AsyncFrameAuthenticator(const std::string& hmac_key)
+        : hmac_key_(hmac_key)
+        , busy_(false)
+        , completed_(false)
+        , success_(false) {}
+
+    /**
+     * @brief Authenticate frame asynchronously.
+     * 
+     * Computes SHA256 of pixel data, then HMAC-SHA256 over header + hash.
+     * Results are written to the ZeroCopyFrame when complete.
+     * 
+     * @param pixel_data Pointer to pixel data buffer
+     * @param pixel_size Size of pixel data in bytes
+     * @param header_data Pointer to frame header data (for HMAC)
+     * @param header_size Size of header data in bytes
+     * @param out_frame Pointer to frame struct to write hash/hmac
+     */
+    void authenticate_frame(const void* pixel_data, size_t pixel_size,
+                           const void* header_data, size_t header_size,
+                           void* out_frame);
+
+    /**
+     * @brief Wait for authentication to complete.
+     * 
+     * @param timeout Maximum time to wait
+     * @return true if authentication completed, false on timeout
+     */
+    bool wait_for_completion(std::chrono::milliseconds timeout);
+
+    /**
+     * @brief Check if authentication is in progress.
+     * 
+     * @return true if authentication is running
+     */
+    bool is_busy() const noexcept {
+        return busy_.load(std::memory_order_acquire);
     }
 
-    unsigned char result = 0;
-    for (size_t i = 0; i < computed.length(); i++) {
-        result |= static_cast<unsigned char>(static_cast<unsigned char>(computed[i]) ^ static_cast<unsigned char>(signature[i]));
+    /**
+     * @brief Check if last authentication succeeded.
+     * 
+     * @return true if authentication completed successfully
+     */
+    bool last_success() const noexcept {
+        return success_.load(std::memory_order_acquire);
     }
-    return result == 0;
+
+private:
+    std::string hmac_key_;
+    std::atomic<bool> busy_;
+    std::atomic<bool> completed_;
+    std::atomic<bool> success_;
+    std::thread worker_;
+    
+    // Working buffers
+    unsigned char pending_hash_[32];
+    unsigned char pending_hmac_[32];
+    void* pending_frame_ = nullptr;
+};
+
+// Inline implementations for AsyncFrameAuthenticator
+inline void AsyncFrameAuthenticator::authenticate_frame(
+    const void* pixel_data, size_t pixel_size,
+    const void* header_data, size_t header_size,
+    void* out_frame) {
+    
+    if (busy_.exchange(true, std::memory_order_acq_rel)) {
+        // Already busy - skip this frame (backpressure)
+        return;
+    }
+    
+    completed_.store(false, std::memory_order_release);
+    success_.store(false, std::memory_order_release);
+    pending_frame_ = out_frame;
+    
+    // Copy input data for async processing
+    std::memcpy(pending_hash_, pixel_data, std::min(pixel_size, static_cast<size_t>(32)));
+    
+    worker_ = std::thread([this, pixel_data, pixel_size, header_data, header_size]() {
+        // Compute SHA256 of pixel data
+        unsigned char frame_hash[32];
+        compute_sha256_raw_threadsafe(pixel_data, pixel_size, frame_hash);
+        
+        // Compute HMAC over header + hash
+        std::vector<uint8_t> hmac_input;
+        hmac_input.reserve(header_size + 32);
+        hmac_input.insert(hmac_input.end(), 
+                         static_cast<const uint8_t*>(header_data),
+                         static_cast<const uint8_t*>(header_data) + header_size);
+        hmac_input.insert(hmac_input.end(), frame_hash, frame_hash + 32);
+        
+        unsigned char hmac[32];
+        compute_hmac_sha256_raw_threadsafe(hmac_key_, hmac_input.data(), hmac_input.size(), hmac);
+        
+        // Write results to frame (must be atomic for lock-free safety)
+        struct AuthFrame {
+            uint8_t frame_hash[32];
+            uint8_t hmac[32];
+        };
+        
+        AuthFrame* auth_frame = static_cast<AuthFrame*>(pending_frame_);
+        if (auth_frame) {
+            std::memcpy(auth_frame->frame_hash, frame_hash, 32);
+            std::memcpy(auth_frame->hmac, hmac, 32);
+        }
+        
+        std::memcpy(pending_hash_, frame_hash, 32);
+        std::memcpy(pending_hmac_, hmac, 32);
+        
+        success_.store(true, std::memory_order_release);
+        completed_.store(true, std::memory_order_release);
+        busy_.store(false, std::memory_order_release);
+    });
+    
+    worker_.detach();  // Fire-and-forget for async operation
+}
+
+inline bool AsyncFrameAuthenticator::wait_for_completion(std::chrono::milliseconds timeout) {
+    auto start = std::chrono::steady_clock::now();
+    while (!completed_.load(std::memory_order_acquire)) {
+        auto elapsed = std::chrono::steady_clock::now() - start;
+        if (elapsed >= timeout) {
+            return false;
+        }
+        std::this_thread::yield();
+    }
+    return success_.load(std::memory_order_acquire);
 }
 
 } // namespace security
 } // namespace aurore
+
+#pragma GCC diagnostic pop
