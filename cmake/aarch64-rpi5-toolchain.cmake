@@ -33,10 +33,10 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
-# Compiler flags for ARMv8.2-A (Cortex-A72 on Raspberry Pi 5)
+# Compiler flags for ARMv8.2-A (Cortex-A76 on Raspberry Pi 5)
 # Reference: https://developer.arm.com/documentation/102374/0101/
-set(CMAKE_C_FLAGS_INIT "-march=armv8-a+fp+simd -mtune=cortex-a72")
-set(CMAKE_CXX_FLAGS_INIT "-march=armv8-a+fp+simd -mtune=cortex-a72")
+set(CMAKE_C_FLAGS_INIT "-march=armv8-a+fp+simd -mtune=cortex-a76")
+set(CMAKE_CXX_FLAGS_INIT "-march=armv8-a+fp+simd -mtune=cortex-a76")
 
 # Release build optimizations
 set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -ffast-math")

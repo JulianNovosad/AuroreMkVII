@@ -135,15 +135,22 @@ endif()
 
 add_compile_options(
     -fstack-protector-strong      # Stack canaries
+    -fstack-clash-protection      # Stack clash protection
     -D_FORTIFY_SOURCE=2           # Buffer overflow protection
     -fPIE                         # Position-independent executable
 )
+
+# Control flow protection for x86_64
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|x64")
+    add_compile_options(-fcf-protection)
+endif()
 
 add_link_options(
     -fPIE
     -pie
     -Wl,-z,relro,-z,now           # Full RELRO
     -Wl,-z,noexecstack            # Non-executable stack
+    -Wl,-z,defs                   # No undefined symbols in shared libs
 )
 
 # ============================================================================
@@ -152,6 +159,9 @@ add_link_options(
 
 # Find required packages
 find_package(Threads REQUIRED)
+
+# OpenSSL for HMAC-SHA256
+find_package(OpenSSL REQUIRED)
 
 # Protobuf is optional for laptop builds (only needed for AuroreLink server)
 if(AURORE_LAPTOP_BUILD)
@@ -292,6 +302,7 @@ if(AURORE_LAPTOP_BUILD)
         src/drivers/mock_fusion_hat.cpp
 
         # Vision pipeline
+        src/vision/apriltag_detector.cpp
         src/vision/orb_detector.cpp
 
         # Tracking
@@ -311,6 +322,7 @@ if(AURORE_LAPTOP_BUILD)
         src/common/telemetry_writer.cpp
         src/common/hud_socket.cpp
         src/common/config_loader.cpp
+        src/common/security.cpp
 
         # Network
         src/network/aurore_link_server.cpp
@@ -333,6 +345,7 @@ else()
         src/drivers/fusion_hat.cpp
 
         # Vision pipeline
+        src/vision/apriltag_detector.cpp
         src/vision/orb_detector.cpp
 
         # Tracking
@@ -352,6 +365,7 @@ else()
         src/common/telemetry_writer.cpp
         src/common/hud_socket.cpp
         src/common/config_loader.cpp
+        src/common/security.cpp
 
         # Network
         src/network/aurore_link_server.cpp
@@ -389,6 +403,7 @@ if(AURORE_LAPTOP_BUILD)
         Threads::Threads
         ${OPENCV_LIBRARIES}
         ${Protobuf_LIBRARIES}
+        OpenSSL::Crypto
         rt      # Real-time extensions (clock_nanosleep, etc.)
         pthread # POSIX threads
     )
@@ -398,6 +413,7 @@ else()
         ${OPENCV_LIBRARIES}
         ${LIBCAMERA_LIBRARIES}
         ${Protobuf_LIBRARIES}
+        OpenSSL::Crypto
         rt      # Real-time extensions (clock_nanosleep, etc.)
         pthread # POSIX threads
     )
@@ -520,10 +536,10 @@ if(AURORE_ENABLE_TESTS)
     add_test(NAME MainThreadOrchestrationTest COMMAND main_thread_orchestration_test)
     set_tests_properties(MainThreadOrchestrationTest PROPERTIES TIMEOUT 60)
 
-    # ORB detector tests
+    # AprilTag detector tests
     add_executable(detector_test
         tests/unit/detector_test.cpp
-        src/vision/orb_detector.cpp
+        src/vision/apriltag_detector.cpp
     )
     target_include_directories(detector_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(detector_test PRIVATE Threads::Threads ${OPENCV_LIBRARIES})
@@ -534,6 +550,7 @@ if(AURORE_ENABLE_TESTS)
     add_executable(tracker_test
         tests/unit/tracker_test.cpp
         src/tracking/csrt_tracker.cpp
+        src/drivers/mock_camera_wrapper.cpp
     )
     target_include_directories(tracker_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(tracker_test PRIVATE Threads::Threads ${OPENCV_LIBRARIES})
@@ -577,7 +594,7 @@ if(AURORE_ENABLE_TESTS)
         src/state_machine/state_machine.cpp
     )
     target_include_directories(hud_socket_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(hud_socket_test PRIVATE Threads::Threads)
+    target_link_libraries(hud_socket_test PRIVATE Threads::Threads OpenSSL::Crypto)
     add_test(NAME HudSocketTest COMMAND hud_socket_test)
     set_tests_properties(HudSocketTest PROPERTIES TIMEOUT 30)
 endif()
@@ -588,7 +605,7 @@ if(AURORE_ENABLE_TESTS)
         src/common/telemetry_writer.cpp
     )
     target_include_directories(telemetry_writer_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(telemetry_writer_test PRIVATE Threads::Threads)
+    target_link_libraries(telemetry_writer_test PRIVATE Threads::Threads OpenSSL::Crypto)
     add_test(NAME TelemetryWriterTest COMMAND telemetry_writer_test)
     set_tests_properties(TelemetryWriterTest PROPERTIES TIMEOUT 30)
 endif()
@@ -597,6 +614,7 @@ if(AURORE_ENABLE_TESTS)
     add_executable(interlock_controller_test
         tests/unit/interlock_controller_test.cpp
         src/safety/interlock_controller.cpp
+        src/drivers/fusion_hat.cpp
     )
     target_include_directories(interlock_controller_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(interlock_controller_test PRIVATE Threads::Threads rt)
@@ -619,9 +637,32 @@ if(AURORE_ENABLE_TESTS)
         ${OPENCV_LIBRARIES}
         ${LIBCAMERA_LIBRARIES}
         rt
+        OpenSSL::Crypto
     )
     add_test(NAME CameraWrapperTest COMMAND camera_wrapper_test)
     set_tests_properties(CameraWrapperTest PROPERTIES TIMEOUT 30)
+endif()
+
+if(AURORE_ENABLE_TESTS)
+    # Frame authentication tests (ICD-001 / AM7-L2-SEC-001)
+    add_executable(frame_authentication_test
+        tests/unit/test_frame_authentication.cpp
+        src/drivers/camera_wrapper.cpp
+    )
+    target_include_directories(frame_authentication_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${OPENCV_INCLUDE_DIRS}
+        ${LIBCAMERA_INCLUDE_DIRS}
+    )
+    target_link_libraries(frame_authentication_test PRIVATE
+        Threads::Threads
+        ${OPENCV_LIBRARIES}
+        ${LIBCAMERA_LIBRARIES}
+        rt
+        OpenSSL::Crypto
+    )
+    add_test(NAME FrameAuthenticationTest COMMAND frame_authentication_test)
+    set_tests_properties(FrameAuthenticationTest PROPERTIES TIMEOUT 60)
 endif()
 
 if(AURORE_ENABLE_TESTS)
@@ -629,6 +670,7 @@ if(AURORE_ENABLE_TESTS)
     add_executable(aurore_link_test
         tests/unit/aurore_link_test.cpp
         src/network/aurore_link_server.cpp
+        src/common/security.cpp
         ${PROTO_SRCS}
     )
     target_include_directories(aurore_link_test PRIVATE
@@ -637,10 +679,28 @@ if(AURORE_ENABLE_TESTS)
         ${Protobuf_INCLUDE_DIRS}
     )
     target_link_libraries(aurore_link_test PRIVATE
-        Threads::Threads ${Protobuf_LIBRARIES}
+        Threads::Threads ${Protobuf_LIBRARIES} OpenSSL::Crypto
     )
     add_test(NAME AuroreLinkTest COMMAND aurore_link_test)
     set_tests_properties(AuroreLinkTest PROPERTIES TIMEOUT 30)
+
+    # EMERGENCY_INHIBIT handler tests
+    add_executable(emergency_inhibit_test
+        tests/unit/test_emergency_inhibit.cpp
+        src/network/aurore_link_server.cpp
+        src/common/security.cpp
+        ${PROTO_SRCS}
+    )
+    target_include_directories(emergency_inhibit_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}
+        ${Protobuf_INCLUDE_DIRS}
+    )
+    target_link_libraries(emergency_inhibit_test PRIVATE
+        Threads::Threads ${Protobuf_LIBRARIES} OpenSSL::Crypto
+    )
+    add_test(NAME EmergencyInhibitTest COMMAND emergency_inhibit_test)
+    set_tests_properties(EmergencyInhibitTest PROPERTIES TIMEOUT 30)
 endif()
 
 if(AURORE_ENABLE_TESTS)
@@ -655,6 +715,18 @@ if(AURORE_ENABLE_TESTS)
     set_tests_properties(ConfigLoaderTest PROPERTIES TIMEOUT 15)
 endif()
 
+if(AURORE_ENABLE_TESTS)
+    # Sequence validation tests (RFC 1982)
+    add_executable(sequence_validation_test
+        tests/unit/sequence_validation_test.cpp
+        src/common/security.cpp
+    )
+    target_include_directories(sequence_validation_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(sequence_validation_test PRIVATE Threads::Threads OpenSSL::Crypto)
+    add_test(NAME SequenceValidationTest COMMAND sequence_validation_test)
+    set_tests_properties(SequenceValidationTest PROPERTIES TIMEOUT 30)
+endif()
+
 # ============================================================================
 # Integration Tests
 # ============================================================================
@@ -666,23 +738,114 @@ if(AURORE_ENABLE_TESTS)
         # tests/timing/jitter_analysis.cpp    # TODO: Implement
         # tests/timing/thread_sync_test.cpp   # TODO: Implement
     )
-    
+
     target_include_directories(aurore_timing_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/include
         ${CMAKE_SOURCE_DIR}/tests
     )
-    
+
     target_link_libraries(aurore_timing_tests PRIVATE
         Threads::Threads
         rt
     )
-    
+
     # Mark as optional (requires hardware)
     add_test(NAME TimingIntegrationTest COMMAND aurore_timing_tests)
     set_tests_properties(TimingIntegrationTest
-        PROPERTIES 
+        PROPERTIES
         TIMEOUT 300
         DISABLED TRUE  # Disabled by default - requires Raspberry Pi
+    )
+
+    # ========================================================================
+    # Integration Test Suite - End-to-End Data Flow Tests
+    # ========================================================================
+
+    # Vision Pipeline Integration Test
+    # Tests: Camera -> Vision -> Track -> Actuation data flow
+    add_executable(vision_pipeline_integration_test
+        tests/integration/vision_pipeline_test.cpp
+        src/state_machine/state_machine.cpp
+    )
+
+    target_include_directories(vision_pipeline_integration_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/tests
+    )
+
+    target_link_libraries(vision_pipeline_integration_test PRIVATE
+        Threads::Threads
+        ${OPENCV_LIBRARIES}
+        rt
+    )
+
+    add_test(NAME VisionPipelineIntegrationTest COMMAND vision_pipeline_integration_test)
+    set_tests_properties(VisionPipelineIntegrationTest
+        PROPERTIES
+        TIMEOUT 120
+        LABELS "IntegrationTest"
+    )
+
+    # Actuation Timing Integration Test
+    # Tests: Actuation command timing, I2C latency, thread synchronization
+    add_executable(actuation_timing_integration_test
+        tests/integration/actuation_timing_test.cpp
+    )
+
+    target_include_directories(actuation_timing_integration_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/tests
+    )
+
+    target_link_libraries(actuation_timing_integration_test PRIVATE
+        Threads::Threads
+        rt
+    )
+
+    add_test(NAME ActuationTimingIntegrationTest COMMAND actuation_timing_integration_test)
+    set_tests_properties(ActuationTimingIntegrationTest
+        PROPERTIES
+        TIMEOUT 120
+        LABELS "IntegrationTest"
+    )
+
+    # Safety Fault Injection FMEA Test
+    # Tests: Fault detection, response, and FMEA coverage
+    add_executable(safety_fault_injection_test
+        tests/integration/safety_fault_injection_test.cpp
+        src/state_machine/state_machine.cpp
+    )
+
+    target_include_directories(safety_fault_injection_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/tests
+    )
+
+    target_link_libraries(safety_fault_injection_test PRIVATE
+        Threads::Threads
+        rt
+    )
+
+    add_test(NAME SafetyFaultInjectionTest COMMAND safety_fault_injection_test)
+    set_tests_properties(SafetyFaultInjectionTest
+        PROPERTIES
+        TIMEOUT 120
+        LABELS "IntegrationTest"
+    )
+
+    # ========================================================================
+    # Integration Test Runner (runs all integration tests)
+    # ========================================================================
+
+    # Add a convenience target to run all integration tests
+    add_custom_target(run_integration_tests
+        COMMAND ${CMAKE_CTEST_COMMAND} -R IntegrationTest --output-on-failure
+        DEPENDS
+            vision_pipeline_integration_test
+            actuation_timing_integration_test
+            safety_fault_injection_test
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        COMMENT "Running all integration tests"
     )
 endif()
 

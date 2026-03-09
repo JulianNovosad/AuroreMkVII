@@ -89,6 +89,19 @@ apt install -y \
     libssl-dev \
     git
 
+# Create runtime directories with proper permissions (ICD-005/ICD-006)
+echo "[7/6] Creating runtime directories..."
+RUN_DIR="/run/aurore"
+if [ ! -d "$RUN_DIR" ]; then
+    echo "  Creating $RUN_DIR..."
+    mkdir -p "$RUN_DIR"
+    chown root:root "$RUN_DIR"
+    chmod 0755 "$RUN_DIR"
+    echo "  Created $RUN_DIR with permissions 0755"
+else
+    echo "  $RUN_DIR already exists"
+fi
+
 echo ""
 echo "=== Setup Complete ==="
 echo ""

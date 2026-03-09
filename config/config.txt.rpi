@@ -1,0 +1,80 @@
+# Raspberry Pi 5 Boot Configuration for Aurore MkVII
+# Reference configuration with HDMI and Bluetooth disabled
+#
+# Purpose: Optimize RPi 5 for real-time vision processing by disabling
+#          unnecessary peripherals (HDMI display, Bluetooth) to reduce
+#          power consumption, heat, and potential interference.
+#
+# Installation:
+#   1. Backup original: sudo cp /boot/firmware/config.txt /boot/firmware/config.txt.backup
+#   2. Copy this file:   sudo cp config.txt.rpi /boot/firmware/config.txt
+#   3. Reboot:           sudo reboot
+#
+# Related: scripts/configure-rpi-boot.sh (automated installation script)
+
+# =============================================================================
+# HDMI Configuration - Disabled
+# =============================================================================
+
+# Force HDMI detection off - prevents HDMI initialization
+hdmi_force_hotplug=0
+
+# Enable HDMI blanking - turns off display when not in use
+# Reduces power consumption and heat generation
+hdmi_blanking=1
+
+# Disable HDMI audio (optional, reduces overhead)
+hdmi_ignore_edid_audio=1
+
+# =============================================================================
+# Bluetooth Configuration - Disabled
+# =============================================================================
+
+# Disable Bluetooth via device tree overlay
+# This disables the onboard Bluetooth module completely
+dtoverlay=disable-bt
+
+# =============================================================================
+# Real-Time Optimizations (Aurore MkVII specific)
+# =============================================================================
+
+# CPU frequency scaling - set to performance mode
+# Prevents CPU frequency changes that could introduce jitter
+force_turbo=1
+
+# Disable WiFi power management (if WiFi is not needed, consider disabling entirely)
+# dtoverlay=disable-wifi
+
+# Enable deterministic memory allocation
+# CMA (Contiguous Memory Allocator) reduced for real-time workloads
+cma=64M
+
+# GPU memory allocation - minimal for headless operation
+gpu_mem=128
+
+# =============================================================================
+# Camera Interface (Required for Aurore MkVII)
+# =============================================================================
+
+# Enable camera interface with 4-lane configuration
+camera-auto-detect=0
+camera-control-port=1
+libcamera-camera=0
+
+# =============================================================================
+# I2C Configuration (Required for Fusion HAT+)
+# =============================================================================
+
+# Enable I2C1 (GPIO 2/3) - used by Fusion HAT+ gimbal controller
+dtparam=i2c_arm=on
+dtparam=i2c_arm_baudrate=400000
+
+# =============================================================================
+# Additional Notes
+# =============================================================================
+# - After applying this config, verify with:
+#     vcgencmd get_config hdmi_blanking
+#     vcgencmd get_config hdmi_force_hotplug
+#     dtc -I fs /proc/device-tree | grep -i bluetooth
+# - Bluetooth can be re-enabled by removing the dtoverlay line
+# - HDMI can be re-enabled by setting hdmi_force_hotplug=1 and hdmi_blanking=0

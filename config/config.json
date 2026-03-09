@@ -115,7 +115,11 @@
       "command_port": 9002
     },
     "hud_telemetry": {
-      "socket_path": "/tmp/aurore_hud.sock",
+      "socket_path": "/run/aurore/hud_telemetry.sock",
+      "update_rate_hz": 120
+    },
+    "operator_control": {
+      "socket_path": "/run/aurore/operator_control.sock",
       "update_rate_hz": 120
     }
   }
