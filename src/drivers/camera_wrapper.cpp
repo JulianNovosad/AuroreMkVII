@@ -33,10 +33,19 @@
 // OpenCV headers
 #include <opencv2/opencv.hpp>
 
+// ARM NEON headers for SIMD optimization
+#if defined(__aarch64__) || defined(__arm__)
+#include <arm_neon.h>
+#define AURORE_HAS_NEON
+#endif
+
 // libcamera headers — only available on non-laptop (hardware) builds
 #ifndef AURORE_LAPTOP_BUILD
 #include <libcamera/libcamera.h>
 #endif
+
+// Security headers for frame authentication
+#include "aurore/security.hpp"
 
 namespace aurore {
 
@@ -322,13 +331,10 @@ struct CameraWrapper::Impl {
     }
 
     /**
-     * @brief Blocking libcamera frame capture.
+     * @brief Blocking libcamera frame capture (zero-copy).
      *
-     * Copies DMA buffer data to a heap allocation (same lifetime convention as
-     * the test-pattern path; consumer must delete[] via frame.error[0] flag).
-     *
-     * TODO: True zero-copy via reference-counted DMA buffer when buffer
-     * lifecycle is tracked through the ring buffer.
+     * Returns a descriptor pointing directly to the DMA buffer.
+     * Consumer MUST call release_frame() when done.
      */
     bool capture_libcamera(ZeroCopyFrame& frame, int timeout_ms) {
         std::unique_lock<std::mutex> lock(lc_mutex);
@@ -356,12 +362,12 @@ struct CameraWrapper::Impl {
 
         libcamera::FrameBuffer* fb = it->second;
         const auto& meta           = fb->metadata();
-        const auto& plane          = fb->planes()[0];
 
-        auto* data = new uint8_t[plane.length];
         const auto mit = lc_mapped.find(fb);
-        if (mit != lc_mapped.end()) {
-            std::memcpy(data, mit->second.data, plane.length);
+        if (mit == lc_mapped.end()) {
+            req->reuse(libcamera::Request::ReuseBuffers);
+            lc_camera->queueRequest(req);
+            return false;
         }
 
         frame.sequence      = meta.sequence;
@@ -369,21 +375,51 @@ struct CameraWrapper::Impl {
         frame.width         = width;
         frame.height        = height;
         frame.format        = PixelFormat::RAW10;
-        frame.plane_data[0] = data;
-        frame.plane_size[0] = plane.length;
+        frame.plane_data[0] = mit->second.data;
+        frame.plane_size[0] = mit->second.size;
         // SGRBG10_CSI2P: packed RAW10 stride = ceil(width * 10 / 8)
         frame.stride[0]     = static_cast<int>((static_cast<unsigned int>(width) * 10u + 7u) / 8u);
+
+        frame.request_ptr   = req;
         frame.valid         = true;
-        frame.error[0]      = 1;  // Mark heap-allocated — consumer must delete[]
+        frame.error[0]      = 0;  // DMA buffer
+
+        // Compute frame authentication (SHA256 + HMAC) - ICD-001 / AM7-L2-SEC-001
+        // Note: This is synchronous for correctness; async version available via AsyncFrameAuthenticator
+        authenticate_frame(frame);
 
         frame_counter++;
-
-        req->reuse(libcamera::Request::ReuseBuffers);
-        lc_camera->queueRequest(req);
-
         return frame.validate(width, height);
     }
 
+#endif  // !AURORE_LAPTOP_BUILD
+
+    // =========================================================================
+    // Common methods (all builds)
+    // =========================================================================
+
+    void release_frame(ZeroCopyFrame& frame) {
+        if (!frame.valid) return;
+
+#ifndef AURORE_LAPTOP_BUILD
+        if (frame.request_ptr && use_libcamera) {
+            libcamera::Request* req = static_cast<libcamera::Request*>(frame.request_ptr);
+            req->reuse(libcamera::Request::ReuseBuffers);
+            lc_camera->queueRequest(req);
+            frame.request_ptr = nullptr;
+            return;
+        }
+#endif
+
+        // Free aligned memory (allocated with aligned_alloc)
+        if (frame.error[0] == 1 && frame.plane_data[0] != nullptr) {
+            free(frame.plane_data[0]);
+            frame.plane_data[0] = nullptr;
+            frame.error[0] = 0;
+        }
+    }
+
+#ifndef AURORE_LAPTOP_BUILD
     /** @brief Stop and release all libcamera resources. */
     void cleanup_libcamera() {
         {
@@ -497,8 +533,20 @@ struct CameraWrapper::Impl {
         frame.valid         = !bgr_frame.empty();
 
         const size_t sz = static_cast<size_t>(width) * static_cast<size_t>(height) * 3u;
-        auto* frame_data = new uint8_t[sz];
+        // 64-byte aligned allocation for SIMD optimization
+        auto* frame_data = static_cast<uint8_t*>(aligned_alloc(64, sz));
+        if (!frame_data) {
+            frame.valid = false;
+            snprintf(frame.error, sizeof(frame.error), "%s", "aligned_alloc failed");
+            return false;
+        }
         std::memcpy(frame_data, bgr_frame.data, sz);
+
+        // Runtime alignment check (debug assertion)
+        if ((reinterpret_cast<uintptr_t>(frame_data) & 0x3Fu) != 0) {
+            std::fprintf(stderr, "FATAL: frame data not 64-byte aligned at %p\n", frame_data);
+            std::abort();
+        }
 
         frame.plane_data[0] = frame_data;
         frame.plane_size[0] = sz;
@@ -507,6 +555,9 @@ struct CameraWrapper::Impl {
 
         snprintf(frame.error + 1, sizeof(frame.error) - 1,
                  "%s", "Development mode - BGR capture");
+
+        // Compute frame authentication (SHA256 + HMAC) - ICD-001 / AM7-L2-SEC-001
+        authenticate_frame(frame);
 
         return frame.validate(width, height);
     }
@@ -587,6 +638,12 @@ bool CameraWrapper::try_capture_frame(ZeroCopyFrame& frame) {
     return capture_frame(frame, 0);
 }
 
+void CameraWrapper::release_frame(ZeroCopyFrame& frame) {
+    if (impl_) {
+        impl_->release_frame(frame);
+    }
+}
+
 cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
                                     PixelFormat target_format) {
     if (!frame.validate(config_.width, config_.height)) {
@@ -612,10 +669,34 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
         const uint8_t* raw = static_cast<const uint8_t*>(frame.plane_data[0]);
         const int stride   = frame.stride[0];
 
+#ifdef AURORE_HAS_NEON
+        // NEON optimized 10-bit to 8-bit greyscale conversion
+        // Processes 32 pixels per iteration (40 bytes of RAW10)
         for (int row = 0; row < frame.height; ++row) {
             const uint8_t* line = raw + row * stride;
-            for (int col = 0; col < frame.width; col += 4) {
-                // SGRBG10_CSI2P: 5 bytes encode 4 × 10-bit pixels
+            uint8_t* out = bgr_img.ptr<uint8_t>(row);
+            
+            int col = 0;
+            // Process 32 pixels (40 bytes of RAW10) at a time using vld5
+            for (; col <= frame.width - 32; col += 32) {
+                // vld5_u8 pulls 5 * 8 = 40 bytes.
+                // 40 bytes of RAW10 = 32 pixels.
+                // v.val[0..3] each contain 8 pixels (high 8 bits).
+                uint8x8x5_t v = vld5_u8(line);
+                line += 40;
+                
+                for (int i = 0; i < 4; ++i) {
+                    uint8x8x3_t bgr;
+                    bgr.val[0] = v.val[i]; // B
+                    bgr.val[1] = v.val[i]; // G
+                    bgr.val[2] = v.val[i]; // R
+                    vst3_u8(out, bgr);
+                    out += 24; // 8 pixels * 3 bytes
+                }
+            }
+            
+            // Revert to software for remaining pixels or if width not multiple of 32
+            for (; col < frame.width; col += 4) {
                 const uint16_t p0 = (static_cast<uint16_t>(line[0]) << 2) | (line[4] & 0x03u);
                 const uint16_t p1 = (static_cast<uint16_t>(line[1]) << 2) | ((line[4] >> 2) & 0x03u);
                 const uint16_t p2 = (static_cast<uint16_t>(line[2]) << 2) | ((line[4] >> 4) & 0x03u);
@@ -623,15 +704,34 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
                 line += 5;
 
                 const auto to_u8 = [](uint16_t v) -> uint8_t {
-                    return static_cast<uint8_t>(v >> 2);  // 10→8 bit (drop LSBs)
+                    return static_cast<uint8_t>(v >> 2);
                 };
-                const int base = row * frame.width + col;
-                if (col     < frame.width) bgr_img.at<cv::Vec3b>(base + 0) = cv::Vec3b(to_u8(p0), to_u8(p0), to_u8(p0));
-                if (col + 1 < frame.width) bgr_img.at<cv::Vec3b>(base + 1) = cv::Vec3b(to_u8(p1), to_u8(p1), to_u8(p1));
-                if (col + 2 < frame.width) bgr_img.at<cv::Vec3b>(base + 2) = cv::Vec3b(to_u8(p2), to_u8(p2), to_u8(p2));
-                if (col + 3 < frame.width) bgr_img.at<cv::Vec3b>(base + 3) = cv::Vec3b(to_u8(p3), to_u8(p3), to_u8(p3));
+                if (col     < frame.width) bgr_img.at<cv::Vec3b>(row, col + 0) = cv::Vec3b(to_u8(p0), to_u8(p0), to_u8(p0));
+                if (col + 1 < frame.width) bgr_img.at<cv::Vec3b>(row, col + 1) = cv::Vec3b(to_u8(p1), to_u8(p1), to_u8(p1));
+                if (col + 2 < frame.width) bgr_img.at<cv::Vec3b>(row, col + 2) = cv::Vec3b(to_u8(p2), to_u8(p2), to_u8(p2));
+                if (col + 3 < frame.width) bgr_img.at<cv::Vec3b>(row, col + 3) = cv::Vec3b(to_u8(p3), to_u8(p3), to_u8(p3));
             }
         }
+#else
+        for (int row = 0; row < frame.height; ++row) {
+            const uint8_t* line = raw + row * stride;
+            for (int col = 0; col < frame.width; col += 4) {
+                const uint16_t p0 = (static_cast<uint16_t>(line[0]) << 2) | (line[4] & 0x03u);
+                const uint16_t p1 = (static_cast<uint16_t>(line[1]) << 2) | ((line[4] >> 2) & 0x03u);
+                const uint16_t p2 = (static_cast<uint16_t>(line[2]) << 2) | ((line[4] >> 4) & 0x03u);
+                const uint16_t p3 = (static_cast<uint16_t>(line[3]) << 2) | ((line[4] >> 6) & 0x03u);
+                line += 5;
+
+                const auto to_u8 = [](uint16_t v) -> uint8_t {
+                    return static_cast<uint8_t>(v >> 2);
+                };
+                if (col     < frame.width) bgr_img.at<cv::Vec3b>(row, col + 0) = cv::Vec3b(to_u8(p0), to_u8(p0), to_u8(p0));
+                if (col + 1 < frame.width) bgr_img.at<cv::Vec3b>(row, col + 1) = cv::Vec3b(to_u8(p1), to_u8(p1), to_u8(p1));
+                if (col + 2 < frame.width) bgr_img.at<cv::Vec3b>(row, col + 2) = cv::Vec3b(to_u8(p2), to_u8(p2), to_u8(p2));
+                if (col + 3 < frame.width) bgr_img.at<cv::Vec3b>(row, col + 3) = cv::Vec3b(to_u8(p3), to_u8(p3), to_u8(p3));
+            }
+        }
+#endif
         return bgr_img;
     }
 
@@ -647,6 +747,170 @@ bool CameraWrapper::set_exposure(int exposure_us) {
 bool CameraWrapper::set_gain(float gain) {
     (void)gain;
     return impl_ != nullptr;
+}
+
+// =============================================================================
+// Frame Authentication Implementation (ICD-001 / AM7-L2-SEC-001)
+// =============================================================================
+
+namespace {
+// Default HMAC key for development (should be loaded from config in production)
+// This is a 256-bit key stored in .rodata
+constexpr const char* kDefaultHmacKey = "AURORE_MK7_FRAME_AUTH_KEY_256BIT_SECRET";
+
+/**
+ * @brief Compute frame header for HMAC input.
+ * 
+ * Packs the frame header fields into a contiguous buffer for HMAC computation.
+ * Per ICD-001: HMAC covers header + frame_hash.
+ */
+void compute_frame_header(const ZeroCopyFrame& frame, uint8_t* out_header, size_t& out_size) {
+    // Header layout (matches ICD-001 spec):
+    // - sequence:      u64 (8 bytes)
+    // - timestamp_ns:  u64 (8 bytes)
+    // - exposure_us:   u64 (8 bytes)
+    // - gain:          f32 (4 bytes)
+    // - width:         u32 (4 bytes)
+    // - height:        u32 (4 bytes)
+    // - format:        u32 (4 bytes)
+    // - buffer_id:     u32 (4 bytes)
+    // Total: 44 bytes
+    
+    size_t offset = 0;
+    std::memcpy(out_header + offset, &frame.sequence, sizeof(frame.sequence));
+    offset += sizeof(frame.sequence);
+    std::memcpy(out_header + offset, &frame.timestamp_ns, sizeof(frame.timestamp_ns));
+    offset += sizeof(frame.timestamp_ns);
+    std::memcpy(out_header + offset, &frame.exposure_us, sizeof(frame.exposure_us));
+    offset += sizeof(frame.exposure_us);
+    std::memcpy(out_header + offset, &frame.gain, sizeof(frame.gain));
+    offset += sizeof(frame.gain);
+    std::memcpy(out_header + offset, &frame.width, sizeof(frame.width));
+    offset += sizeof(frame.width);
+    std::memcpy(out_header + offset, &frame.height, sizeof(frame.height));
+    offset += sizeof(frame.height);
+    std::memcpy(out_header + offset, &frame.format, sizeof(frame.format));
+    offset += sizeof(frame.format);
+    std::memcpy(out_header + offset, &frame.buffer_id, sizeof(frame.buffer_id));
+    offset += sizeof(frame.buffer_id);
+    
+    out_size = offset;
+}
+}  // anonymous namespace
+
+/**
+ * @brief Compute SHA256 hash of frame pixel data.
+ * 
+ * @param frame Frame to hash
+ * @return true if hash computed successfully
+ */
+bool compute_frame_hash(ZeroCopyFrame& frame) {
+    if (!frame.is_valid() || frame.plane_data[0] == nullptr || frame.plane_size[0] == 0) {
+        return false;
+    }
+    
+    // Compute SHA256 of pixel data (plane 0 only for RAW10)
+    // This is synchronous for simplicity; async version available via AsyncFrameAuthenticator
+    aurore::security::compute_sha256_raw_threadsafe(
+        frame.plane_data[0], 
+        frame.plane_size[0], 
+        frame.frame_hash
+    );
+    
+    return true;
+}
+
+/**
+ * @brief Compute HMAC-SHA256 over frame header + hash.
+ * 
+ * @param frame Frame to authenticate (must have frame_hash computed)
+ * @param hmac_key HMAC key (256-bit recommended)
+ * @param key_len Length of key in bytes
+ * @return true if HMAC computed successfully
+ */
+bool compute_frame_hmac(ZeroCopyFrame& frame, const void* hmac_key, size_t key_len) {
+    if (!frame.is_valid()) {
+        return false;
+    }
+    
+    // Build header buffer
+    uint8_t header_buf[64];  // 44 bytes needed
+    size_t header_size = 0;
+    compute_frame_header(frame, header_buf, header_size);
+    
+    // Compute HMAC over header + frame_hash
+    // Input: header (44 bytes) + frame_hash (32 bytes) = 76 bytes
+    std::vector<uint8_t> hmac_input;
+    hmac_input.reserve(header_size + 32);
+    hmac_input.insert(hmac_input.end(), header_buf, header_buf + header_size);
+    hmac_input.insert(hmac_input.end(), frame.frame_hash, frame.frame_hash + 32);
+    
+    std::string key_str(static_cast<const char*>(hmac_key), key_len);
+    aurore::security::compute_hmac_sha256_raw_threadsafe(
+        key_str,
+        hmac_input.data(),
+        hmac_input.size(),
+        frame.hmac
+    );
+    
+    return true;
+}
+
+/**
+ * @brief Authenticate frame (compute hash + HMAC).
+ * 
+ * This is the main entry point for frame authentication.
+ * Called after frame capture, before releasing to consumer.
+ * 
+ * @param frame Frame to authenticate
+ * @param hmac_key HMAC key (nullptr uses default key)
+ * @param key_len Length of key (0 uses default key length)
+ * @return true if authentication successful
+ */
+bool authenticate_frame(ZeroCopyFrame& frame, const void* hmac_key, size_t key_len) {
+    // Compute SHA256 hash of pixel data
+    if (!compute_frame_hash(frame)) {
+        return false;
+    }
+    
+    // Use default key if none provided
+    if (!hmac_key || key_len == 0) {
+        hmac_key = kDefaultHmacKey;
+        key_len = std::strlen(kDefaultHmacKey);
+    }
+    
+    // Compute HMAC over header + hash
+    return compute_frame_hmac(frame, hmac_key, key_len);
+}
+
+/**
+ * @brief Verify frame authentication.
+ * 
+ * Member function implementation for ZeroCopyFrame::verify_authentication.
+ * 
+ * @param key HMAC key
+ * @param key_len Length of key
+ * @return true if verification passes
+ */
+bool ZeroCopyFrame::verify_authentication(const void* key, size_t key_len) const noexcept {
+    if (!is_valid()) {
+        return false;
+    }
+    
+    // Rebuild header
+    uint8_t header_buf[64];
+    size_t header_size = 0;
+    compute_frame_header(*this, header_buf, header_size);
+    
+    // Rebuild HMAC input
+    std::vector<uint8_t> hmac_input;
+    hmac_input.reserve(header_size + 32);
+    hmac_input.insert(hmac_input.end(), header_buf, header_buf + header_size);
+    hmac_input.insert(hmac_input.end(), frame_hash, frame_hash + 32);
+    
+    // Verify HMAC
+    std::string key_str(static_cast<const char*>(key), key_len);
+    return aurore::security::verify_hmac_sha256_raw(key_str, hmac_input.data(), hmac_input.size(), hmac);
 }
 
 // =============================================================================

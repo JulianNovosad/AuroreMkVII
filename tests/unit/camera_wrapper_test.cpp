@@ -43,11 +43,11 @@ static int g_tests_failed = 0;
 // ---------------------------------------------------------------------------
 // Helper: free heap-allocated plane data that capture_frame_stub allocates.
 // The implementation stores error[0] = 1 to signal that plane_data[0] must
-// be deleted with delete[].
+// be freed with free() (aligned_alloc memory).
 // ---------------------------------------------------------------------------
 static void free_frame(aurore::ZeroCopyFrame& frame) {
     if (frame.error[0] == 1 && frame.plane_data[0] != nullptr) {
-        delete[] static_cast<uint8_t*>(frame.plane_data[0]);
+        free(frame.plane_data[0]);
         frame.plane_data[0] = nullptr;
         frame.error[0] = 0;
     }
