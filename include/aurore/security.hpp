@@ -82,7 +82,10 @@ inline void compute_hmac_sha256_raw(const std::string& key, const void* data, si
  */
 inline void compute_hmac_sha256_raw_threadsafe(const std::string& key, const void* data, size_t len, unsigned char* out_hmac) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    if (!ctx) return;
+    if (!ctx) {
+        std::fprintf(stderr, "FATAL: EVP_MD_CTX_new failed (out of memory or OpenSSL error)\n");
+        std::abort();
+    }
 
     // Create key from raw bytes using EVP_PKEY_new_raw_private_key (correct API for HMAC)
     EVP_PKEY* pkey = EVP_PKEY_new_raw_private_key(
@@ -90,32 +93,37 @@ inline void compute_hmac_sha256_raw_threadsafe(const std::string& key, const voi
         reinterpret_cast<const unsigned char*>(key.data()), key.size()
     );
     if (!pkey) {
+        std::fprintf(stderr, "FATAL: EVP_PKEY_new_raw_private_key failed (invalid key or OpenSSL error)\n");
         EVP_MD_CTX_free(ctx);
-        return;
+        std::abort();
     }
 
     if (EVP_DigestSignInit(ctx, nullptr, EVP_sha256(), nullptr, pkey) != 1) {
+        std::fprintf(stderr, "FATAL: EVP_DigestSignInit failed\n");
         EVP_PKEY_free(pkey);
         EVP_MD_CTX_free(ctx);
-        return;
+        std::abort();
     }
     if (EVP_DigestSignUpdate(ctx, data, len) != 1) {
+        std::fprintf(stderr, "FATAL: EVP_DigestSignUpdate failed\n");
         EVP_PKEY_free(pkey);
         EVP_MD_CTX_free(ctx);
-        return;
+        std::abort();
     }
 
     // Two-phase final: first get required buffer size, then compute HMAC
     size_t hmac_len = 0;
     if (EVP_DigestSignFinal(ctx, nullptr, &hmac_len) != 1) {
+        std::fprintf(stderr, "FATAL: EVP_DigestSignFinal (get size) failed\n");
         EVP_PKEY_free(pkey);
         EVP_MD_CTX_free(ctx);
-        return;
+        std::abort();
     }
     if (EVP_DigestSignFinal(ctx, out_hmac, &hmac_len) != 1) {
+        std::fprintf(stderr, "FATAL: EVP_DigestSignFinal (write) failed\n");
         EVP_PKEY_free(pkey);
         EVP_MD_CTX_free(ctx);
-        return;
+        std::abort();
     }
 
     EVP_PKEY_free(pkey);
@@ -261,8 +269,9 @@ inline void AsyncFrameAuthenticator::authenticate_frame(
     void* out_frame) {
 
     if (busy_.exchange(true, std::memory_order_acq_rel)) {
-        // Already busy - skip this frame (backpressure)
-        return;
+        // Already busy - contract violation (frame dropped)
+        std::fprintf(stderr, "FATAL: AsyncFrameAuthenticator is busy. Frame dropped! (backpressure violation)\n");
+        std::abort();
     }
 
     completed_.store(false, std::memory_order_release);
