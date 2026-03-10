@@ -45,6 +45,7 @@ cmake .. \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DAURORE_ENABLE_TESTS=ON \
     -DAURORE_REALTIME=ON \
+    -DAURORE_LAPTOP_BUILD=ON \
     "${PROTOBUF_ARGS[@]}" \
     "${@:2}"
 

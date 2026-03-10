@@ -31,7 +31,14 @@ option(AURORE_ENABLE_TESTS "Build unit tests" ON)
 option(AURORE_ENABLE_COVERAGE "Enable code coverage" OFF)
 option(AURORE_ENABLE_SANITIZERS "Enable sanitizers (debug only)" OFF)
 option(AURORE_REALTIME "Enable real-time optimizations" ON)
-option(AURORE_LAPTOP_BUILD "Build for laptop (no libcamera/I2C hardware, use mocks)" OFF)
+
+# Default to laptop build on x86_64
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|x64")
+    set(AURORE_LAPTOP_BUILD_DEFAULT ON)
+else()
+    set(AURORE_LAPTOP_BUILD_DEFAULT OFF)
+endif()
+option(AURORE_LAPTOP_BUILD "Build for laptop (no libcamera/I2C hardware, use mocks)" ${AURORE_LAPTOP_BUILD_DEFAULT})
 
 # ============================================================================
 # C++ Standard Configuration
@@ -293,88 +300,56 @@ link_directories(
 
 # Source files - conditional based on laptop build
 if(AURORE_LAPTOP_BUILD)
-    set(AURORE_SOURCES
-        # Main entry point
-        src/main.cpp
-
-        # Drivers (mock versions for laptop)
-        src/drivers/mock_camera_wrapper.cpp
-        src/drivers/mock_fusion_hat.cpp
-
-        # Vision pipeline
-        src/vision/apriltag_detector.cpp
-        src/vision/orb_detector.cpp
-
-        # Tracking
-        src/tracking/kcf_tracker.cpp
-
-        # Actuation
-        src/actuation/ballistic_solver.cpp
-        src/actuation/gimbal_controller.cpp
-
-        # State machine
-        src/state_machine/state_machine.cpp
-
-        # Safety
-        src/safety/interlock_controller.cpp
-
-        # Common utilities
-        src/common/telemetry_writer.cpp
-        src/common/hud_socket.cpp
-        src/common/config_loader.cpp
-        src/common/security.cpp
-
-        # Network
-        src/network/aurore_link_server.cpp
-
-        # Protobuf generated sources
-        ${PROTO_SRCS}
-    )
+    set(FUSION_HAT_SRC src/drivers/mock_fusion_hat.cpp)
+    set(CAMERA_WRAPPER_SRC src/drivers/mock_camera_wrapper.cpp)
     add_compile_definitions(AURORE_LAPTOP_BUILD=1)
     message(STATUS "Laptop build: using mock hardware drivers")
 else()
-    set(AURORE_SOURCES
-        # Main entry point
-        src/main.cpp
-
-        # Drivers (real hardware)
-        # NOTE: src/drivers/fusion_hat_i2c.cpp is intentionally NOT compiled.
-        #   It is a legacy I2C driver with a different API from the active
-        #   fusion_hat.cpp (sysfs-based). It is retained for reference only.
-        src/drivers/camera_wrapper.cpp
-        src/drivers/fusion_hat.cpp
-
-        # Vision pipeline
-        src/vision/apriltag_detector.cpp
-        src/vision/orb_detector.cpp
-
-        # Tracking
-        src/tracking/kcf_tracker.cpp
-
-        # Actuation
-        src/actuation/ballistic_solver.cpp
-        src/actuation/gimbal_controller.cpp
-
-        # State machine
-        src/state_machine/state_machine.cpp
-
-        # Safety
-        src/safety/interlock_controller.cpp
-
-        # Common utilities
-        src/common/telemetry_writer.cpp
-        src/common/hud_socket.cpp
-        src/common/config_loader.cpp
-        src/common/security.cpp
-
-        # Network
-        src/network/aurore_link_server.cpp
-
-        # Protobuf generated sources
-        ${PROTO_SRCS}
-    )
+    set(FUSION_HAT_SRC src/drivers/fusion_hat.cpp)
+    set(CAMERA_WRAPPER_SRC src/drivers/camera_wrapper.cpp)
     message(STATUS "Hardware build: using real libcamera and I2C drivers")
 endif()
+
+set(CAMERA_AUTH_SRC src/drivers/camera_auth.cpp)
+
+set(AURORE_SOURCES
+    # Main entry point
+    src/main.cpp
+
+    # Drivers (mock versions if AURORE_LAPTOP_BUILD=ON)
+    ${CAMERA_WRAPPER_SRC}
+    ${CAMERA_AUTH_SRC}
+    ${FUSION_HAT_SRC}
+
+    # Vision pipeline
+    src/vision/apriltag_detector.cpp
+    src/vision/orb_detector.cpp
+
+    # Tracking
+    src/tracking/kcf_tracker.cpp
+
+    # Actuation
+    src/actuation/ballistic_solver.cpp
+    src/actuation/gimbal_controller.cpp
+
+    # State machine
+    src/state_machine/state_machine.cpp
+
+    # Safety
+    src/safety/interlock_controller.cpp
+
+    # Common utilities
+    src/common/telemetry_writer.cpp
+    src/common/hud_socket.cpp
+    src/common/config_loader.cpp
+    src/common/security.cpp
+
+    # Network
+    src/network/aurore_link_server.cpp
+
+    # Protobuf generated sources
+    ${PROTO_SRCS}
+)
 
 # Header files (for IDE integration)
 set(AURORE_HEADERS
@@ -542,7 +517,7 @@ if(AURORE_ENABLE_TESTS)
         src/vision/apriltag_detector.cpp
     )
     target_include_directories(detector_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(detector_test PRIVATE Threads::Threads ${OPENCV_LIBRARIES})
+    target_link_libraries(detector_test PRIVATE Threads::Threads ${OPENCV_LIBRARIES} rt OpenSSL::Crypto)
     add_test(NAME DetectorTest COMMAND detector_test)
     set_tests_properties(DetectorTest PROPERTIES TIMEOUT 60)
 
@@ -550,10 +525,11 @@ if(AURORE_ENABLE_TESTS)
     add_executable(tracker_test
         tests/unit/tracker_test.cpp
         src/tracking/kcf_tracker.cpp
-        src/drivers/mock_camera_wrapper.cpp
+        ${CAMERA_WRAPPER_SRC}
+        ${CAMERA_AUTH_SRC}
     )
     target_include_directories(tracker_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(tracker_test PRIVATE Threads::Threads ${OPENCV_LIBRARIES})
+    target_link_libraries(tracker_test PRIVATE Threads::Threads ${OPENCV_LIBRARIES} rt OpenSSL::Crypto)
     add_test(NAME TrackerTest COMMAND tracker_test)
     set_tests_properties(TrackerTest PROPERTIES TIMEOUT 60)
 
@@ -592,12 +568,24 @@ if(AURORE_ENABLE_TESTS)
     # Fusion HAT+ I2C driver tests
     add_executable(fusion_hat_test
         tests/unit/fusion_hat_test.cpp
-        src/drivers/fusion_hat.cpp
+        ${FUSION_HAT_SRC}
     )
     target_include_directories(fusion_hat_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(fusion_hat_test PRIVATE Threads::Threads)
     add_test(NAME FusionHatTest COMMAND fusion_hat_test)
     set_tests_properties(FusionHatTest PROPERTIES TIMEOUT 30)
+
+    # Coupling Control-Actuation tests
+    add_executable(coupling_control_actuation_test
+        tests/unit/test_coupling_control_actuation.cpp
+        ${FUSION_HAT_SRC}
+        src/safety/interlock_controller.cpp
+        src/common/security.cpp
+    )
+    target_include_directories(coupling_control_actuation_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(coupling_control_actuation_test PRIVATE Threads::Threads rt OpenSSL::Crypto)
+    add_test(NAME CouplingControlActuationTest COMMAND coupling_control_actuation_test)
+    set_tests_properties(CouplingControlActuationTest PROPERTIES TIMEOUT 30)
 
     # Actuation command latency test (AM7-L2-ACT-003)
     add_executable(actuation_command_latency_test
@@ -653,7 +641,7 @@ if(AURORE_ENABLE_TESTS)
     add_executable(interlock_controller_test
         tests/unit/interlock_controller_test.cpp
         src/safety/interlock_controller.cpp
-        src/drivers/fusion_hat.cpp
+        ${FUSION_HAT_SRC}
         src/common/security.cpp
     )
     target_include_directories(interlock_controller_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
@@ -665,7 +653,8 @@ endif()
 if(AURORE_ENABLE_TESTS)
     add_executable(camera_wrapper_test
         tests/unit/camera_wrapper_test.cpp
-        src/drivers/camera_wrapper.cpp
+        ${CAMERA_WRAPPER_SRC}
+        ${CAMERA_AUTH_SRC}
     )
     target_include_directories(camera_wrapper_test PRIVATE
         ${CMAKE_SOURCE_DIR}/include
@@ -687,7 +676,8 @@ if(AURORE_ENABLE_TESTS)
     # Frame authentication tests (ICD-001 / AM7-L2-SEC-001)
     add_executable(frame_authentication_test
         tests/unit/test_frame_authentication.cpp
-        src/drivers/camera_wrapper.cpp
+        ${CAMERA_WRAPPER_SRC}
+        ${CAMERA_AUTH_SRC}
     )
     target_include_directories(frame_authentication_test PRIVATE
         ${CMAKE_SOURCE_DIR}/include
@@ -709,7 +699,8 @@ if(AURORE_ENABLE_TESTS)
     # Vision pipeline latency tests (AM7-L2-VIS-003)
     add_executable(vision_pipeline_latency_test
         tests/unit/test_vision_pipeline_latency.cpp
-        src/drivers/camera_wrapper.cpp
+        ${CAMERA_WRAPPER_SRC}
+        ${CAMERA_AUTH_SRC}
     )
     target_include_directories(vision_pipeline_latency_test PRIVATE
         ${CMAKE_SOURCE_DIR}/include
@@ -731,7 +722,8 @@ if(AURORE_ENABLE_TESTS)
     # GPU acceleration tests (VideoCore VII)
     add_executable(gpu_acceleration_test
         tests/unit/test_gpu_acceleration.cpp
-        src/drivers/camera_wrapper.cpp
+        ${CAMERA_WRAPPER_SRC}
+        ${CAMERA_AUTH_SRC}
     )
     target_include_directories(gpu_acceleration_test PRIVATE
         ${CMAKE_SOURCE_DIR}/include
@@ -814,6 +806,27 @@ if(AURORE_ENABLE_TESTS)
     target_link_libraries(sequence_validation_test PRIVATE Threads::Threads OpenSSL::Crypto)
     add_test(NAME SequenceValidationTest COMMAND sequence_validation_test)
     set_tests_properties(SequenceValidationTest PROPERTIES TIMEOUT 30)
+
+    # Security stress tests (High-frequency / Race conditions)
+    add_executable(security_stress_test
+        tests/unit/test_security_stress.cpp
+        ${CAMERA_WRAPPER_SRC}
+        ${CAMERA_AUTH_SRC}
+    )
+    target_include_directories(security_stress_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${OPENCV_INCLUDE_DIRS}
+        ${LIBCAMERA_INCLUDE_DIRS}
+    )
+    target_link_libraries(security_stress_test PRIVATE
+        Threads::Threads
+        ${OPENCV_LIBRARIES}
+        ${LIBCAMERA_LIBRARIES}
+        rt
+        OpenSSL::Crypto
+    )
+    add_test(NAME SecurityStressTest COMMAND security_stress_test)
+    set_tests_properties(SecurityStressTest PROPERTIES TIMEOUT 120)
 endif()
 
 # ============================================================================
@@ -866,6 +879,7 @@ if(AURORE_ENABLE_TESTS)
         Threads::Threads
         ${OPENCV_LIBRARIES}
         rt
+        OpenSSL::Crypto
     )
 
     add_test(NAME VisionPipelineIntegrationTest COMMAND vision_pipeline_integration_test)
