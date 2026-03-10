@@ -370,7 +370,7 @@ Frame Header:
   - hmac:           u32[8] (HMAC-SHA256 over header + frame_hash)
 
 Pixel Data:
-  - RAW10 packed:   1280 × 1024 × 10 bits = 1,638,400 bytes
+  - RAW10 packed:   1536 × 864 × 10 bits = 1,658,880 bytes
 ```
 
 ### 8.2 ICD-002: Compute → Gimbal Interface (PWM Servo via Fusion HAT+)
@@ -569,8 +569,8 @@ ZOOM_COMMAND (0x0103):
   - reserved:       u16
 
 TARGET_SELECT (0x0104):
-  - cursor_x:       u16 (pixel coordinates, 0-1920)
-  - cursor_y:       u16 (pixel coordinates, 0-1080)
+  - cursor_x:       u16 (pixel coordinates, 0-1536)
+  - cursor_y:       u16 (pixel coordinates, 0-864)
   - confidence:     u8 (operator confidence 0-100)
   - reserved:       u8[2]
 
@@ -688,8 +688,8 @@ RETICLE_DATA (0x0301):
 TARGET_BOX (0x0302):
   - box_x:          u16 (top-left X, pixels)
   - box_y:          u16 (top-left Y, pixels)
-  - box_width:      u16 (pixels, 0-1920)
-  - box_height:     u16 (pixels, 0-1080)
+  - box_width:      u16 (pixels, 0-1536)
+  - box_height:     u16 (pixels, 0-864)
   - confidence:     u8 (0-100)
   - reserved:       u8[3]
 

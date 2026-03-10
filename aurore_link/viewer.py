@@ -46,7 +46,7 @@ class TelemetryViewer:
         self._running = True
 
         cv2.namedWindow("Aurore MkVII Telemetry", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Aurore MkVII Telemetry", 640, 480)
+        cv2.resizeWindow("Aurore MkVII Telemetry", 1536, 864)
 
     def _on_telemetry(self, telemetry: Telemetry):
         """Callback for received telemetry."""
@@ -183,7 +183,7 @@ class TelemetryViewer:
             print("Failed to connect to Aurore")
             return
 
-        blank_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        blank_frame = np.zeros((864, 1536, 3), dtype=np.uint8)
 
         try:
             while self._running:
