@@ -1167,9 +1167,10 @@ bool authenticate_frame(ZeroCopyFrame& frame, const void* hmac_key, size_t key_l
 
 /**
  * @brief Verify frame authentication.
- * 
+ *
  * Member function implementation for ZeroCopyFrame::verify_authentication.
- * 
+ * Recomputes the frame hash from pixel data and verifies the HMAC.
+ *
  * @param key HMAC key
  * @param key_len Length of key
  * @return true if verification passes
@@ -1178,18 +1179,34 @@ bool ZeroCopyFrame::verify_authentication(const void* key, size_t key_len) const
     if (!is_valid()) {
         return false;
     }
-    
+
+    // Recompute SHA256 hash of pixel data to detect tampering
+    unsigned char computed_hash[32];
+    if (plane_data[0] == nullptr || plane_size[0] == 0) {
+        return false;
+    }
+    aurore::security::compute_sha256_raw_threadsafe(
+        plane_data[0],
+        plane_size[0],
+        computed_hash
+    );
+
+    // Check if hash matches (detects pixel data tampering)
+    if (std::memcmp(computed_hash, frame_hash, 32) != 0) {
+        return false;
+    }
+
     // Rebuild header
     uint8_t header_buf[64];
     size_t header_size = 0;
     compute_frame_header(*this, header_buf, header_size);
-    
-    // Rebuild HMAC input
+
+    // Rebuild HMAC input (header + frame_hash)
     std::vector<uint8_t> hmac_input;
     hmac_input.reserve(header_size + 32);
     hmac_input.insert(hmac_input.end(), header_buf, header_buf + header_size);
     hmac_input.insert(hmac_input.end(), frame_hash, frame_hash + 32);
-    
+
     // Verify HMAC
     std::string key_str(static_cast<const char*>(key), key_len);
     return aurore::security::verify_hmac_sha256_raw(key_str, hmac_input.data(), hmac_input.size(), hmac);

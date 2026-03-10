@@ -72,6 +72,9 @@ inline void compute_hmac_sha256_raw(const std::string& key, const void* data, si
 /**
  * @brief Computes HMAC-SHA256 signature for a raw binary buffer (thread-safe version).
  *
+ * Uses EVP_PKEY_new_raw_private_key for proper key handling.
+ * Requires two-phase EVP_DigestSignFinal call to get buffer size first.
+ *
  * @param key The secret key for signing.
  * @param data Pointer to the data buffer.
  * @param len Length of the data buffer.
@@ -80,21 +83,41 @@ inline void compute_hmac_sha256_raw(const std::string& key, const void* data, si
 inline void compute_hmac_sha256_raw_threadsafe(const std::string& key, const void* data, size_t len, unsigned char* out_hmac) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     if (!ctx) return;
-    
-    unsigned char key_buf[EVP_MAX_KEY_LENGTH];
-    std::memcpy(key_buf, key.c_str(), std::min(key.length(), static_cast<size_t>(EVP_MAX_KEY_LENGTH)));
-    
-    EVP_PKEY* pkey = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, nullptr, key_buf, static_cast<int>(key.length()));
+
+    // Create key from raw bytes using EVP_PKEY_new_raw_private_key (correct API for HMAC)
+    EVP_PKEY* pkey = EVP_PKEY_new_raw_private_key(
+        EVP_PKEY_HMAC, nullptr,
+        reinterpret_cast<const unsigned char*>(key.data()), key.size()
+    );
     if (!pkey) {
         EVP_MD_CTX_free(ctx);
         return;
     }
-    
-    EVP_DigestSignInit(ctx, nullptr, EVP_sha256(), nullptr, pkey);
-    EVP_DigestSignUpdate(ctx, data, len);
+
+    if (EVP_DigestSignInit(ctx, nullptr, EVP_sha256(), nullptr, pkey) != 1) {
+        EVP_PKEY_free(pkey);
+        EVP_MD_CTX_free(ctx);
+        return;
+    }
+    if (EVP_DigestSignUpdate(ctx, data, len) != 1) {
+        EVP_PKEY_free(pkey);
+        EVP_MD_CTX_free(ctx);
+        return;
+    }
+
+    // Two-phase final: first get required buffer size, then compute HMAC
     size_t hmac_len = 0;
-    EVP_DigestSignFinal(ctx, out_hmac, &hmac_len);
-    
+    if (EVP_DigestSignFinal(ctx, nullptr, &hmac_len) != 1) {
+        EVP_PKEY_free(pkey);
+        EVP_MD_CTX_free(ctx);
+        return;
+    }
+    if (EVP_DigestSignFinal(ctx, out_hmac, &hmac_len) != 1) {
+        EVP_PKEY_free(pkey);
+        EVP_MD_CTX_free(ctx);
+        return;
+    }
+
     EVP_PKEY_free(pkey);
     EVP_MD_CTX_free(ctx);
 }
@@ -236,55 +259,73 @@ inline void AsyncFrameAuthenticator::authenticate_frame(
     const void* pixel_data, size_t pixel_size,
     const void* header_data, size_t header_size,
     void* out_frame) {
-    
+
     if (busy_.exchange(true, std::memory_order_acq_rel)) {
         // Already busy - skip this frame (backpressure)
         return;
     }
-    
+
     completed_.store(false, std::memory_order_release);
     success_.store(false, std::memory_order_release);
     pending_frame_ = out_frame;
-    
+
     // Copy input data for async processing
     std::memcpy(pending_hash_, pixel_data, std::min(pixel_size, static_cast<size_t>(32)));
-    
+
     worker_ = std::thread([this, pixel_data, pixel_size, header_data, header_size]() {
         // Compute SHA256 of pixel data
         unsigned char frame_hash[32];
         compute_sha256_raw_threadsafe(pixel_data, pixel_size, frame_hash);
-        
+
         // Compute HMAC over header + hash
         std::vector<uint8_t> hmac_input;
         hmac_input.reserve(header_size + 32);
-        hmac_input.insert(hmac_input.end(), 
+        hmac_input.insert(hmac_input.end(),
                          static_cast<const uint8_t*>(header_data),
                          static_cast<const uint8_t*>(header_data) + header_size);
         hmac_input.insert(hmac_input.end(), frame_hash, frame_hash + 32);
-        
+
         unsigned char hmac[32];
         compute_hmac_sha256_raw_threadsafe(hmac_key_, hmac_input.data(), hmac_input.size(), hmac);
-        
-        // Write results to frame (must be atomic for lock-free safety)
-        struct AuthFrame {
-            uint8_t frame_hash[32];
-            uint8_t hmac[32];
+
+        // Write results to ZeroCopyFrame struct
+        // Note: ZeroCopyFrame has frame_hash[32] and hmac[32] as consecutive fields
+        // Offsets: frame_hash at 269, hmac at 301 (on 64-bit platform)
+        struct ZeroCopyFrameAuth {
+            // Fields before frame_hash (must match ZeroCopyFrame layout exactly)
+            uint64_t sequence;         // 0
+            uint64_t timestamp_ns;     // 8
+            uint64_t exposure_us;      // 16
+            float gain;                // 24
+            void* plane_data[4];       // 32
+            size_t plane_size[4];      // 64
+            int stride[4];             // 96
+            int width;                 // 112
+            int height;                // 116
+            uint32_t format;           // 120 (PixelFormat underlying type)
+            void* request_ptr;         // 128
+            uint32_t buffer_id;        // 136
+            bool valid;                // 140
+            char error[128];           // 141
+            // Authentication fields
+            uint8_t frame_hash[32];    // 269
+            uint8_t hmac[32];          // 301
         };
-        
-        AuthFrame* auth_frame = static_cast<AuthFrame*>(pending_frame_);
+
+        ZeroCopyFrameAuth* auth_frame = static_cast<ZeroCopyFrameAuth*>(pending_frame_);
         if (auth_frame) {
             std::memcpy(auth_frame->frame_hash, frame_hash, 32);
             std::memcpy(auth_frame->hmac, hmac, 32);
         }
-        
+
         std::memcpy(pending_hash_, frame_hash, 32);
         std::memcpy(pending_hmac_, hmac, 32);
-        
+
         success_.store(true, std::memory_order_release);
         completed_.store(true, std::memory_order_release);
         busy_.store(false, std::memory_order_release);
     });
-    
+
     worker_.detach();  // Fire-and-forget for async operation
 }
 
