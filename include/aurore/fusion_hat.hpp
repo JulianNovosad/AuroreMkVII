@@ -39,9 +39,12 @@
 
 #include <array>
 #include <atomic>
-#include <cstdint>
+#include <condition_variable>
+#include <mutex>
 #include <optional>
-#include <string>
+#include <queue>
+#include <thread>
+#include <variant>
 
 namespace aurore {
 
@@ -359,6 +362,28 @@ class FusionHat {
 
    private:
     /**
+     * @brief Internal command structure for asynchronous processing
+     */
+    struct ServoCommand {
+        enum class Type {
+            SET_PULSE_WIDTH,
+            SET_ENABLED
+        } type;
+        int channel;
+        int value;  // pulse_width_us or enable (0/1)
+    };
+
+    /**
+     * @brief Push command to asynchronous queue
+     */
+    void push_command(const ServoCommand& cmd);
+
+    /**
+     * @brief Background command processing loop
+     */
+    void command_processor();
+
+    /**
      * @brief Write integer to sysfs file (simple, no retry - for const methods)
      *
      * @param path Sysfs file path
@@ -439,6 +464,13 @@ class FusionHat {
     };
 
     std::array<ChannelState, 12> channels_;
+
+    // Asynchronous command queue
+    std::queue<ServoCommand> command_queue_;
+    mutable std::mutex queue_mutex_;
+    std::condition_variable queue_cv_;
+    std::thread command_thread_;
+    std::atomic<bool> stop_thread_{false};
 
     // Sysfs base path
     static constexpr const char* SYSFS_BASE = "/sys/class/fusion_hat/fusion_hat";

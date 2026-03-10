@@ -230,6 +230,11 @@ FusionHat::FusionHat(const FusionHatConfig& config)
 }
 
 FusionHat::~FusionHat() {
+    stop_thread_ = true;
+    queue_cv_.notify_all();
+    if (command_thread_.joinable()) {
+        command_thread_.join();
+    }
     disable_all_servos();
 }
 
@@ -313,6 +318,15 @@ bool FusionHat::init() {
         channels_[static_cast<size_t>(ch)].current_angle.store(0.0f, std::memory_order_release);
     }
     
+    // Start background command processor thread
+    stop_thread_ = false;
+    command_thread_ = std::thread(&FusionHat::command_processor, this);
+    
+    // Set thread name if possible
+#ifdef __linux__
+    pthread_setname_np(command_thread_.native_handle(), "fusion_hat_io");
+#endif
+
     initialized_.store(true, std::memory_order_release);
     
     std::cout << "FusionHat: Initialized (" << get_driver_version() 
@@ -332,6 +346,38 @@ std::string FusionHat::get_driver_version() const {
 // ============================================================================
 // Servo Control
 // ============================================================================
+
+void FusionHat::push_command(const ServoCommand& cmd) {
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex_);
+        command_queue_.push(cmd);
+    }
+    queue_cv_.notify_one();
+}
+
+void FusionHat::command_processor() {
+    while (!stop_thread_) {
+        ServoCommand cmd;
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex_);
+            queue_cv_.wait(lock, [this] { return !command_queue_.empty() || stop_thread_; });
+            
+            if (stop_thread_ && command_queue_.empty()) {
+                break;
+            }
+            
+            cmd = command_queue_.front();
+            command_queue_.pop();
+        }
+        
+        std::string pwm_path = get_pwm_path(cmd.channel);
+        if (cmd.type == ServoCommand::Type::SET_PULSE_WIDTH) {
+            write_sysfs_with_retry(pwm_path + "/duty_cycle", cmd.value);
+        } else if (cmd.type == ServoCommand::Type::SET_ENABLED) {
+            write_sysfs_with_retry(pwm_path + "/enable", cmd.value);
+        }
+    }
+}
 
 bool FusionHat::set_servo_angle(int channel, float angle_deg) {
     if (!initialized_.load(std::memory_order_acquire)) {
@@ -425,12 +471,7 @@ bool FusionHat::set_servo_pulse_width(int channel, int pulse_width_us) {
         return false;
     }
 
-    std::string pwm_path = get_pwm_path(channel);
-
-    if (!write_sysfs_with_retry(pwm_path + "/duty_cycle", pulse_width_us)) {
-        // Error already counted by write_sysfs_with_retry
-        return false;
-    }
+    push_command({ServoCommand::Type::SET_PULSE_WIDTH, channel, pulse_width_us});
 
     command_count_.fetch_add(1, std::memory_order_relaxed);
     return true;
@@ -450,12 +491,7 @@ bool FusionHat::set_servo_enabled(int channel, bool enable) {
         return false;
     }
 
-    std::string pwm_path = get_pwm_path(channel);
-
-    if (!write_sysfs_with_retry(pwm_path + "/enable", enable ? 1 : 0)) {
-        // Error already counted by write_sysfs_with_retry
-        return false;
-    }
+    push_command({ServoCommand::Type::SET_ENABLED, channel, enable ? 1 : 0});
 
     channels_[static_cast<size_t>(channel)].enabled.store(enable, std::memory_order_release);
     return true;
