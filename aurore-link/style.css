@@ -267,13 +267,15 @@ html, body {
 
 /* --- Ballistic Pipper ----------------------------------- */
 #hud-pipper-lead {
+  display: block !important;  /* Ensure visible by default */
   position: absolute;
   top: 0;
   left: 0;
   width: 40px;
   height: 40px;
   pointer-events: none;
-  z-index: 21;
+  z-index: 100;  /* Topmost layer */
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8));
   /* Positioned via JS: left/top */
 }
 

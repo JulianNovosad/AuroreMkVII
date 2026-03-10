@@ -327,6 +327,14 @@ wss.on('connection', (ws, req) => {
       case 'freecam': {
         const az = cmd.az;
         const el = cmd.el;
+        
+        // Validate input
+        if (typeof az !== 'number' || !isFinite(az) || 
+            typeof el !== 'number' || !isFinite(el)) {
+          console.warn(`[CMD] freecam invalid values: az=${az} el=${el}`);
+          break;
+        }
+        
         // Set absolute position (frontend already accumulated)
         state.gimbalYaw = az;
         state.gimbalPitch = el;

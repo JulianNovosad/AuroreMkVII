@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -296,6 +297,99 @@ struct SystemHealthData {
         return true;
     }
 };
+
+/**
+ * @brief Binary audit log entry per AM7-L3-SEC-003
+ *
+ * Format: {timestamp: u64, event_id: u16, severity: u8, data: u8[], hmac: u32[8]}
+ * Each entry is individually signed with HMAC-SHA256.
+ *
+ * SEC-009: Fixed-size buffers with explicit bounds
+ */
+struct BinaryLogEntry {
+    // Core fields (fixed size: 8 + 2 + 1 = 11 bytes + padding)
+    uint64_t timestamp_ns{0};       ///< Timestamp (CLOCK_MONOTONIC_RAW)
+    uint16_t event_id{0};           ///< Event ID (TelemetryEventId value)
+    uint8_t severity{0};            ///< Severity (TelemetrySeverity value)
+    uint8_t data_len{0};            ///< Length of data payload (0-64 bytes)
+
+    // Data payload (fixed-size buffer for binary format)
+    static constexpr size_t kMaxDataSize = 64;
+    uint8_t data[kMaxDataSize]{};   ///< Variable-length data (padded to 64 bytes)
+
+    // HMAC-SHA256 signature (8 x u32 = 32 bytes)
+    uint32_t hmac[8]{};             ///< HMAC-SHA256 signature
+
+    /**
+     * @brief SEC-009: Set data payload with bounds checking
+     */
+    void set_data(const void* src, size_t len) {
+        if (src == nullptr || len == 0) {
+            data_len = 0;
+            return;
+        }
+        data_len = static_cast<uint8_t>(std::min(len, static_cast<size_t>(kMaxDataSize)));
+        std::memcpy(data, src, data_len);
+    }
+
+    /**
+     * @brief SEC-009: Set data from string with bounds checking
+     */
+    void set_data(const std::string& str) {
+        set_data(str.c_str(), str.size());
+    }
+
+    /**
+     * @brief Set event ID from TelemetryEventId enum
+     */
+    void set_event_id(TelemetryEventId id) {
+        event_id = static_cast<uint16_t>(id);
+    }
+
+    /**
+     * @brief Set severity from TelemetrySeverity enum
+     */
+    void set_severity(TelemetrySeverity sev) {
+        severity = static_cast<uint8_t>(sev);
+    }
+
+    /**
+     * @brief SEC-009: Validate entry structure
+     */
+    bool is_valid() const {
+        // Check data length is within bounds
+        if (data_len > kMaxDataSize) {
+            return false;
+        }
+
+        // Check event_id is in valid range (non-zero)
+        if (event_id == 0) {
+            return false;
+        }
+
+        // Check severity is in valid range
+        if (severity > 4) {  // kCritical = 4
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @brief Get total entry size (for binary serialization)
+     */
+    static constexpr size_t entry_size() {
+        return sizeof(BinaryLogEntry);
+    }
+};
+
+// SEC-009: Compile-time size verification for BinaryLogEntry
+// Note: Struct has padding after data_len (1 byte padding to align hmac to 4-byte boundary)
+// Layout: timestamp(8) + event_id(2) + severity(1) + data_len(1) + padding(2) + data(64) + hmac(32) = 110 bytes
+// Actual layout with alignment: timestamp(8) + event_id(2) + severity(1) + data_len(1) + pad(4) + data(64) + hmac(32) = 112 bytes
+// hmac offset: 8 + 2 + 1 + 1 + 4 (padding) = 16, then + 64 (data) = 80... but actual is 76
+static_assert(sizeof(BinaryLogEntry) == 112, "BinaryLogEntry size mismatch (expected 112 bytes with padding)");
+// Note: Actual offset is 76 due to compiler packing (4 bytes padding total: 2 after data_len, 2 more for alignment)
 
 /**
  * @brief Simplified CSV log entry (MVP version)

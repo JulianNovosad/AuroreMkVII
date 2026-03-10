@@ -43,10 +43,10 @@ const bracketBR  = document.querySelector('.bracket-br');
 // ---------------------------------------------------------------------------
 const keyState = {};
 const keyTimers = {};
-const TAP_WINDOW_MS = 200;  // Double tap window for snappy response
-const TAP_DELTA = 3;        // Single tap: 3°
-const DOUBLE_TAP_DELTA = 15; // Double tap: 15°
-const HOLD_DELTA = 0.5;     // Hold: 0.5° per 100ms (5°/sec for fine control)
+const TAP_WINDOW_MS = 100;  // Double tap window for snappy response
+const TAP_DELTA = 0.75;     // Single tap: 0.75°
+const DOUBLE_TAP_DELTA = 3; // Double tap: 3°
+const HOLD_DELTA = 0.15;    // Hold: 0.15° per 100ms (1.5°/sec)
 const HOLD_INTERVAL_MS = 100; // 10Hz command rate for hold slew
 
 // Accumulated gimbal position (matches C++ gimbal controller)
@@ -58,6 +58,31 @@ const GIMBAL_YAW_MIN = -90;
 const GIMBAL_YAW_MAX = 90;
 const GIMBAL_PITCH_MIN = -10;
 const GIMBAL_PITCH_MAX = 45;
+
+// Smoothing for realistic gimbal movement (matches real servo dynamics)
+let targetYaw = 0;             // Target gimbal position
+let targetPitch = 0;
+let currentYaw = 0;            // Current (smoothed) position
+let currentPitch = 0;
+let velocityYaw = 0;           // Current angular velocity (°/sec)
+let velocityPitch = 0;
+
+// Gimbal dynamics (MUST match real servo specs: 0.17s per 60°)
+const MAX_ANGULAR_VELOCITY = 353;    // 60° per 0.17s = 353°/sec max
+const MAX_ANGULAR_ACCELERATION = 2000; // 2000°/sec² for smooth accel/decel
+const SMOOTHING_ENABLED = true;
+
+// Servo latency simulation (real servos have ~70ms delay)
+const SERVO_LATENCY_MS = 70;
+const SERVO_LATENCY_FRAMES = 4;  // ~70ms at 60fps
+let latencyBufferYaw = [];       // Circular buffer for delayed position
+let latencyBufferPitch = [];
+
+// PD control state
+let prevErrorYaw = 0;
+let prevErrorPitch = 0;
+let lastSendTime = 0;
+let smoothingInitialized = false;  // Track if smoothing has started
 
 let holdInterval = null;
 
@@ -191,9 +216,13 @@ function updateGimbalPipper(gimbal) {
   const degScaleX = W / 66;  // pixels per degree horizontal
   const degScaleY = H / 41;  // pixels per degree vertical
 
+  // Use smoothed current position if smoothing is active, otherwise use telemetry
+  const displayYaw = (SMOOTHING_ENABLED && smoothingInitialized) ? currentYaw : gimbal.yaw;
+  const displayPitch = (SMOOTHING_ENABLED && smoothingInitialized) ? currentPitch : gimbal.pitch;
+
   // Gimbal yaw moves horizontally, pitch moves vertically
-  const px = cx + gimbal.yaw * degScaleX;
-  const py = cy - gimbal.pitch * degScaleY; // pitch up = negative y
+  const px = cx + displayYaw * degScaleX;
+  const py = cy - displayPitch * degScaleY; // pitch up = negative y
 
   // Position pipper (40×40 SVG, center at 20,20)
   pipperLead.style.left = (px - 20) + 'px';
@@ -290,20 +319,29 @@ function updateHUD(s) {
   }
 
   // Update gimbal pipper (offset crosshair shows gimbal position)
+  // Always update from telemetry as fallback, smoothing loop also updates when running
   updateGimbalPipper(s.gimbal);
 
   // Altitude (placeholder — not in current telemetry)
   altitudeEl.textContent = 'ALT ---M';
-  
+
   // Link status (derived from WebSocket state)
   // Updated separately by connection handler
-  
-  // Gimbal coords
-  gimbalCoordsEl.textContent = 'AZ ' + s.gimbal.yaw.toFixed(1) + '° EL ' + s.gimbal.pitch.toFixed(1) + '°';
-  
-  // Update analog dial
-  updateGimbalDial(s.gimbal.yaw);
-  
+
+  // Gimbal coords - use smoothed values when available
+  if (SMOOTHING_ENABLED && smoothingInitialized) {
+    gimbalCoordsEl.textContent = `AZ ${currentYaw.toFixed(1)}° EL ${currentPitch.toFixed(1)}°`;
+  } else {
+    gimbalCoordsEl.textContent = 'AZ ' + s.gimbal.yaw.toFixed(1) + '° EL ' + s.gimbal.pitch.toFixed(1) + '°';
+  }
+
+  // Update analog dial - use smoothed values when available
+  if (SMOOTHING_ENABLED && smoothingInitialized) {
+    gimbalNeedle.style.transform = `rotate(${currentYaw}deg)`;
+  } else {
+    updateGimbalDial(s.gimbal.yaw);
+  }
+
   // Sensor params (placeholder — not in current telemetry)
   sensorParamsEl.textContent = 'WHOT BRT -- CNT --';
 }
@@ -492,18 +530,146 @@ function switchMode(newMode) {
   }
 }
 
+// Gimbal smoothing - called every animation frame
+// Implements PD control + servo latency simulation
+let lastSmoothTime = 0;
+let commandFrameCount = 0;
+
+function updateGimbalSmoothing(timestamp) {
+  // Mark smoothing as initialized on first run
+  if (!smoothingInitialized) {
+    smoothingInitialized = true;
+    console.log('[SMOOTH] Smoothing initialized, canvas:', canvas ? canvas.width + 'x' + canvas.height : 'null');
+  }
+
+  if (!SMOOTHING_ENABLED) {
+    // No smoothing - just use target directly
+    currentYaw = targetYaw;
+    currentPitch = targetPitch;
+    sendCmd({ type: 'freecam', az: currentYaw, el: currentPitch });
+  } else {
+    const dt = lastSmoothTime ? (timestamp - lastSmoothTime) / 1000 : 0;
+    lastSmoothTime = timestamp;
+    
+    // Limit dt to prevent huge jumps after tab switch
+    const deltaTime = Math.min(dt, 0.05); // Cap at 50ms
+    
+    // Calculate error to target
+    const errorYaw = targetYaw - currentYaw;
+    const errorPitch = targetPitch - currentPitch;
+    
+    // PD control with higher gains for smooth motion
+    const Kp = 25;   // Proportional gain
+    const Kd = 0.08; // Derivative gain (damping)
+    
+    // Calculate derivative (rate of change of error)
+    const derivYaw = (errorYaw - prevErrorYaw) / deltaTime;
+    const derivPitch = (errorPitch - prevErrorPitch) / deltaTime;
+    
+    prevErrorYaw = errorYaw;
+    prevErrorPitch = errorPitch;
+    
+    // PD output = proportional + derivative
+    let cmdVelocityYaw = Kp * errorYaw + Kd * derivYaw;
+    let cmdVelocityPitch = Kp * errorPitch + Kd * derivPitch;
+    
+    // Apply acceleration limits for smoothness
+    const maxAccelDt = MAX_ANGULAR_ACCELERATION * deltaTime;
+    const accelYaw = cmdVelocityYaw - velocityYaw;
+    const accelPitch = cmdVelocityPitch - velocityPitch;
+    
+    velocityYaw += Math.max(-maxAccelDt, Math.min(maxAccelDt, accelYaw));
+    velocityPitch += Math.max(-maxAccelDt, Math.min(maxAccelDt, accelPitch));
+    
+    // Clamp velocity to max
+    velocityYaw = Math.max(-MAX_ANGULAR_VELOCITY, Math.min(MAX_ANGULAR_VELOCITY, velocityYaw));
+    velocityPitch = Math.max(-MAX_ANGULAR_VELOCITY, Math.min(MAX_ANGULAR_VELOCITY, velocityPitch));
+    
+    // Update position
+    currentYaw += velocityYaw * deltaTime;
+    currentPitch += velocityPitch * deltaTime;
+    
+    // Snap to target if very close
+    if (Math.abs(errorYaw) < 0.01) currentYaw = targetYaw;
+    if (Math.abs(errorPitch) < 0.01) currentPitch = targetPitch;
+    
+    // Add to latency buffer
+    latencyBufferYaw.push({ yaw: currentYaw, pitch: currentPitch });
+    latencyBufferPitch.push({ yaw: currentYaw, pitch: currentPitch });
+    
+    // Remove old entries (keep only last N frames)
+    if (latencyBufferYaw.length > SERVO_LATENCY_FRAMES) {
+      latencyBufferYaw.shift();
+      latencyBufferPitch.shift();
+    }
+    
+    // Send with latency: use buffered position from 70ms ago
+    // If buffer not full yet, use current position
+    const sendYaw = latencyBufferYaw.length > 0 ? latencyBufferYaw[0].yaw : currentYaw;
+    const sendPitch = latencyBufferPitch.length > 0 ? latencyBufferPitch[0].pitch : currentPitch;
+
+    // Throttle sends to ~60Hz to reduce choppiness
+    if (timestamp - lastSendTime >= 16.67) {
+      // Only send if values are valid numbers
+      if (typeof sendYaw === 'number' && typeof sendPitch === 'number' && 
+          isFinite(sendYaw) && isFinite(sendPitch)) {
+        sendCmd({ type: 'freecam', az: sendYaw, el: sendPitch });
+        lastSendTime = timestamp;
+
+        // Update pipper display directly from smoothing loop
+        if (pipperLead && canvas && canvas.width > 0 && canvas.height > 0) {
+          const W = canvas.width;
+          const H = canvas.height;
+          const cx = W / 2;
+          const cy = H / 2;
+          const degScaleX = W / 66;
+          const degScaleY = H / 41;
+          const px = cx + sendYaw * degScaleX;
+          const py = cy - sendPitch * degScaleY;
+          pipperLead.style.left = (px - 20) + 'px';
+          pipperLead.style.top  = (py - 20) + 'px';
+          pipperLead.style.display = 'block';  // Ensure pipper is visible
+          // Debug: log first few updates
+          if (lastSendTime < 1000) {
+            console.log('[PIP] Update:', sendYaw.toFixed(2), sendPitch.toFixed(2), '-> px:', px.toFixed(0), py.toFixed(0));
+          }
+        }
+
+        // Update gimbal coords display
+        if (gimbalCoordsEl) {
+          gimbalCoordsEl.textContent = `AZ ${sendYaw.toFixed(1)}° EL ${sendPitch.toFixed(1)}°`;
+        }
+
+        // Update gimbal dial (analog needle)
+        if (gimbalNeedle) {
+          gimbalNeedle.style.transform = `rotate(${sendYaw}deg)`;
+        }
+      }
+    }
+  }
+  
+  // Continue animation loop
+  requestAnimationFrame(updateGimbalSmoothing);
+}
+
+// Start smoothing loop
+if (SMOOTHING_ENABLED) {
+  requestAnimationFrame(updateGimbalSmoothing);
+}
+
 // Gimbal control command
 function sendGimbalCommand(azDelta, elDelta) {
   // Accumulate deltas for absolute position
   accumulatedYaw += azDelta;
   accumulatedPitch += elDelta;
-  
+
   // Clamp to gimbal limits (MUST match C++: src/actuation/gimbal_controller.hpp)
   accumulatedYaw = Math.max(GIMBAL_YAW_MIN, Math.min(GIMBAL_YAW_MAX, accumulatedYaw));
   accumulatedPitch = Math.max(GIMBAL_PITCH_MIN, Math.min(GIMBAL_PITCH_MAX, accumulatedPitch));
-  
-  // Send absolute position command
-  sendCmd({ type: 'freecam', az: accumulatedYaw, el: accumulatedPitch });
+
+  // Set target for smoothing
+  targetYaw = accumulatedYaw;
+  targetPitch = accumulatedPitch;
 }
 
 // Key event handlers
@@ -595,12 +761,33 @@ function assignTargetAtPosition(screenX, screenY) {
   const rect = canvas.getBoundingClientRect();
   const scaleX = SCENE_W / rect.width;
   const scaleY = SCENE_H / rect.height;
-  
+
   const frameX = (screenX - rect.left) * scaleX;
   const frameY = (screenY - rect.top) * scaleY;
+
+  // Convert pixel position to gimbal angles
+  // Center of screen = (0°, 0°)
+  // RPI Cam Module 3: 66° horizontal FOV, 41° vertical FOV
+  const centerX = rect.width / 2;
+  const centerY = rect.height / 2;
+  const offsetX = screenX - centerX;
+  const offsetY = screenY - centerY;
   
-  // TODO: Send target assignment command when backend supports it
-  showNotification(`TARGET: (${frameX.toFixed(0)}, ${frameY.toFixed(0)})`);
+  // Calculate gimbal angles based on click position
+  const yaw = (offsetX / centerX) * 33;  // ±33° (half of 66° horizontal FOV)
+  const pitch = -(offsetY / centerY) * 20.5;  // ±20.5° (half of 41° vertical FOV), negative because Y is inverted
+  
+  // Clamp to gimbal limits
+  const clampedYaw = Math.max(GIMBAL_YAW_MIN, Math.min(GIMBAL_YAW_MAX, yaw));
+  const clampedPitch = Math.max(GIMBAL_PITCH_MIN, Math.min(GIMBAL_PITCH_MAX, pitch));
+
+  // Update accumulated position and target for smoothing
+  accumulatedYaw = clampedYaw;
+  accumulatedPitch = clampedPitch;
+  targetYaw = clampedYaw;
+  targetPitch = clampedPitch;
+  
+  showNotification(`TARGET: AZ ${clampedYaw.toFixed(1)}° EL ${clampedPitch.toFixed(1)}°`);
 }
 
 function clearTarget() {
@@ -641,10 +828,11 @@ window.addEventListener('keydown', (e) => {
         keyTimers['KeyA'] = 0;
         keyTimers['KeyS'] = 0;
         keyTimers['KeyD'] = 0;
-        // Reset accumulated position to center
+        // Reset accumulated position to center (smoothing will interpolate)
         accumulatedYaw = 0;
         accumulatedPitch = 0;
-        sendCmd({ type: 'freecam', az: 0, el: 0 });
+        targetYaw = 0;
+        targetPitch = 0;
         showNotification('GIMBAL: CENTERED (0°, 0°)');
       }
       break;
@@ -695,8 +883,25 @@ let currentMode = 'AUTO';
 // Override mode indicator update to track mode
 const originalUpdateHUD = typeof updateHUD !== 'undefined' ? updateHUD : null;
 
+// ---------------------------------------------------------------------------
+// Initialize pipper at center on load
+// ---------------------------------------------------------------------------
+function initPipper() {
+  if (pipperLead && canvas && canvas.width > 0 && canvas.height > 0) {
+    const W = canvas.width;
+    const H = canvas.height;
+    const cx = W / 2;
+    const cy = H / 2;
+    pipperLead.style.left = (cx - 20) + 'px';
+    pipperLead.style.top  = (cy - 20) + 'px';
+    pipperLead.style.display = 'block';
+    console.log('[INIT] Pipper initialized at center:', cx, cy);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
+resizeCanvas();  // Ensure canvas is sized
+initPipper();    // Initialize pipper at center
 connect();

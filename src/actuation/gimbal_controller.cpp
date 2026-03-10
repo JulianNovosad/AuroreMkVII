@@ -30,11 +30,11 @@ GimbalCommand GimbalController::command_from_pixel(float centroid_x, float centr
     az_.store(new_az, std::memory_order_relaxed);
     el_.store(new_el, std::memory_order_relaxed);
 
-    return GimbalCommand{new_az, new_el};
+    return GimbalCommand{new_az, new_el, std::nullopt};  // No sequence number for AUTO mode
 }
 
-GimbalCommand GimbalController::command_absolute(float az_deg, float el_deg) {
-    // FREECAM mode: set absolute angles directly
+GimbalCommand GimbalController::command_absolute(float az_deg, float el_deg, std::optional<uint32_t> seq_num) {
+    // FREECAM mode: set absolute angles
     float clamped_az = std::clamp(az_deg, az_min_, az_max_);
     float clamped_el = std::clamp(el_deg, el_min_, el_max_);
 
@@ -42,7 +42,31 @@ GimbalCommand GimbalController::command_absolute(float az_deg, float el_deg) {
     az_.store(clamped_az, std::memory_order_relaxed);
     el_.store(clamped_el, std::memory_order_relaxed);
 
-    return GimbalCommand{clamped_az, clamped_el};
+    return GimbalCommand{clamped_az, clamped_el, seq_num};
+}
+
+std::optional<GimbalCommand> GimbalController::process_command_with_gap_check(float az_deg, float el_deg, uint32_t seq_num) {
+    // Check for sequence gap if we have a previous sequence number
+    if (last_sequence_num_.has_value()) {
+        if (security::is_sequence_gap(last_sequence_num_.value(), seq_num, kGimbalSequenceGapThreshold)) {
+            // Sequence gap detected - reject command and flag fault
+            sequence_gap_detected_.store(true, std::memory_order_release);
+            return std::nullopt;  // Command rejected
+        }
+    }
+
+    // Update last sequence number
+    last_sequence_num_ = seq_num;
+
+    // Process command normally
+    float clamped_az = std::clamp(az_deg, az_min_, az_max_);
+    float clamped_el = std::clamp(el_deg, el_min_, el_max_);
+
+    // Store angles
+    az_.store(clamped_az, std::memory_order_relaxed);
+    el_.store(clamped_el, std::memory_order_relaxed);
+
+    return GimbalCommand{clamped_az, clamped_el, seq_num};
 }
 
 void GimbalController::set_limits(float az_min, float az_max, float el_min, float el_max) {

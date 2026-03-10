@@ -1,3 +1,38 @@
+/**
+ * @file kcf_tracker.cpp
+ * @brief KCF (Kernelized Correlation Filter) Tracker Implementation
+ *
+ * ============================================================================
+ * KCF vs CSRT Trade-off Analysis (WCET Compliance)
+ * ============================================================================
+ *
+ * DESIGN DECISION: KCF tracker selected over CSRT for WCET compliance.
+ *
+ * Performance comparison at 1536x864 resolution:
+ * - KCF:  1-2ms execution time (typical)
+ * - CSRT: 10-20ms execution time (typical)
+ *
+ * WCET Budget (AM7-L2-TIM-002): ≤5ms for entire vision pipeline
+ * - KCF update: ~1-2ms → COMPLIANT (leaves 3-4ms for pre/post-processing)
+ * - CSRT update: ~10-20ms → NON-COMPLIANT (exceeds total budget alone)
+ *
+ * Accuracy trade-off:
+ * - CSRT: Higher accuracy, supports scale change detection
+ * - KCF: Good accuracy for rigid targets, NO scale change detection
+ *
+ * Rationale:
+ * - Primary use case: fixed-range rigid target tracking at 120Hz
+ * - Scale changes are minimal at operational ranges
+ * - WCET compliance is mandatory for real-time guarantees
+ * - 120Hz update rate compensates for KCF's lower per-frame accuracy
+ *
+ * For scale-invariant tracking requirements, consider:
+ * - SAMF (Scale Adaptive Multi-Feature) tracker: ~3-5ms
+ * - Multi-scale KCF: ~2-4ms with reduced accuracy
+ *
+ * @copyright AuroreMkVII Project - Educational/Personal Use Only
+ */
+
 #include <opencv2/imgproc.hpp>
 
 #include "aurore/tracker.hpp"

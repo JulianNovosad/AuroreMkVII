@@ -10,7 +10,7 @@
  * Hardware interface:
  * - I2C Address: 0x17 (handled by kernel driver)
  * - PWM Channels: 12 (0-11)
- * - Frequency: 50Hz for servos (500-2500μs pulse width)
+ * - Frequency: 50Hz for servos (1000-2000μs pulse width per AM7-L2-ACT-001)
  * - Sysfs path: /sys/class/fusion_hat/fusion_hat/pwm*
  *
  * Usage:
@@ -22,11 +22,11 @@
  *     }
  *
  *     // Set servo on channel 0 to center position
- *     hat.set_servo_angle(0, 0.0f);  // 0 degrees = center
+ *     hat.set_servo_angle(0, 90.0f);  // 90 degrees = center (0-180 range)
  *
  *     // Set servo to full range
- *     hat.set_servo_angle(0, -90.0f);  // Full left
- *     hat.set_servo_angle(0, 90.0f);   // Full right
+ *     hat.set_servo_angle(0, 0.0f);   // Full left (0 degrees)
+ *     hat.set_servo_angle(0, 180.0f); // Full right (180 degrees)
  *
  *     // Direct PWM control
  *     hat.set_pwm_duty_cycle(1, 50);  // 50% duty cycle
@@ -52,17 +52,19 @@ struct FusionHatConfig {
     /// Servo frequency in Hz (default 50Hz for standard servos)
     int servo_freq_hz = 50;
 
-    /// Minimum pulse width in microseconds (default 500μs = -90°)
-    int min_pulse_width_us = 500;
+    /// Minimum pulse width in microseconds (default 1000μs = 0° per spec)
+    /// AM7-L2-ACT-001: Standard servo range for Fusion HAT+ gimbal
+    int min_pulse_width_us = 1000;
 
-    /// Maximum pulse width in microseconds (default 2500μs = +90°)
-    int max_pulse_width_us = 2500;
+    /// Maximum pulse width in microseconds (default 2000μs = 180° per spec)
+    /// AM7-L2-ACT-001: Standard servo range for Fusion HAT+ gimbal
+    int max_pulse_width_us = 2000;
 
-    /// Minimum servo angle in degrees (default -90°)
-    float min_angle_deg = -90.0f;
+    /// Minimum servo angle in degrees (default 0°)
+    float min_angle_deg = 0.0f;
 
-    /// Maximum servo angle in degrees (default +90°)
-    float max_angle_deg = 90.0f;
+    /// Maximum servo angle in degrees (default 180°)
+    float max_angle_deg = 180.0f;
 
     /// Enable software endstops
     bool enable_endstops = true;
@@ -429,11 +431,11 @@ class FusionHat {
     // Per-channel state
     struct ChannelState {
         std::atomic<bool> enabled{false};
-        std::atomic<float> current_angle{0.0f};
-        std::atomic<int> current_pulse_width{1500};
+        std::atomic<float> current_angle{90.0f};  // Center position (0-180 range)
+        std::atomic<int> current_pulse_width{1500};  // Center pulse width
         std::atomic<uint64_t> last_update_ns{0};
-        float min_angle{-90.0f};
-        float max_angle{90.0f};
+        float min_angle{0.0f};
+        float max_angle{180.0f};
     };
 
     std::array<ChannelState, 12> channels_;

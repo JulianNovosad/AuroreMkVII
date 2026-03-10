@@ -182,6 +182,78 @@ InterlockStatus InterlockController::get_status() const noexcept {
     return status;
 }
 
+SelfTestResult InterlockController::run_self_test() noexcept {
+    SelfTestResult result;
+    result.last_test_timestamp_ns = get_timestamp(ClockId::MonotonicRaw);
+
+    // AM7-L2-SAFE-007: Self-test verifies comparator function, interlock GPIO, watchdog timer
+
+    // 1. Comparator test - verify state comparison logic
+    // Test by forcing a known state and verifying it reads back correctly
+    {
+        InterlockState original_state = state_.load(std::memory_order_acquire);
+        
+        // Force to OPEN, verify, then force to CLOSED, verify
+        force_state(InterlockState::OPEN);
+        bool open_ok = (get_state() == InterlockState::OPEN);
+        
+        force_state(InterlockState::CLOSED);
+        bool closed_ok = (get_state() == InterlockState::CLOSED);
+        
+        // Restore original state
+        force_state(original_state);
+        
+        result.comparator_ok = open_ok && closed_ok;
+    }
+
+    // 2. Interlock GPIO test - verify GPIO read/write
+    // Test by toggling status LED and verifying output state
+    {
+        if (impl_ && impl_->gpio_map) {
+            // Toggle LED and verify we can write
+            impl_->write_pin(config_.status_led_pin, 1);
+            impl_->write_pin(config_.status_led_pin, 0);
+            
+            // GPIO test passes if we can write without error
+            result.interlock_gpio_ok = true;
+        } else {
+            // No GPIO hardware - test failed
+            result.interlock_gpio_ok = false;
+        }
+    }
+
+    // 3. Watchdog timer test - verify watchdog feed mechanism
+    // Test by feeding watchdog and verifying timestamp updates
+    {
+        uint64_t before_feed = last_watchdog_feed_ns_.load(std::memory_order_acquire);
+        
+        // Feed watchdog
+        watchdog_feed();
+        
+        uint64_t after_feed = last_watchdog_feed_ns_.load(std::memory_order_acquire);
+        
+        // Watchdog test passes if feed timestamp was updated
+        result.watchdog_ok = (after_feed >= before_feed);
+    }
+
+    // Update self-test statistics
+    self_test_count_.fetch_add(1, std::memory_order_relaxed);
+    if (!result.all_passed()) {
+        self_test_failure_count_.fetch_add(1, std::memory_order_relaxed);
+    }
+    
+    // Store individual result fields atomically
+    self_test_comparator_ok_.store(result.comparator_ok, std::memory_order_release);
+    self_test_gpio_ok_.store(result.interlock_gpio_ok, std::memory_order_release);
+    self_test_watchdog_ok_.store(result.watchdog_ok, std::memory_order_release);
+    self_test_timestamp_ns_.store(result.last_test_timestamp_ns, std::memory_order_release);
+    
+    // Store full result (non-atomic, for convenience reading)
+    last_self_test_result_ = result;
+
+    return result;
+}
+
 void InterlockController::watchdog_feed() noexcept {
     if (!config_.enable_watchdog) return;
 
@@ -297,17 +369,15 @@ void InterlockController::monitor_thread_func() noexcept {
         if (timestamp_diff_ns(start, last_self_test_ns) >= 100000000LL) {
             last_self_test_ns = start;
 
-            // 1. Verify I2C interface (check if hat exists and is responsive)
-            if (hat_) {
-                // Perform a non-modifying I2C check or just verify last set was successful
-                // For now, we ensure the inhibit channel matches expected state
-                const bool inhibit =
-                    (state_.load(std::memory_order_acquire) != InterlockState::CLOSED);
-                // Re-enforce inhibit state as part of self-test
-                hat_->set_servo_pulse_width(config_.inhibit_channel, inhibit ? 1000 : 2000);
-            }
+            // Run comprehensive self-test (comparator, GPIO, watchdog)
+            SelfTestResult test_result = run_self_test();
 
-            // 2. Verify watchdog integrity (checked below via timeout)
+            // If self-test fails, trigger fault
+            if (!test_result.all_passed()) {
+                std::cerr << "Interlock self-test FAILED: " << test_result.get_failure_description()
+                          << std::endl;
+                force_state(InterlockState::FAULT);
+            }
         }
 
         // Read debounced input

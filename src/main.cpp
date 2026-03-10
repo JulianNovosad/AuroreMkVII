@@ -513,6 +513,9 @@ int main(int argc, char* argv[]) {
 
         while (!g_shutdown_requested.load(std::memory_order_acquire) &&
                !safety_monitor.is_emergency_active()) {
+            // RAII watchdog kick - auto-kick at end of each loop iteration
+            aurore::WatchdogKick kick(safety_monitor);
+
             timing.wait();
 
             if (timing.missed_deadline()) {
@@ -543,7 +546,7 @@ int main(int argc, char* argv[]) {
                               << " ns" << std::endl;
                 }
             }
-        }
+        }  // kick_watchdog() called here automatically
 
         vision_running.store(false, std::memory_order_release);
     });
@@ -576,6 +579,9 @@ int main(int argc, char* argv[]) {
 
         while (!g_shutdown_requested.load(std::memory_order_acquire) &&
                !safety_monitor.is_emergency_active()) {
+            // RAII watchdog kick - auto-kick at end of each loop iteration
+            aurore::WatchdogKick kick(safety_monitor);
+
             timing.wait();
 
             // Process frame from buffer
@@ -714,6 +720,9 @@ int main(int argc, char* argv[]) {
 
         while (!g_shutdown_requested.load(std::memory_order_acquire) &&
                !safety_monitor.is_emergency_active()) {
+            // RAII watchdog kick - auto-kick at end of each loop iteration
+            aurore::WatchdogKick kick(safety_monitor);
+
             timing.wait();
             deadline.start();
 
@@ -730,7 +739,7 @@ int main(int argc, char* argv[]) {
                  state == aurore::FcsState::FREECAM);
 
             // Compute gimbal command based on source (AUTO=tracking centroid, FREECAM=operator)
-            aurore::GimbalCommand gimbal_cmd{0.f, 0.f};
+            aurore::GimbalCommand gimbal_cmd{0.f, 0.f, std::nullopt};
             if (latest_solution.valid && state == aurore::FcsState::TRACKING) {
                 // AUTO mode: convert track centroid to gimbal delta
                 gimbal_cmd = gimbal_ctrl.command_from_pixel(latest_solution.centroid_x,
@@ -899,6 +908,9 @@ int main(int argc, char* argv[]) {
         aurore::ThreadTiming timing(1000000, 0);  // 1kHz
 
         while (!g_shutdown_requested.load(std::memory_order_acquire)) {
+            // RAII watchdog kick - auto-kick at end of each monitoring cycle
+            aurore::WatchdogKick kick(safety_monitor);
+
             timing.wait();
 
             // Feed interlock watchdog every cycle
@@ -915,7 +927,7 @@ int main(int argc, char* argv[]) {
                     interlock.set_inhibit(true);
                 }
             }
-        }
+        }  // kick_watchdog() called here automatically
     });
 
     // Main loop - monitor system status

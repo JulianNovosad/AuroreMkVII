@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
   <div id="app">
@@ -20,6 +20,19 @@
 
       <!-- Scanline overlay (video layer only) -->
       <div class="video-overlay-noise"></div>
+
+      <!-- ====================================================
+           BALLISTIC PIPPER — Offset crosshair for lead
+           Placed outside hud-overlay for proper z-index
+      ===================================================== -->
+      <svg id="hud-pipper-lead" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+        <g stroke="#ffffff" stroke-width="1.5" fill="none" style="filter: drop-shadow(0 0 3px #fff);">
+          <line x1="20" y1="0" x2="20" y2="16"/>
+          <line x1="20" y1="24" x2="20" y2="40"/>
+          <line x1="0" y1="20" x2="16" y2="20"/>
+          <line x1="24" y1="20" x2="40" y2="20"/>
+        </g>
+      </svg>
 
       <!-- ====================================================
            HUD OVERLAY — Full-screen grid
@@ -177,19 +190,6 @@
       </svg>
 
       <!-- ====================================================
-           BALLISTIC PIPPER — Offset crosshair for lead
-           Smaller (40x40), 1px stroke, no center dot
-      ===================================================== -->
-      <svg id="hud-pipper-lead" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-        <g stroke="#ffffff" stroke-width="1" fill="none">
-          <line x1="20" y1="0" x2="20" y2="16"/>
-          <line x1="20" y1="24" x2="20" y2="40"/>
-          <line x1="0" y1="20" x2="16" y2="20"/>
-          <line x1="24" y1="20" x2="40" y2="20"/>
-        </g>
-      </svg>
-
-      <!-- ====================================================
            TARGET CORNER BRACKETS — 4 separate L-shaped corners
            1.5px stroke, 20px arms, pure L-shape
       ===================================================== -->
@@ -232,6 +232,6 @@
 
   </div>
 
-  <script src="main.js?v=3"></script>
+  <script src="main.js?v=12"></script>
 </body>
 </html>

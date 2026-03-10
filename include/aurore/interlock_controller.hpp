@@ -126,6 +126,45 @@ struct InterlockStatus {
 };
 
 /**
+ * @brief Self-test result per AM7-L2-SAFE-007
+ */
+struct SelfTestResult {
+    /// Comparator test passed
+    bool comparator_ok{false};
+
+    /// Interlock GPIO test passed
+    bool interlock_gpio_ok{false};
+
+    /// Watchdog timer test passed
+    bool watchdog_ok{false};
+
+    /// Reserved padding for alignment
+    bool reserved{false};
+
+    /// Timestamp of last self-test (nanoseconds since boot)
+    uint64_t last_test_timestamp_ns{0};
+
+    /// Overall pass/fail
+    bool all_passed() const {
+        return comparator_ok && interlock_gpio_ok && watchdog_ok;
+    }
+
+    /// Get failure description
+    std::string get_failure_description() const {
+        std::string desc;
+        if (!comparator_ok) desc += "COMPARATOR_FAIL ";
+        if (!interlock_gpio_ok) desc += "GPIO_FAIL ";
+        if (!watchdog_ok) desc += "WATCHDOG_FAIL ";
+        return desc.empty() ? "ALL_PASSED" : desc;
+    }
+};
+
+// SelfTestResult must be trivially copyable for atomic operations
+static_assert(std::is_trivially_copyable_v<SelfTestResult>, "SelfTestResult must be trivially copyable");
+// SelfTestResult must be 16 bytes for lock-free atomic on x86_64
+static_assert(sizeof(SelfTestResult) == 16, "SelfTestResult must be 16 bytes for lock-free atomic");
+
+/**
  * @brief Hybrid GPIO/I2C safety interlock controller
  *
  * Monitors hardware interlock circuit (GPIO) and controls Fusion HAT+ inhibit (I2C).
@@ -227,6 +266,42 @@ class InterlockController {
      */
     int get_output_raw() const noexcept { return output_value_.load(std::memory_order_acquire); }
 
+    /**
+     * @brief Run self-test per AM7-L2-SAFE-007
+     *
+     * Self-test executes at power-on and every 100ms during operation.
+     * Verifies: comparator function, interlock GPIO, watchdog timer.
+     *
+     * @return SelfTestResult Result of self-test
+     */
+    SelfTestResult run_self_test() noexcept;
+
+    /**
+     * @brief Get last self-test result
+     */
+    SelfTestResult get_last_self_test_result() const noexcept {
+        SelfTestResult result;
+        result.comparator_ok = self_test_comparator_ok_.load(std::memory_order_acquire);
+        result.interlock_gpio_ok = self_test_gpio_ok_.load(std::memory_order_acquire);
+        result.watchdog_ok = self_test_watchdog_ok_.load(std::memory_order_acquire);
+        result.last_test_timestamp_ns = self_test_timestamp_ns_.load(std::memory_order_acquire);
+        return result;
+    }
+
+    /**
+     * @brief Get self-test count (number of tests executed)
+     */
+    uint64_t get_self_test_count() const noexcept {
+        return self_test_count_.load(std::memory_order_acquire);
+    }
+
+    /**
+     * @brief Get self-test failure count
+     */
+    uint64_t get_self_test_failure_count() const noexcept {
+        return self_test_failure_count_.load(std::memory_order_acquire);
+    }
+
    private:
     /**
      * @brief Monitoring thread function
@@ -284,6 +359,18 @@ class InterlockController {
     // Debounce state
     int last_stable_input_{0};
     uint64_t debounce_start_ns_{0};
+
+    // Self-test tracking (AM7-L2-SAFE-007)
+    // Use separate atomics instead of atomic<SelfTestResult> to avoid 16-byte atomic issues
+    std::atomic<bool> self_test_comparator_ok_{false};
+    std::atomic<bool> self_test_gpio_ok_{false};
+    std::atomic<bool> self_test_watchdog_ok_{false};
+    std::atomic<uint64_t> self_test_timestamp_ns_{0};
+    std::atomic<uint64_t> self_test_count_{0};
+    std::atomic<uint64_t> self_test_failure_count_{0};
+
+    // Last self-test result (protected by implicit atomicity of individual fields above)
+    SelfTestResult last_self_test_result_{};  // Non-atomic, read after test completes
 };
 
 }  // namespace aurore
