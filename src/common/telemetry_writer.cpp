@@ -69,7 +69,6 @@ bool TelemetryWriter::start(const TelemetryConfig& config) {
     entries_written_.store(0, std::memory_order_release);
     entries_dropped_.store(0, std::memory_order_release);
     entries_enqueued_.store(0, std::memory_order_release);
-    queue_depth_.store(0, std::memory_order_release);
     high_water_mark_.store(0, std::memory_order_release);
     backpressure_active_.store(false, std::memory_order_release);
 
@@ -85,9 +84,6 @@ void TelemetryWriter::stop() {
     if (!running_.exchange(false, std::memory_order_acq_rel)) {
         return;  // Already stopped
     }
-
-    // Wake up writer thread
-    queue_cv_.notify_all();
 
     // Wait for writer thread
     if (writer_thread_.joinable()) {
@@ -122,42 +118,35 @@ bool TelemetryWriter::enqueue_entry(const CsvLogEntry& entry) {
                                           entry_to_queue.hmac);
     }
 
-    std::unique_lock<std::mutex> lock(queue_mutex_);
+    // SPSC buffer used by multiple producers requires serialization
+    std::lock_guard<std::mutex> lock(producer_mutex_);
 
-    size_t current_depth = queue_depth_.load(std::memory_order_acquire);
+    size_t current_depth = ring_buffer_.size();
+    size_t max_capacity = std::min(config_.max_queue_size, static_cast<size_t>(1023));
 
     // SEC-010: Check if queue is full
-    if (current_depth >= config_.max_queue_size) {
+    if (current_depth >= max_capacity) { 
         // Apply backpressure policy
-        switch (config_.backpressure_policy) {
-            case BackpressurePolicy::kDropOldest:
-                // Drop oldest entry to make room
-                if (!entry_queue_.empty()) {
-                    entry_queue_.pop();
-                    entries_dropped_.fetch_add(1, std::memory_order_relaxed);
-                    current_depth = queue_depth_.fetch_sub(1, std::memory_order_acq_rel) - 1;
-                }
-                break;
-
-            case BackpressurePolicy::kDropNewest:
-                // Drop the new entry
-                entries_dropped_.fetch_add(1, std::memory_order_relaxed);
-                check_backpressure_state(current_depth);
-                return false;
-
-            case BackpressurePolicy::kBlock:
-                // Wait until space available (not recommended for real-time)
-                queue_cv_.wait(lock, [this] {
-                    return queue_depth_.load(std::memory_order_acquire) < config_.max_queue_size;
-                });
-                current_depth = queue_depth_.load(std::memory_order_acquire);
-                break;
+        if (config_.backpressure_policy == BackpressurePolicy::kDropOldest) {
+            CsvLogEntry dummy;
+            ring_buffer_.pop(dummy);
+            entries_dropped_.fetch_add(1, std::memory_order_relaxed);
+            current_depth = ring_buffer_.size();
+        } else {
+            // Drop newest or block (block not implemented for SPSC without extra sync)
+            entries_dropped_.fetch_add(1, std::memory_order_relaxed);
+            check_backpressure_state(current_depth);
+            return false;
         }
     }
 
     // Queue the entry
-    entry_queue_.push(entry_to_queue);
-    size_t new_depth = queue_depth_.fetch_add(1, std::memory_order_acq_rel) + 1;
+    if (!ring_buffer_.push(entry_to_queue)) {
+        entries_dropped_.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+
+    size_t new_depth = ring_buffer_.size();
     entries_enqueued_.fetch_add(1, std::memory_order_relaxed);
 
     // SEC-010: Update monitoring
@@ -246,14 +235,7 @@ void TelemetryWriter::log_frame(const DetectionData& detection, const TrackData&
     entry.set_event("frame_complete");
 
     // SEC-010: Queue entry with backpressure handling
-    bool queued = enqueue_entry(entry);
-    if (!queued) {
-        // Entry was dropped due to backpressure
-        return;
-    }
-
-    // Notify writer thread
-    queue_cv_.notify_one();
+    enqueue_entry(entry);
 
     // Update statistics
     uint64_t now_ns = get_timestamp_ns();
@@ -276,92 +258,63 @@ void TelemetryWriter::log_event(TelemetryEventId event_id, TelemetrySeverity sev
         truncated_message = message.substr(0, kMessage_max - 1);
     }
 
-    // For MVP, just print to console
-    // Full implementation would queue as CsvLogEntry
+    CsvLogEntry entry;
+    auto now = std::chrono::system_clock::now();
+    entry.produced_ts_epoch_ms = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
+    entry.call_ts_epoch_ms = entry.produced_ts_epoch_ms;
+    
+    entry.set_module("EventLog");
+    entry.set_event(truncated_message.c_str());
+    
+    // We could store event_id and severity in other fields or add them to CsvLogEntry
+    // For now, follow MKVI format which uses module/event fields.
 
-    const char* severity_str = "";
-    switch (severity) {
-        case TelemetrySeverity::kDebug:
-            severity_str = "DEBUG";
-            break;
-        case TelemetrySeverity::kInfo:
-            severity_str = "INFO";
-            break;
-        case TelemetrySeverity::kWarning:
-            severity_str = "WARNING";
-            break;
-        case TelemetrySeverity::kError:
-            severity_str = "ERROR";
-            break;
-        case TelemetrySeverity::kCritical:
-            severity_str = "CRITICAL";
-            break;
+    enqueue_entry(entry);
+
+    if (config_.enable_console) {
+        const char* severity_str = "";
+        switch (severity) {
+            case TelemetrySeverity::kDebug: severity_str = "DEBUG"; break;
+            case TelemetrySeverity::kInfo: severity_str = "INFO"; break;
+            case TelemetrySeverity::kWarning: severity_str = "WARNING"; break;
+            case TelemetrySeverity::kError: severity_str = "ERROR"; break;
+            case TelemetrySeverity::kCritical: severity_str = "CRITICAL"; break;
+        }
+        std::cout << "[" << severity_str << "] Event " << static_cast<int>(event_id) << ": "
+                  << truncated_message << std::endl;
     }
-
-    std::cout << "[" << severity_str << "] Event " << static_cast<int>(event_id) << ": "
-              << truncated_message << std::endl;
 }
 
 void TelemetryWriter::writer_loop() {
     while (running_.load(std::memory_order_acquire)) {
         CsvLogEntry entry;
-        bool has_entry = false;
-
-        // Wait for entry or timeout
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-
-            // Wait with timeout to allow checking running_ flag
-            if (queue_cv_.wait_for(lock, std::chrono::milliseconds(100), [this] {
-                    return !entry_queue_.empty() || !running_.load(std::memory_order_acquire);
-                })) {
-                if (!entry_queue_.empty()) {
-                    entry = entry_queue_.front();
-                    entry_queue_.pop();
-
-                    // SEC-010: Update atomic depth counter
-                    size_t new_depth = queue_depth_.fetch_sub(1, std::memory_order_acq_rel) - 1;
-                    check_backpressure_state(new_depth);
-
-                    has_entry = true;
-                }
+        if (ring_buffer_.pop(entry)) {
+            if (csv_file_.is_open()) {
+                write_csv_entry(entry);
+                entries_written_.fetch_add(1, std::memory_order_relaxed);
             }
+        } else {
+            // Buffer empty, wait a bit
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
+    }
 
-        // Write entry
-        if (has_entry && csv_file_.is_open()) {
+    // Drain remaining entries
+    CsvLogEntry entry;
+    while (ring_buffer_.pop(entry)) {
+        if (csv_file_.is_open()) {
             write_csv_entry(entry);
             entries_written_.fetch_add(1, std::memory_order_relaxed);
         }
     }
 
-    // Drain remaining entries
-    while (true) {
-        CsvLogEntry entry;
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-            if (entry_queue_.empty()) break;
-            entry = entry_queue_.front();
-            entry_queue_.pop();
-
-            // SEC-010: Update atomic depth counter
-            size_t new_depth = queue_depth_.fetch_sub(1, std::memory_order_acq_rel) - 1;
-            check_backpressure_state(new_depth);
-        }
-        write_csv_entry(entry);
-        entries_written_.fetch_add(1, std::memory_order_relaxed);
-    }
-
     // Reset backpressure state on shutdown
     backpressure_active_.store(false, std::memory_order_release);
-    queue_depth_.store(0, std::memory_order_release);
 }
 
 TelemetryQueueStats TelemetryWriter::get_queue_stats() const {
     TelemetryQueueStats stats;
-
-    std::lock_guard<std::mutex> lock(queue_mutex_);
-    stats.current_depth = queue_depth_.load(std::memory_order_acquire);
+    stats.current_depth = ring_buffer_.size();
     stats.high_water_mark = high_water_mark_.load(std::memory_order_acquire);
     stats.max_depth = config_.max_queue_size;
     stats.total_enqueued = entries_enqueued_.load(std::memory_order_acquire);

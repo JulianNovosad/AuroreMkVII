@@ -49,8 +49,18 @@ bool OrbDetector::is_ready() const { return !templates_.empty(); }
 std::optional<Detection> OrbDetector::detect(const cv::Mat& bgr_frame) const {
     if (templates_.empty()) return std::nullopt;
 
+    // AM7-L2-TIM-002: Use 640x480 center ROI to stay within 5ms WCET
+    // Input frame is 1536x864. ROI: (1536-640)/2 = 448, (864-480)/2 = 192
+    const int roi_x = 448;
+    const int roi_y = 192;
+    const int roi_w = 640;
+    const int roi_h = 480;
+    
+    cv::Rect roi(roi_x, roi_y, roi_w, roi_h);
+    cv::Mat cropped = bgr_frame(roi);
+
     cv::Mat gray;
-    cv::cvtColor(bgr_frame, gray, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(cropped, gray, cv::COLOR_BGR2GRAY);
 
     // PERF-002: Use cached CLAHE object instead of creating new one each frame
     clahe_->apply(gray, gray);
@@ -105,7 +115,8 @@ std::optional<Detection> OrbDetector::detect(const cv::Mat& bgr_frame) const {
             if (n > 0) {
                 cx /= static_cast<float>(n); cy /= static_cast<float>(n);
                 best.confidence = conf;
-                best.bbox = {static_cast<int>(cx - 25), static_cast<int>(cy - 25), 50, 50};
+                // Add ROI offsets back to detection coordinates
+                best.bbox = {static_cast<int>(cx + roi_x - 25), static_cast<int>(cy + roi_y - 25), 50, 50};
             }
         }
     }
