@@ -578,6 +578,17 @@ if(AURORE_ENABLE_TESTS)
     add_test(NAME GimbalControllerTest COMMAND gimbal_controller_test)
     set_tests_properties(GimbalControllerTest PROPERTIES TIMEOUT 30)
 
+    # Geometry tests
+    add_executable(geometry_test
+        tests/unit/geometry_test.cpp
+        src/actuation/gimbal_controller.cpp
+        src/common/security.cpp
+    )
+    target_include_directories(geometry_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(geometry_test PRIVATE Threads::Threads OpenSSL::Crypto)
+    add_test(NAME GeometryTest COMMAND geometry_test)
+    set_tests_properties(GeometryTest PROPERTIES TIMEOUT 30)
+
     # Fusion HAT+ I2C driver tests
     add_executable(fusion_hat_test
         tests/unit/fusion_hat_test.cpp

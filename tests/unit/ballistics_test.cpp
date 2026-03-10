@@ -212,6 +212,36 @@ void test_monte_carlo_p_hit_perfect_inputs() {
     std::cout << "PASS: monte carlo returns [0,1] result for " << p << "\n";
 }
 
+void test_isfinite_checks() {
+    BallisticSolver solver;
+    float nan_val = std::nanf("");
+    float inf_val = std::numeric_limits<float>::infinity();
+
+    // Test solve() with NaN
+    try {
+        solver.solve(nan_val, 0.f, 0.f, 900.f, 0.f);
+        assert(false && "Should have thrown runtime_error for NaN");
+    } catch (const std::runtime_error& e) {
+        std::cout << "PASS: Caught expected exception for NaN in solve(): " << e.what() << "\n";
+    }
+
+    // Test solve_kinetic() with Inf
+    try {
+        solver.solve_kinetic(100.f, inf_val, 900.f, 0.f);
+        assert(false && "Should have thrown runtime_error for Inf");
+    } catch (const std::runtime_error& e) {
+        std::cout << "PASS: Caught expected exception for Inf in solve_kinetic(): " << e.what() << "\n";
+    }
+
+    // Test solve_drop() with NaN
+    try {
+        solver.solve_drop(100.f, nan_val, 0.f);
+        assert(false && "Should have thrown runtime_error for NaN");
+    } catch (const std::runtime_error& e) {
+        std::cout << "PASS: Caught expected exception for NaN in solve_drop(): " << e.what() << "\n";
+    }
+}
+
 void test_mode_selection_kinetic_for_shallow_target() {
     BallisticSolver solver;
     [[maybe_unused]] EngagementMode mode = solver.select_mode(1.5f, 10.f, 1.0f);
@@ -359,6 +389,7 @@ int main() {
     test_drop_mode_requires_valid_arc();
     test_drop_mode_impossible_geometry();
     test_monte_carlo_p_hit_perfect_inputs();
+    test_isfinite_checks();
     test_mode_selection_kinetic_for_shallow_target();
     test_mode_selection_drop_for_top_down();
     test_rk4_vacuum_trajectory();
