@@ -566,6 +566,10 @@ void StateMachine::request_disarm() {
 // method checks has_operator_authorization() before transitioning to ARMED.
 void StateMachine::set_operator_authorization(bool authorized) {
     operator_authorized_ = authorized;
+    // AM7-L3-MODE-006: ARMED -> IDLE_SAFE if authorization is lost
+    if (!authorized && state_ == FcsState::ARMED) {
+        transition(FcsState::IDLE_SAFE);
+    }
 }
 
 bool StateMachine::has_valid_lock() const { return redetection_score_ >= kRedetectionScoreMin; }

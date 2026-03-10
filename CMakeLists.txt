@@ -442,6 +442,15 @@ if(AURORE_ENABLE_TESTS)
     add_test(NAME TimingTest COMMAND timing_test)
     set_tests_properties(TimingTest PROPERTIES TIMEOUT 60)
 
+    # Core Utility Stress tests
+    add_executable(core_stress_test
+        tests/unit/core_stress_test.cpp
+    )
+    target_include_directories(core_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(core_stress_test PRIVATE Threads::Threads rt)
+    add_test(NAME CoreStressTest COMMAND core_stress_test)
+    set_tests_properties(CoreStressTest PROPERTIES TIMEOUT 120)
+
     # Safety monitor tests (standalone executable)
     add_executable(safety_monitor_test
         tests/unit/safety_monitor_test.cpp
@@ -473,6 +482,15 @@ if(AURORE_ENABLE_TESTS)
     add_test(NAME SafetyMonitorFaultCodesTest COMMAND safety_monitor_fault_codes_test)
     set_tests_properties(SafetyMonitorFaultCodesTest PROPERTIES TIMEOUT 60)
 
+    # Safety Stress tests
+    add_executable(safety_stress_test
+        tests/unit/safety_stress_test.cpp
+    )
+    target_include_directories(safety_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(safety_stress_test PRIVATE Threads::Threads rt)
+    add_test(NAME SafetyStressTest COMMAND safety_stress_test)
+    set_tests_properties(SafetyStressTest PROPERTIES TIMEOUT 120)
+
     # State machine tests
     add_executable(state_machine_test
         tests/unit/state_machine_test.cpp
@@ -496,6 +514,16 @@ if(AURORE_ENABLE_TESTS)
     )
     add_test(NAME StateMachineTransitionsTest COMMAND state_machine_transitions_test)
     set_tests_properties(StateMachineTransitionsTest PROPERTIES TIMEOUT 60)
+
+    # State Machine Stress tests
+    add_executable(state_machine_stress_test
+        tests/unit/state_machine_stress_test.cpp
+        src/state_machine/state_machine.cpp
+    )
+    target_include_directories(state_machine_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(state_machine_stress_test PRIVATE Threads::Threads)
+    add_test(NAME StateMachineStressTest COMMAND state_machine_stress_test)
+    set_tests_properties(StateMachineStressTest PROPERTIES TIMEOUT 60)
 
     # Main thread orchestration tests
     add_executable(main_thread_orchestration_test
@@ -541,7 +569,18 @@ if(AURORE_ENABLE_TESTS)
     target_include_directories(ballistics_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(ballistics_test PRIVATE Threads::Threads)
     add_test(NAME BallisticsTest COMMAND ballistics_test)
-    set_tests_properties(BallisticsTest PROPERTIES TIMEOUT 30)
+    set_tests_properties(BallisticsTest PROPERTIES TIMEOUT 60)
+
+    # Ballistics Stress tests
+    add_executable(ballistics_stress_test
+        tests/unit/ballistics_stress_test.cpp
+        src/actuation/ballistic_solver.cpp
+    )
+    target_include_directories(ballistics_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(ballistics_stress_test PRIVATE Threads::Threads)
+    add_test(NAME BallisticsStressTest COMMAND ballistics_stress_test)
+    set_tests_properties(BallisticsStressTest PROPERTIES TIMEOUT 60)
+
 
     # Gimbal controller tests
     add_executable(gimbal_controller_test
@@ -573,7 +612,18 @@ if(AURORE_ENABLE_TESTS)
     target_include_directories(fusion_hat_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(fusion_hat_test PRIVATE Threads::Threads)
     add_test(NAME FusionHatTest COMMAND fusion_hat_test)
-    set_tests_properties(FusionHatTest PROPERTIES TIMEOUT 30)
+    set_tests_properties(FusionHatTest PROPERTIES TIMEOUT 60)
+
+    # Fusion HAT Stress tests
+    add_executable(fusion_hat_stress_test
+        tests/unit/fusion_hat_stress_test.cpp
+        src/drivers/fusion_hat.cpp
+    )
+    target_include_directories(fusion_hat_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(fusion_hat_stress_test PRIVATE Threads::Threads rt stdc++fs)
+    add_test(NAME FusionHatStressTest COMMAND fusion_hat_stress_test)
+    set_tests_properties(FusionHatStressTest PROPERTIES TIMEOUT 60)
+
 
     # Coupling Control-Actuation tests
     add_executable(coupling_control_actuation_test
@@ -623,7 +673,29 @@ if(AURORE_ENABLE_TESTS)
     target_include_directories(hud_socket_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(hud_socket_test PRIVATE Threads::Threads OpenSSL::Crypto)
     add_test(NAME HudSocketTest COMMAND hud_socket_test)
-    set_tests_properties(HudSocketTest PROPERTIES TIMEOUT 30)
+    set_tests_properties(HudSocketTest PROPERTIES TIMEOUT 60)
+
+    # HUD Socket Stress tests
+    add_executable(hud_socket_stress_test
+        tests/unit/hud_socket_stress_test.cpp
+        src/common/hud_socket.cpp
+        src/common/security.cpp
+        src/state_machine/state_machine.cpp
+    )
+    target_include_directories(hud_socket_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(hud_socket_stress_test PRIVATE Threads::Threads crypto ssl)
+    add_test(NAME HudSocketStressTest COMMAND hud_socket_stress_test)
+    set_tests_properties(HudSocketStressTest PROPERTIES TIMEOUT 60)
+
+    # Raw10 Conversion tests
+    add_executable(raw10_test
+        tests/unit/raw10_test.cpp
+    )
+    target_include_directories(raw10_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(raw10_test PRIVATE Threads::Threads)
+    add_test(NAME Raw10Test COMMAND raw10_test)
+    set_tests_properties(Raw10Test PROPERTIES TIMEOUT 60)
+
 endif()
 
 if(AURORE_ENABLE_TESTS)

@@ -245,7 +245,7 @@ FusionHat::~FusionHat() {
 bool FusionHat::is_connected() const noexcept {
     // Check device tree for Fusion HAT+ UUID
     // Product ID 0x0774 is encoded in the UUID
-    DIR* dir = opendir(DEVICE_TREE_PATH);
+    DIR* dir = opendir(proc_base_.c_str());
     if (!dir) {
         return false;
     }
@@ -256,7 +256,7 @@ bool FusionHat::is_connected() const noexcept {
     while ((entry = readdir(dir)) != nullptr) {
         std::string name = entry->d_name;
         if (name.find("hat") != std::string::npos) {
-            std::string uuid_path = std::string(DEVICE_TREE_PATH) + "/" + name + "/uuid";
+            std::string uuid_path = std::string(proc_base_.c_str()) + "/" + name + "/uuid";
             std::string uuid = read_sysfs_string(uuid_path);
             
             // UUID format: 9daeea78-0000-0774-000a-582369ac3e02
@@ -273,7 +273,7 @@ bool FusionHat::is_connected() const noexcept {
     // Also check sysfs path exists
     if (found) {
         struct stat st;
-        if (stat(SYSFS_BASE, &st) != 0) {
+        if (stat(sysfs_base_.c_str(), &st) != 0) {
             found = false;
         }
     }
@@ -336,11 +336,11 @@ bool FusionHat::init() {
 }
 
 std::string FusionHat::get_firmware_version() const {
-    return read_sysfs_string(std::string(SYSFS_BASE) + "/firmware_version");
+    return read_sysfs_string(std::string(sysfs_base_) + "/firmware_version");
 }
 
 std::string FusionHat::get_driver_version() const {
-    return read_sysfs_string(std::string(SYSFS_BASE) + "/version");
+    return read_sysfs_string(std::string(sysfs_base_) + "/version");
 }
 
 // ============================================================================
@@ -350,6 +350,23 @@ std::string FusionHat::get_driver_version() const {
 void FusionHat::push_command(const ServoCommand& cmd) {
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
+        // AM7-L3-ACT-005: SET_ENABLED(Disable) overrides/clears pending commands for that channel
+        if (cmd.type == ServoCommand::Type::SET_ENABLED && cmd.value == 0) {
+            // Filter queue to remove pending SET_PULSE_WIDTH for this channel
+            std::queue<ServoCommand> new_queue;
+            while (!command_queue_.empty()) {
+                auto pending = command_queue_.front();
+                command_queue_.pop();
+                if (!(pending.channel == cmd.channel && 
+                      pending.type == ServoCommand::Type::SET_PULSE_WIDTH)) {
+                    new_queue.push(pending);
+                }
+            }
+            command_queue_ = std::move(new_queue);
+            // Put Disable at the front for immediate processing
+            // Wait, std::queue is not a deque, so we'll just push it.
+            // But we already cleared the channel's pending work.
+        }
         command_queue_.push(cmd);
     }
     queue_cv_.notify_one();
@@ -638,7 +655,7 @@ float FusionHat::pulse_width_to_angle(int pulse_width_us) const noexcept {
 }
 
 std::string FusionHat::get_pwm_path(int channel) const {
-    return std::string(SYSFS_BASE) + "/pwm" + std::to_string(channel);
+    return std::string(sysfs_base_) + "/pwm" + std::to_string(channel);
 }
 
 }  // namespace aurore

@@ -43,6 +43,7 @@
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <string>
 #include <thread>
 #include <variant>
 
@@ -360,6 +361,22 @@ class FusionHat {
         i2c_nack_count_.store(0, std::memory_order_release);
     }
 
+    /**
+     * @brief Set sysfs base path (test only)
+     *
+     * @param path Custom sysfs base path
+     */
+    void set_sysfs_base_for_test(const std::string& path) {
+        sysfs_base_ = path;
+    }
+
+    /**
+     * @brief Set proc base path (test only)
+     */
+    void set_proc_base_for_test(const std::string& path) {
+        proc_base_ = path;
+    }
+
    private:
     /**
      * @brief Internal command structure for asynchronous processing
@@ -446,6 +463,8 @@ class FusionHat {
      */
     std::string get_pwm_path(int channel) const;
 
+    std::string sysfs_base_{SYSFS_BASE};
+    std::string proc_base_{DEVICE_TREE_PATH};
     FusionHatConfig config_;
     std::atomic<bool> initialized_{false};
     std::atomic<uint64_t> error_count_{0};
