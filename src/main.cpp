@@ -103,7 +103,7 @@ bool configure_rt_thread(const char* name, int priority, int cpu_affinity) {
 // Lock memory to prevent page faults
 bool lock_memory() {
     if (mlockall(MCL_CURRENT | MCL_FUTURE) != 0) {
-        std::cerr << "Warning: Failed to lock memory: " << strerror(errno) << std::endl;
+        std::cerr << "FATAL: Failed to lock memory: " << strerror(errno) << std::endl;
         return false;
     }
     std::cout << "Memory locked successfully" << std::endl;
@@ -260,7 +260,10 @@ int main(int argc, char* argv[]) {
     set_resource_limits();
 
     // Lock memory
-    lock_memory();
+    if (!lock_memory()) {
+        std::cerr << "FATAL: Failed to lock memory (mlockall). System cannot guarantee real-time performance." << std::endl;
+        return 1;
+    }
 
     // Load configuration
     aurore::ConfigLoader config("config/config.json");
@@ -313,8 +316,8 @@ int main(int argc, char* argv[]) {
     // This reduces attack surface by running as non-root
     if (!dry_run) {
         if (!drop_privileges(true)) {
-            std::cerr << "Warning: Failed to drop privileges, continuing as root" << std::endl;
-            // Continue anyway - this is a warning, not a fatal error
+            std::cerr << "FATAL: Failed to drop privileges (drop_privileges). Exiting for safety." << std::endl;
+            return 1;
         }
     }
 
