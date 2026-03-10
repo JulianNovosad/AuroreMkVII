@@ -123,6 +123,24 @@ static bool test_watchdog_feed_increments_counter() {
 }
 
 // ---------------------------------------------------------------------------
+// test_init_on_laptop
+// ---------------------------------------------------------------------------
+static bool test_init_on_laptop() {
+    InterlockConfig cfg;
+    InterlockController ic(nullptr, cfg);
+
+    // Should succeed on laptop because of dummy buffer
+    bool inited = ic.init();
+    CHECK(inited, "init() should succeed on laptop builds");
+
+    // Verify we can force state and it doesn't crash (exercises write_pin)
+    ic.force_state(InterlockState::CLOSED);
+    CHECK(ic.get_state() == InterlockState::CLOSED, "state should be CLOSED");
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 int main() {
@@ -132,6 +150,7 @@ int main() {
         { "test_actuation_allowed_only_when_closed", test_actuation_allowed_only_when_closed },
         { "test_get_status_reflects_state",      test_get_status_reflects_state      },
         { "test_watchdog_feed_increments_counter", test_watchdog_feed_increments_counter },
+        { "test_init_on_laptop",                 test_init_on_laptop                 },
     };
 
     for (auto& t : tests) {

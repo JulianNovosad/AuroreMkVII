@@ -13,6 +13,7 @@
 #include <stdexcept>
 
 #include <opencv2/opencv.hpp>
+#include <thread>
 
 // ---------------------------------------------------------------------------
 // Minimal test harness (no external framework)
@@ -167,6 +168,9 @@ static void test_sequence_numbers_increment() {
 
     bool ok1 = cam.try_capture_frame(f1);
     CHECK(ok1);
+
+    // Give the mock thread time to generate at least one more frame
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     bool ok2 = cam.try_capture_frame(f2);
     CHECK(ok2);

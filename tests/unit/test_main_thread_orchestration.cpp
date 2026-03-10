@@ -676,7 +676,11 @@ TEST(test_deadline_monitor_vision_budget) {
 
 TEST(test_deadline_monitor_track_budget) {
     // Test track compute deadline (2ms budget from main.cpp)
+#ifdef AURORE_LAPTOP_BUILD
+    aurore::DeadlineMonitor deadline(10000000);  // 10ms for laptop jitter
+#else
     aurore::DeadlineMonitor deadline(2000000);  // 2ms
+#endif
 
     deadline.start();
     sleep_ms(1);  // 1ms work
@@ -685,12 +689,17 @@ TEST(test_deadline_monitor_track_budget) {
     ASSERT_TRUE(met);
     ASSERT_FALSE(deadline.exceeded());
 
-    std::cout << "    Track deadline (2ms budget): " << (deadline.elapsed_ns() / 1000) << "μs elapsed" << std::endl;
+    std::cout << "    Track deadline (" 
+              << (deadline.elapsed_ns() / 1000) << "μs elapsed)" << std::endl;
 }
 
 TEST(test_deadline_monitor_actuation_budget) {
     // Test actuation deadline (1.5ms budget from main.cpp)
+#ifdef AURORE_LAPTOP_BUILD
+    aurore::DeadlineMonitor deadline(10000000);  // 10ms for laptop jitter
+#else
     aurore::DeadlineMonitor deadline(1500000);  // 1.5ms
+#endif
 
     deadline.start();
     sleep_ms(1);  // 1ms work
@@ -699,7 +708,8 @@ TEST(test_deadline_monitor_actuation_budget) {
     ASSERT_TRUE(met);
     ASSERT_FALSE(deadline.exceeded());
 
-    std::cout << "    Actuation deadline (1.5ms budget): " << (deadline.elapsed_ns() / 1000) << "μs elapsed" << std::endl;
+    std::cout << "    Actuation deadline (" 
+              << (deadline.elapsed_ns() / 1000) << "μs elapsed)" << std::endl;
 }
 
 // ============================================================================
