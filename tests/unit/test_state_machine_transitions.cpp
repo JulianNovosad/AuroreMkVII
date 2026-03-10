@@ -20,7 +20,6 @@
  * - AM7-L3-MODE-011: Fault transition from any state
  */
 
-#include "aurore/state_machine.hpp"
 #include <atomic>
 #include <cassert>
 #include <chrono>
@@ -28,6 +27,8 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+
+#include "aurore/state_machine.hpp"
 
 namespace {
 
@@ -37,28 +38,38 @@ std::atomic<size_t> g_tests_passed(0);
 std::atomic<size_t> g_tests_failed(0);
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::cout << "  PASS: " << #name << std::endl; \
-    } \
-    catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                          \
+    do {                                                                        \
+        g_tests_run.fetch_add(1);                                               \
+        try {                                                                   \
+            name();                                                             \
+            g_tests_passed.fetch_add(1);                                        \
+            std::cout << "  PASS: " << #name << std::endl;                      \
+        } catch (const std::exception& e) {                                     \
+            g_tests_failed.fetch_add(1);                                        \
+            std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
+        }                                                                       \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_NE(a, b) do { if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " == " #b); } while(0)
-#define ASSERT_FLOAT_EQ(a, b) do { \
-    float av = (a), bv = (b); \
-    if (std::fabs(av - bv) > 0.0001f) \
-        throw std::runtime_error("Assertion failed: " #a " not near " #b); \
-} while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_NE(a, b)                                                              \
+    do {                                                                             \
+        if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " == " #b); \
+    } while (0)
+#define ASSERT_FLOAT_EQ(a, b)                                                  \
+    do {                                                                       \
+        float av = (a), bv = (b);                                              \
+        if (std::fabs(av - bv) > 0.0001f)                                      \
+            throw std::runtime_error("Assertion failed: " #a " not near " #b); \
+    } while (0)
 
 }  // anonymous namespace
 
@@ -236,13 +247,20 @@ TEST(test_freecam_no_auto_lock) {
 
 TEST(test_search_transitions_to_tracking) {
     // AM7-L2-MODE-004: SEARCH -> TRACKING on valid detection
+    // AM7-L2-TGT-003: Requires 3 consecutive stable frames (delta <= 2 pixels)
 
     aurore::StateMachine sm;
     sm.force_state_for_test(aurore::FcsState::SEARCH);
 
     aurore::Detection d;
-    d.confidence = 0.8f;  // >= kConfidenceMin (0.7)
+    d.confidence = 0.96f;  // >= kConfidenceMin (0.95)
     d.bbox = {100, 100, 50, 50};
+    sm.on_detection(d);
+
+    d.bbox = {101, 100, 50, 50};  // delta = 1 pixel
+    sm.on_detection(d);
+
+    d.bbox = {100, 101, 50, 50};  // delta = 1 pixel
     sm.on_detection(d);
 
     ASSERT_EQ(sm.state(), aurore::FcsState::TRACKING);
@@ -304,7 +322,7 @@ TEST(test_search_gimbal_settling) {
 
     // Gimbal not settled (high error)
     aurore::GimbalStatusSm g;
-    g.az_error_deg = 10.0f;  // > kGimbalErrorMaxDeg (2.0)
+    g.az_error_deg = 10.0f;    // > kGimbalErrorMaxDeg (2.0)
     g.velocity_deg_s = 20.0f;  // > kGimbalVelocityMaxDs (5.0)
     g.settled_frames = 0;
     sm.on_gimbal_status(g);
@@ -338,7 +356,7 @@ TEST(test_tracking_transitions_to_armed_with_conditions) {
     sm.set_operator_authorization(true);
 
     // Set up valid lock conditions
-    sm.on_redetection_score(0.90f);  // >= kRedetectionScoreMin (0.85)
+    sm.on_redetection_score(0.96f);  // >= kRedetectionScoreMin (0.95)
 
     aurore::FireControlSolution sol;
     sol.p_hit = 0.96f;  // >= kPHitMin (0.95)
@@ -412,7 +430,7 @@ TEST(test_armed_only_from_tracking) {
     // TRACKING should succeed (tested separately)
     sm.force_state_for_test(aurore::FcsState::TRACKING);
     sm.set_operator_authorization(true);
-    sm.on_redetection_score(0.90f);
+    sm.on_redetection_score(0.96f);
     aurore::FireControlSolution sol4;
     sol4.p_hit = 0.96f;
     sm.on_ballistics_solution(sol4);
@@ -429,7 +447,7 @@ TEST(test_armed_requires_operator_authorization) {
     sm.set_operator_authorization(false);
 
     // Set up otherwise valid conditions
-    sm.on_redetection_score(0.90f);
+    sm.on_redetection_score(0.96f);
     aurore::FireControlSolution sol;
     sol.p_hit = 0.96f;
     sm.on_ballistics_solution(sol);
@@ -520,23 +538,15 @@ TEST(test_fault_from_all_states) {
     // AM7-L3-MODE-011: Any fault transitions immediately to FAULT from any state
 
     std::vector<aurore::FcsState> all_states = {
-        aurore::FcsState::BOOT,
-        aurore::FcsState::IDLE_SAFE,
-        aurore::FcsState::FREECAM,
-        aurore::FcsState::SEARCH,
-        aurore::FcsState::TRACKING,
-        aurore::FcsState::ARMED,
+        aurore::FcsState::BOOT,   aurore::FcsState::IDLE_SAFE, aurore::FcsState::FREECAM,
+        aurore::FcsState::SEARCH, aurore::FcsState::TRACKING,  aurore::FcsState::ARMED,
     };
 
     std::vector<aurore::FaultCode> all_faults = {
-        aurore::FaultCode::CAMERA_TIMEOUT,
-        aurore::FaultCode::GIMBAL_TIMEOUT,
-        aurore::FaultCode::RANGE_DATA_STALE,
-        aurore::FaultCode::RANGE_DATA_INVALID,
-        aurore::FaultCode::AUTH_FAILURE,
-        aurore::FaultCode::SEQUENCE_GAP,
-        aurore::FaultCode::TEMPERATURE_CRITICAL,
-        aurore::FaultCode::WATCHDOG_TIMEOUT,
+        aurore::FaultCode::CAMERA_TIMEOUT,       aurore::FaultCode::GIMBAL_TIMEOUT,
+        aurore::FaultCode::RANGE_DATA_STALE,     aurore::FaultCode::RANGE_DATA_INVALID,
+        aurore::FaultCode::AUTH_FAILURE,         aurore::FaultCode::SEQUENCE_GAP,
+        aurore::FaultCode::TEMPERATURE_CRITICAL, aurore::FaultCode::WATCHDOG_TIMEOUT,
     };
 
     // Test all state/fault combinations
@@ -551,9 +561,9 @@ TEST(test_fault_from_all_states) {
         }
     }
 
-    std::cout << "    Tested " << all_states.size() << " states x " 
-              << all_faults.size() << " faults = " 
-              << all_states.size() * all_faults.size() << " combinations" << std::endl;
+    std::cout << "    Tested " << all_states.size() << " states x " << all_faults.size()
+              << " faults = " << all_states.size() * all_faults.size() << " combinations"
+              << std::endl;
 }
 
 TEST(test_fault_state_latching) {
@@ -664,13 +674,11 @@ TEST(test_state_change_callback) {
 
     std::atomic<int> callback_count(0);
 
-    sm.set_state_change_callback(
-        [&](aurore::FcsState from, aurore::FcsState to) {
-            callback_count.fetch_add(1);
-            (void)from;  // Unused in this test
-            (void)to;    // Unused in this test
-        }
-    );
+    sm.set_state_change_callback([&](aurore::FcsState from, aurore::FcsState to) {
+        callback_count.fetch_add(1);
+        (void)from;  // Unused in this test
+        (void)to;    // Unused in this test
+    });
 
     // force_state_for_test doesn't trigger callback (by design)
     // To test callback, we would need to use transition() which is private
@@ -689,11 +697,11 @@ TEST(test_has_valid_lock) {
     aurore::StateMachine sm;
 
     // Below threshold
-    sm.on_redetection_score(0.70f);  // < kRedetectionScoreMin (0.85)
+    sm.on_redetection_score(0.70f);  // < kRedetectionScoreMin (0.95)
     ASSERT_FALSE(sm.has_valid_lock());
 
     // At threshold
-    sm.on_redetection_score(0.85f);
+    sm.on_redetection_score(0.95f);
     ASSERT_TRUE(sm.has_valid_lock());
 
     // Above threshold
@@ -786,11 +794,8 @@ TEST(test_rapid_state_transitions) {
 
     aurore::StateMachine sm;
     std::vector<aurore::FcsState> states = {
-        aurore::FcsState::IDLE_SAFE,
-        aurore::FcsState::FREECAM,
-        aurore::FcsState::SEARCH,
-        aurore::FcsState::TRACKING,
-        aurore::FcsState::ARMED,
+        aurore::FcsState::IDLE_SAFE, aurore::FcsState::FREECAM, aurore::FcsState::SEARCH,
+        aurore::FcsState::TRACKING,  aurore::FcsState::ARMED,
     };
 
     for (const auto& state : states) {

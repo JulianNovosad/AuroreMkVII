@@ -1,9 +1,10 @@
-#include "aurore/apriltag_detector.hpp"
 #include <cassert>
 #include <cstdio>
 #include <iostream>
 #include <opencv2/aruco.hpp>
 #include <opencv2/opencv.hpp>
+
+#include "aurore/apriltag_detector.hpp"
 
 using namespace aurore;
 
@@ -29,7 +30,8 @@ void test_detect_aruco_marker_tag36h11() {
 
     // Generate ArUco marker image (grayscale)
     cv::Mat marker_image;
-    cv::Ptr<cv::aruco::Dictionary> dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+    cv::Ptr<cv::aruco::Dictionary> dictionary =
+        cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
     cv::aruco::drawMarker(dictionary, 0, 200, marker_image, 1);
 
     // Create a white background frame and embed the marker
@@ -49,17 +51,18 @@ void test_detect_aruco_marker_tag36h11() {
         std::cerr << "FAIL: Invalid bbox: " << result->bbox.w << "x" << result->bbox.h << "\n";
         return;
     }
-    std::cout << "PASS: detected ArUco marker with confidence=" << result->confidence
-              << " bbox=(" << result->bbox.x << "," << result->bbox.y
-              << "," << result->bbox.w << "," << result->bbox.h << ")\n";
+    std::cout << "PASS: detected ArUco marker with confidence=" << result->confidence << " bbox=("
+              << result->bbox.x << "," << result->bbox.y << "," << result->bbox.w << ","
+              << result->bbox.h << ")\n";
 }
 
 void test_detect_multiple_markers() {
     AprilTagDetector det;
     det.set_dictionary(cv::aruco::DICT_6X6_250);
 
-    cv::Ptr<cv::aruco::Dictionary> dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
-    cv::Mat frame = cv::Mat::ones(864, 1536, CV_8UC1) * 255;  // White background
+    cv::Ptr<cv::aruco::Dictionary> dictionary =
+        cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+    cv::Mat frame = cv::Mat::ones(864, 1536, CV_8UC3) * 255;  // White background (BGR)
 
     // Place marker ID 0 at top-left
     cv::Mat marker0;
@@ -92,8 +95,9 @@ void test_filter_by_known_tag_ids() {
     det.set_dictionary(cv::aruco::DICT_6X6_250);
     det.set_known_tag_ids({0, 2});  // Only detect tags 0 and 2
 
-    cv::Ptr<cv::aruco::Dictionary> dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
-    cv::Mat frame = cv::Mat::ones(864, 1536, CV_8UC1) * 255;  // White background
+    cv::Ptr<cv::aruco::Dictionary> dictionary =
+        cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+    cv::Mat frame = cv::Mat::ones(864, 1536, CV_8UC3) * 255;  // White background (BGR)
 
     // Place marker ID 0 (should be detected)
     cv::Mat marker0;
@@ -116,8 +120,9 @@ void test_detect_small_marker_below_threshold() {
     AprilTagDetector det;
     det.set_dictionary(cv::aruco::DICT_6X6_250);
 
-    cv::Ptr<cv::aruco::Dictionary> dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
-    cv::Mat frame = cv::Mat::ones(864, 1536, CV_8UC1) * 255;  // White background
+    cv::Ptr<cv::aruco::Dictionary> dictionary =
+        cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+    cv::Mat frame = cv::Mat::ones(864, 1536, CV_8UC3) * 255;  // White background (BGR)
 
     // Place very small marker (below minMarkerPerimeter threshold)
     cv::Mat marker_small;
@@ -128,7 +133,8 @@ void test_detect_small_marker_below_threshold() {
     auto result = det.detect(frame);
     // Small markers may or may not be detected depending on minMarkerPerimeter
     // This test verifies the detector handles small markers gracefully
-    std::cout << "PASS: handled small marker (detected=" << (result.has_value() ? "yes" : "no") << ")\n";
+    std::cout << "PASS: handled small marker (detected=" << (result.has_value() ? "yes" : "no")
+              << ")\n";
 }
 
 void test_detect_different_dictionaries() {
@@ -136,11 +142,12 @@ void test_detect_different_dictionaries() {
     AprilTagDetector det;
     det.set_dictionary(cv::aruco::DICT_ARUCO_ORIGINAL);
 
-    cv::Ptr<cv::aruco::Dictionary> dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_ARUCO_ORIGINAL);
+    cv::Ptr<cv::aruco::Dictionary> dictionary =
+        cv::aruco::getPredefinedDictionary(cv::aruco::DICT_ARUCO_ORIGINAL);
     cv::Mat marker_image;
     cv::aruco::drawMarker(dictionary, 0, 200, marker_image, 1);
 
-    cv::Mat frame = cv::Mat::ones(864, 1536, CV_8UC1) * 255;  // White background
+    cv::Mat frame = cv::Mat::ones(864, 1536, CV_8UC3) * 255;  // White background (BGR)
     cv::cvtColor(marker_image, marker_image, cv::COLOR_GRAY2BGR);
     marker_image.copyTo(frame(cv::Rect(400, 300, 200, 200)));
 
