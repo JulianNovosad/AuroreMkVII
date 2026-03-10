@@ -599,35 +599,32 @@ if(AURORE_ENABLE_TESTS)
     add_test(NAME FusionHatTest COMMAND fusion_hat_test)
     set_tests_properties(FusionHatTest PROPERTIES TIMEOUT 30)
 
-    # TODO: Actuation command latency test (AM7-L2-ACT-003)
-    # Disabled due to -Werror warnings - needs cleanup for production
-    # add_executable(actuation_command_latency_test
-    #     tests/unit/test_actuation_command_latency.cpp
-    # )
-    # target_include_directories(actuation_command_latency_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    # target_link_libraries(actuation_command_latency_test PRIVATE Threads::Threads rt)
-    # add_test(NAME ActuationCommandLatencyTest COMMAND actuation_command_latency_test)
-    # set_tests_properties(ActuationCommandLatencyTest PROPERTIES TIMEOUT 60)
+    # Actuation command latency test (AM7-L2-ACT-003)
+    add_executable(actuation_command_latency_test
+        tests/unit/test_actuation_command_latency.cpp
+    )
+    target_include_directories(actuation_command_latency_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(actuation_command_latency_test PRIVATE Threads::Threads rt)
+    add_test(NAME ActuationCommandLatencyTest COMMAND actuation_command_latency_test)
+    set_tests_properties(ActuationCommandLatencyTest PROPERTIES TIMEOUT 60)
 
-    # TODO: Gimbal command rate test (AM7-L2-ACT-001)
-    # Disabled due to -Werror warnings - needs cleanup for production
-    # add_executable(gimbal_command_rate_test
-    #     tests/unit/test_gimbal_command_rate.cpp
-    # )
-    # target_include_directories(gimbal_command_rate_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    # target_link_libraries(gimbal_command_rate_test PRIVATE Threads::Threads rt)
-    # add_test(NAME GimbalCommandRateTest COMMAND gimbal_command_rate_test)
-    # set_tests_properties(GimbalCommandRateTest PROPERTIES TIMEOUT 120)
+    # Gimbal command rate test (AM7-L2-ACT-001)
+    add_executable(gimbal_command_rate_test
+        tests/unit/test_gimbal_command_rate.cpp
+    )
+    target_include_directories(gimbal_command_rate_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(gimbal_command_rate_test PRIVATE Threads::Threads rt)
+    add_test(NAME GimbalCommandRateTest COMMAND gimbal_command_rate_test)
+    set_tests_properties(GimbalCommandRateTest PROPERTIES TIMEOUT 120)
 
-    # TODO: Detection rate test framework (AM7-L2-VIS-004)
-    # Disabled due to -Werror warnings - needs cleanup for production
-    # add_executable(detection_rate_test
-    #     tests/unit/test_detection_rate.cpp
-    # )
-    # target_include_directories(detection_rate_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    # target_link_libraries(detection_rate_test PRIVATE Threads::Threads rt)
-    # add_test(NAME DetectionRateTest COMMAND detection_rate_test)
-    # set_tests_properties(DetectionRateTest PROPERTIES TIMEOUT 60)
+    # Detection rate test framework (AM7-L2-VIS-004)
+    add_executable(detection_rate_test
+        tests/unit/test_detection_rate.cpp
+    )
+    target_include_directories(detection_rate_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(detection_rate_test PRIVATE Threads::Threads rt)
+    add_test(NAME DetectionRateTest COMMAND detection_rate_test)
+    set_tests_properties(DetectionRateTest PROPERTIES TIMEOUT 60)
 
     # HUD UNIX domain socket tests
     add_executable(hud_socket_test

@@ -39,13 +39,14 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <stdexcept>
+
+namespace {
 
 // Test configuration
-namespace {
-    constexpr double kMinPd = 0.95;        // AM7-L2-VIS-004: Pd ≥ 95%
-    constexpr double kMaxFAR = 1e-4;       // AM7-L2-VIS-004: FAR ≤ 10⁻⁴ per frame
-    constexpr int kMinTestFrames = 1000;   // Minimum frames for statistical significance
-}
+constexpr double kMinPd = 0.95;        // AM7-L2-VIS-004: Pd ≥ 95%
+constexpr double kMaxFAR = 1e-4;       // AM7-L2-VIS-004: FAR ≤ 10⁻⁴ per frame
+constexpr int kMinTestFrames = 10000;  // Increased for statistical stability
 
 // Detection result
 struct DetectionResult {
@@ -109,7 +110,7 @@ double compute_iou(const DetectionResult& det, const GroundTruth& gt) {
     const float gt_area = gt.true_width * gt.true_height;
     const float union_area = det_area + gt_area - inter_area;
 
-    return (union_area > 0.0f) ? (inter_area / union_area) : 0.0;
+    return (union_area > 0.0f) ? static_cast<double>(inter_area / union_area) : 0.0;
 }
 
 // Evaluate detection results against ground truth
@@ -134,7 +135,7 @@ DetectionEvaluation evaluate_detections(
         if (has_detection && has_target) {
             // Check IoU for true positive
             const double iou = compute_iou(detections[i], ground_truth[i]);
-            if (iou >= iou_threshold) {
+            if (iou >= static_cast<double>(iou_threshold)) {
                 eval.true_positives++;
             } else {
                 eval.false_positives++;
@@ -153,11 +154,11 @@ DetectionEvaluation evaluate_detections(
     const int tp_fp = eval.true_positives + eval.false_positives;
 
     eval.probability_of_detection = (tp_fn > 0) ?
-        static_cast<double>(eval.true_positives) / tp_fn : 0.0;
+        static_cast<double>(eval.true_positives) / static_cast<double>(tp_fn) : 0.0;
     eval.false_alarm_rate = (num_frames > 0) ?
-        static_cast<double>(eval.false_positives) / num_frames : 0.0;
+        static_cast<double>(eval.false_positives) / static_cast<double>(num_frames) : 0.0;
     eval.precision = (tp_fp > 0) ?
-        static_cast<double>(eval.true_positives) / tp_fp : 0.0;
+        static_cast<double>(eval.true_positives) / static_cast<double>(tp_fp) : 0.0;
     eval.recall = eval.probability_of_detection;  // Recall = Pd
 
     return eval;
@@ -174,14 +175,14 @@ public:
 
         if (gt.has_target) {
             // Simulate detection with target present
-            if (static_cast<double>(rand()) / RAND_MAX < target_pd_) {
+            if (static_cast<double>(rand()) / static_cast<double>(RAND_MAX) < target_pd_) {
                 // True positive - add some noise to position
                 DetectionResult result{};
-                result.confidence = 0.7f + static_cast<float>(rand()) / RAND_MAX * 0.3f;
-                result.centroid_x = gt.true_centroid_x + (static_cast<float>(rand()) / RAND_MAX - 0.5f) * 10.0f;
-                result.centroid_y = gt.true_centroid_y + (static_cast<float>(rand()) / RAND_MAX - 0.5f) * 10.0f;
-                result.width = gt.true_width * (0.9f + static_cast<float>(rand()) / RAND_MAX * 0.2f);
-                result.height = gt.true_height * (0.9f + static_cast<float>(rand()) / RAND_MAX * 0.2f);
+                result.confidence = 0.7f + static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 0.3f;
+                result.centroid_x = gt.true_centroid_x + (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) - 0.5f) * 10.0f;
+                result.centroid_y = gt.true_centroid_y + (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) - 0.5f) * 10.0f;
+                result.width = gt.true_width * (0.9f + static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 0.2f);
+                result.height = gt.true_height * (0.9f + static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 0.2f);
                 result.timestamp_ns = aurore::get_timestamp();
                 return result;
             }
@@ -189,13 +190,13 @@ public:
             return std::nullopt;
         } else {
             // Simulate false alarm
-            if (static_cast<double>(rand()) / RAND_MAX < target_far_) {
+            if (static_cast<double>(rand()) / static_cast<double>(RAND_MAX) < target_far_) {
                 DetectionResult result{};
-                result.confidence = 0.5f + static_cast<float>(rand()) / RAND_MAX * 0.5f;
-                result.centroid_x = static_cast<float>(rand()) % 1536;
-                result.centroid_y = static_cast<float>(rand()) % 864;
-                result.width = 50.0f + static_cast<float>(rand()) % 100;
-                result.height = 50.0f + static_cast<float>(rand()) % 100;
+                result.confidence = 0.5f + static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 0.5f;
+                result.centroid_x = static_cast<float>(rand() % 1536);
+                result.centroid_y = static_cast<float>(rand() % 864);
+                result.width = 50.0f + static_cast<float>(rand() % 100);
+                result.height = 50.0f + static_cast<float>(rand() % 100);
                 result.timestamp_ns = aurore::get_timestamp();
                 return result;
             }
@@ -215,11 +216,11 @@ private:
 // Generate test dataset with specified target signature
 std::vector<GroundTruth> generate_test_dataset(int num_frames, double target_frequency = 0.3) {
     std::vector<GroundTruth> dataset;
-    dataset.reserve(num_frames);
+    dataset.reserve(static_cast<size_t>(num_frames));
 
     for (int i = 0; i < num_frames; ++i) {
         GroundTruth gt{};
-        gt.has_target = (static_cast<double>(rand()) / RAND_MAX < target_frequency);
+        gt.has_target = (static_cast<double>(rand()) / static_cast<double>(RAND_MAX) < target_frequency);
 
         if (gt.has_target) {
             // Random target position within image bounds (1536x864)
@@ -249,10 +250,10 @@ void test_detection_rate_framework() {
     auto ground_truth = generate_test_dataset(num_frames, 0.3);  // 30% frames have targets
 
     // Test with detector that meets requirements
-    SimulatedDetector detector(0.96, 5e-5);  // Pd=96%, FAR=5e-5 (meets requirements)
+    SimulatedDetector detector(0.97, 5e-5);  // Pd=97%, FAR=5e-5 (meets requirements)
 
     std::vector<DetectionResult> detections;
-    detections.reserve(num_frames);
+    detections.reserve(static_cast<size_t>(num_frames));
 
     for (const auto& gt : ground_truth) {
         auto result = detector.detect(gt);
@@ -260,7 +261,7 @@ void test_detection_rate_framework() {
             detections.push_back(result.value());
         } else {
             // No detection - add placeholder
-            detections.push_back(DetectionResult{0.0f, 0, 0, 0, 0, 0});
+            detections.push_back(DetectionResult{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0});
         }
     }
 
@@ -273,10 +274,10 @@ void test_detection_rate_framework() {
     std::cout << "  False Negatives: " << eval.false_negatives << std::endl;
     std::cout << "  True Negatives:  " << eval.true_negatives << std::endl;
     std::cout << std::endl;
-    std::cout << "  Probability of Detection (Pd): " << (eval.probability_of_detection * 100) << " %" << std::endl;
+    std::cout << "  Probability of Detection (Pd): " << (eval.probability_of_detection * 100.0) << " %" << std::endl;
     std::cout << "  False Alarm Rate (FAR):        " << eval.false_alarm_rate << " per frame" << std::endl;
-    std::cout << "  Precision:                     " << (eval.precision * 100) << " %" << std::endl;
-    std::cout << "  Recall:                        " << (eval.recall * 100) << " %" << std::endl;
+    std::cout << "  Precision:                     " << (eval.precision * 100.0) << " %" << std::endl;
+    std::cout << "  Recall:                        " << (eval.recall * 100.0) << " %" << std::endl;
     std::cout << std::endl;
 
     // Verify requirements
@@ -285,12 +286,12 @@ void test_detection_rate_framework() {
 
     std::cout << "Verification:" << std::endl;
     std::cout << "  AM7-L2-VIS-004 Pd ≥ 95%:     " << (pd_pass ? "PASS" : "FAIL")
-              << " (measured: " << (eval.probability_of_detection * 100) << "%)" << std::endl;
+              << " (measured: " << (eval.probability_of_detection * 100.0) << "%)" << std::endl;
     std::cout << "  AM7-L2-VIS-004 FAR ≤ 10⁻⁴:   " << (far_pass ? "PASS" : "FAIL")
               << " (measured: " << eval.false_alarm_rate << ")" << std::endl;
 
-    assert(pd_pass && "AM7-L2-VIS-004: Probability of detection below 95%");
-    assert(far_pass && "AM7-L2-VIS-004: False alarm rate exceeds 10⁻⁴");
+    if (!pd_pass) throw std::runtime_error("AM7-L2-VIS-004: Probability of detection below 95%");
+    if (!far_pass) throw std::runtime_error("AM7-L2-VIS-004: False alarm rate exceeds 10^-4");
 
     std::cout << "  PASS" << std::endl;
 }
@@ -303,21 +304,21 @@ void test_iou_computation() {
     GroundTruth gt1{true, 100.0f, 100.0f, 50.0f, 50.0f, "target"};
     double iou1 = compute_iou(det1, gt1);
     std::cout << "  Perfect overlap IoU: " << iou1 << " (expected: 1.0)" << std::endl;
-    assert(std::abs(iou1 - 1.0) < 1e-6 && "Perfect overlap should have IoU=1.0");
+    if (std::abs(iou1 - 1.0) >= 1e-6) throw std::runtime_error("Perfect overlap should have IoU=1.0");
 
     // Test case 2: No overlap
     DetectionResult det2{1.0f, 100.0f, 100.0f, 50.0f, 50.0f, 0};
     GroundTruth gt2{true, 300.0f, 300.0f, 50.0f, 50.0f, "target"};
     double iou2 = compute_iou(det2, gt2);
     std::cout << "  No overlap IoU: " << iou2 << " (expected: 0.0)" << std::endl;
-    assert(std::abs(iou2 - 0.0) < 1e-6 && "No overlap should have IoU=0.0");
+    if (std::abs(iou2 - 0.0) >= 1e-6) throw std::runtime_error("No overlap should have IoU=0.0");
 
-    // Test case 3: Partial overlap (50%)
+    // Test case 3: Partial overlap (1/3 overlap)
     DetectionResult det3{1.0f, 125.0f, 100.0f, 50.0f, 50.0f, 0};
     GroundTruth gt3{true, 150.0f, 100.0f, 50.0f, 50.0f, "target"};
     double iou3 = compute_iou(det3, gt3);
-    std::cout << "  Partial overlap IoU: " << iou3 << " (expected: ~0.43)" << std::endl;
-    assert(iou3 > 0.4 && iou3 < 0.5 && "Partial overlap should have IoU around 0.43");
+    std::cout << "  Partial overlap IoU: " << iou3 << " (expected: 0.333333)" << std::endl;
+    if (std::abs(iou3 - (1.0/3.0)) >= 1e-6) throw std::runtime_error("Partial overlap should have IoU=1/3");
 
     std::cout << "  PASS" << std::endl;
 }
@@ -329,15 +330,15 @@ void test_detection_evaluation_metrics() {
     std::vector<DetectionResult> detections = {
         {0.9f, 100.0f, 100.0f, 50.0f, 50.0f, 0},  // TP
         {0.8f, 200.0f, 200.0f, 50.0f, 50.0f, 0},  // FP (no target)
-        {0.0f, 0, 0, 0, 0, 0},                      // FN (no detection)
-        {0.0f, 0, 0, 0, 0, 0},                      // TN (no detection, no target)
+        {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0},          // FN (no detection)
+        {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0},          // TN (no detection, no target)
     };
 
     std::vector<GroundTruth> ground_truth = {
         {true, 100.0f, 100.0f, 50.0f, 50.0f, "target"},   // Frame 0: target present
-        {false, 0, 0, 0, 0, ""},                           // Frame 1: no target
+        {false, 0.0f, 0.0f, 0.0f, 0.0f, ""},               // Frame 1: no target
         {true, 300.0f, 300.0f, 50.0f, 50.0f, "target"},   // Frame 2: target present (missed)
-        {false, 0, 0, 0, 0, ""},                           // Frame 3: no target
+        {false, 0.0f, 0.0f, 0.0f, 0.0f, ""},               // Frame 3: no target
     };
 
     auto eval = evaluate_detections(detections, ground_truth, 0.5f, 0.5f);
@@ -349,15 +350,15 @@ void test_detection_evaluation_metrics() {
 
     // Pd = TP / (TP + FN) = 1 / (1 + 1) = 0.5
     std::cout << "  Pd: " << eval.probability_of_detection << " (expected: 0.5)" << std::endl;
-    assert(std::abs(eval.probability_of_detection - 0.5) < 1e-6 && "Pd should be 0.5");
+    if (std::abs(eval.probability_of_detection - 0.5) >= 1e-6) throw std::runtime_error("Pd should be 0.5");
 
     // FAR = FP / total_frames = 1 / 4 = 0.25
     std::cout << "  FAR: " << eval.false_alarm_rate << " (expected: 0.25)" << std::endl;
-    assert(std::abs(eval.false_alarm_rate - 0.25) < 1e-6 && "FAR should be 0.25");
+    if (std::abs(eval.false_alarm_rate - 0.25) >= 1e-6) throw std::runtime_error("FAR should be 0.25");
 
     // Precision = TP / (TP + FP) = 1 / (1 + 1) = 0.5
     std::cout << "  Precision: " << eval.precision << " (expected: 0.5)" << std::endl;
-    assert(std::abs(eval.precision - 0.5) < 1e-6 && "Precision should be 0.5");
+    if (std::abs(eval.precision - 0.5) >= 1e-6) throw std::runtime_error("Precision should be 0.5");
 
     std::cout << "  PASS" << std::endl;
 }
@@ -376,14 +377,14 @@ void test_confidence_threshold_sweep() {
     SimulatedDetector detector(0.90, 1e-3);
 
     std::vector<DetectionResult> detections;
-    detections.reserve(num_frames);
+    detections.reserve(static_cast<size_t>(num_frames));
 
     for (const auto& gt : ground_truth) {
         auto result = detector.detect(gt);
         if (result.has_value()) {
             detections.push_back(result.value());
         } else {
-            detections.push_back(DetectionResult{0.0f, 0, 0, 0, 0, 0});
+            detections.push_back(DetectionResult{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0});
         }
     }
 
@@ -393,9 +394,9 @@ void test_confidence_threshold_sweep() {
     for (double threshold = 0.3; threshold <= 0.9; threshold += 0.1) {
         auto eval = evaluate_detections(detections, ground_truth, static_cast<float>(threshold), 0.5f);
         std::cout << "    " << threshold << "     | "
-                  << (eval.probability_of_detection * 100) << " %  | "
+                  << (eval.probability_of_detection * 100.0) << " %  | "
                   << eval.false_alarm_rate << "   | "
-                  << (eval.precision * 100) << " %" << std::endl;
+                  << (eval.precision * 100.0) << " %" << std::endl;
     }
 
     std::cout << std::endl;
@@ -404,7 +405,7 @@ void test_confidence_threshold_sweep() {
 
 }  // anonymous namespace
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
+int main() {
     std::cout << "========================================" << std::endl;
     std::cout << "Target Detection Rate Test Framework" << std::endl;
     std::cout << "AM7-L2-VIS-004 Verification" << std::endl;
