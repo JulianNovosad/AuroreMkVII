@@ -40,11 +40,15 @@ bool FusionHat::init() {
     // Mock initialization
     std::cout << "MockFusionHat: Initializing (no I2C hardware)" << std::endl;
 
-    // Initialize all channels to center position
+    // Initialize all channels to center position and use config for limits
     for (size_t ch = 0; ch < 12; ch++) {
         channels_[ch].current_angle.store(0.0f, std::memory_order_release);
         channels_[ch].enabled.store(false, std::memory_order_release);
         channels_[ch].current_pulse_width.store(1500, std::memory_order_release);
+        
+        // Initialize per-channel endstops from global config
+        channels_[ch].min_angle = config_.min_angle_deg;
+        channels_[ch].max_angle = config_.max_angle_deg;
     }
 
     initialized_.store(true, std::memory_order_release);
@@ -72,8 +76,8 @@ bool FusionHat::set_servo_angle(int channel, float angle_deg) {
 
     // Apply software endstops if enabled
     if (config_.enable_endstops) {
-        float min_angle = -90.0f;  // Default limits for mock
-        float max_angle = 90.0f;
+        float min_angle = channels_[ch_idx].min_angle;
+        float max_angle = channels_[ch_idx].max_angle;
 
         if (angle_deg < min_angle) angle_deg = min_angle;
         if (angle_deg > max_angle) angle_deg = max_angle;
@@ -226,10 +230,10 @@ int FusionHat::get_pwm_period(int channel) const {
 }
 
 void FusionHat::set_endstop_limits(int channel, float min_angle_deg, float max_angle_deg) {
-    // Mock: limits stored in config, not per-channel
-    (void)channel;
-    (void)min_angle_deg;
-    (void)max_angle_deg;
+    if (channel >= 0 && channel < 12 && min_angle_deg < max_angle_deg) {
+        channels_[static_cast<size_t>(channel)].min_angle = min_angle_deg;
+        channels_[static_cast<size_t>(channel)].max_angle = max_angle_deg;
+    }
 }
 
 void FusionHat::set_rate_limit(bool enable, float max_velocity_dps) {

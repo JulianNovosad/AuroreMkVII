@@ -31,6 +31,15 @@ static constexpr uint32_t GPLEV0 = 0x34;   // GPIO Pin Level
 
 // GpioState implementation
 bool InterlockController::GpioState::init() {
+#ifdef AURORE_LAPTOP_BUILD
+    gpio_map_size = 4096;
+    gpio_map = static_cast<volatile uint32_t*>(calloc(1, gpio_map_size));
+    if (!gpio_map) {
+        std::cerr << "Failed to allocate dummy GPIO memory" << std::endl;
+        return false;
+    }
+    return true;
+#else
     // Open /dev/gpiomem (preferred - no root required)
     mem_fd = open("/dev/gpiomem", O_RDWR | O_SYNC);
     if (mem_fd < 0) {
@@ -59,9 +68,16 @@ bool InterlockController::GpioState::init() {
     }
 
     return true;
+#endif
 }
 
 void InterlockController::GpioState::cleanup() {
+#ifdef AURORE_LAPTOP_BUILD
+    if (gpio_map) {
+        free(const_cast<uint32_t*>(gpio_map));
+        gpio_map = nullptr;
+    }
+#else
     if (gpio_map && gpio_map != MAP_FAILED) {
         munmap(const_cast<uint32_t*>(gpio_map), gpio_map_size);
         gpio_map = nullptr;
@@ -70,6 +86,7 @@ void InterlockController::GpioState::cleanup() {
         close(mem_fd);
         mem_fd = -1;
     }
+#endif
 }
 
 void InterlockController::GpioState::set_pin_mode(int pin, int mode) {

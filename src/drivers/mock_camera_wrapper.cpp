@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <cstring>
 #include <iostream>
 #include <mutex>
@@ -17,6 +18,7 @@
 #include <thread>
 #include <vector>
 
+#include "aurore/camera_auth.hpp"
 #include "aurore/camera_wrapper.hpp"
 
 namespace aurore {
@@ -41,6 +43,7 @@ struct MockCameraImpl {
     // Frame buffer (circular buffer for latest frame)
     cv::Mat latest_frame;
     std::mutex frame_mutex;
+    std::condition_variable frame_cv;
 
     bool configure(const CameraConfig& config) {
         width = config.width;
@@ -53,6 +56,12 @@ struct MockCameraImpl {
             cv::Point2f(static_cast<float>(width) / 2.0f, static_cast<float>(height) / 2.0f);
         target_velocity = cv::Point2f(3.0f, 2.0f);  // pixels per frame
         target_size = 40.0f;
+
+        // Generate initial frame so it's ready immediately
+        {
+            std::lock_guard<std::mutex> lock(frame_mutex);
+            generate_frame(latest_frame, frame_counter.fetch_add(1, std::memory_order_relaxed));
+        }
 
         std::cout << "MockCamera: configured " << width << "x" << height << " @ " << fps
                   << " FPS (test pattern mode)" << std::endl;
@@ -140,6 +149,7 @@ struct MockCameraImpl {
                 std::lock_guard<std::mutex> lock(frame_mutex);
                 latest_frame = frame.clone();
             }
+            frame_cv.notify_all();
 
             // Timing control
             auto end = std::chrono::steady_clock::now();
@@ -256,6 +266,9 @@ bool CameraWrapper::capture_frame(ZeroCopyFrame& frame, int /*timeout_ms*/) {
     // Mark for cleanup (hack: use error field to signal data needs deletion)
     frame.error[0] = 1;
     std::snprintf(frame.error + 1, sizeof(frame.error) - 1, "%s", "Mock frame - free() on cleanup");
+
+    // Compute frame authentication (SHA256 + HMAC) - ICD-001 / AM7-L2-SEC-001
+    authenticate_frame(frame);
 
     return frame.validate(config_.width, config_.height);
 }
