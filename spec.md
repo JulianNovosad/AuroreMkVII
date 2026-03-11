@@ -63,6 +63,7 @@ All terms shall be interpreted according to the following quantitative definitio
 | **Control Cycle** | 1ms nominal control loop iteration for safety monitoring |
 | **Brownout** | Supply voltage drops below minimum operating threshold (4.75V for 5V rail) |
 | **Tamper-Evident** | Physical seal that shows visible evidence of unauthorized access |
+| **Software Watchdog** | Software-implemented watchdog timer (no hardware watchdog chip); requires periodic kick every 50ms ±10ms to prevent system reset |
 | **libcamera** | Open-source camera support library for Linux; provides low-level RAW10 frame acquisition from MIPI CSI-2 sensors |
 | **OpenCV** | Open Source Computer Vision library; provides image processing algorithms (convolution, thresholding, tracking) |
 | **VideoCore VII** | Raspberry Pi 5 GPU; provides hardware acceleration for image processing (color space conversion, scaling, convolution) |
@@ -230,7 +231,7 @@ All L2 requirements trace to exactly one L1 parent. All L3 requirements trace to
 
 **AM7-L2-SAFE-006**: System shall achieve PFH < 10⁻⁷/hour for safety functions (design goal).
 
-**AM7-L2-SAFE-007**: Safety function self-test shall execute at power-on and every 100ms during operation. Self-test shall verify: comparator function, interlock GPIO, watchdog timer.
+**AM7-L2-SAFE-007**: Safety function self-test shall execute at power-on and every 100ms during operation. Self-test shall verify: comparator function, interlock GPIO, software watchdog (software-only, no hardware watchdog chip).
 
 ### 6.5 Ballistic Engine
 
@@ -296,7 +297,7 @@ All L2 requirements trace to exactly one L1 parent. All L3 requirements trace to
 
 **AM7-L3-SAFE-004**: Safety comparator shall detect channel mismatch within 100μs. Mismatch shall trigger inhibit. Verification: mismatch injection test with oscilloscope.
 
-**AM7-L3-SAFE-005**: Watchdog timer shall require periodic kick every 50ms ±10ms. Missed kick shall trigger system reset and inhibit. Note: Watchdog timeout (60ms max) exceeds frame-period inhibit budget (8.33ms); fast faults (camera timeout, range data) are detected by software within 8.33ms. Watchdog is for catastrophic CPU hangs only. Verification: watchdog timeout test.
+**AM7-L3-SAFE-005**: Software watchdog (software-only, no hardware watchdog chip) shall require periodic kick every 50ms ±10ms. Missed kick shall trigger system reset and inhibit. Note: Watchdog timeout (60ms max) exceeds frame-period inhibit budget (8.33ms); fast faults (camera timeout, range data) are detected by software within 8.33ms. Watchdog is for catastrophic CPU hangs only. Verification: watchdog timeout test.
 
 **AM7-L3-SAFE-006**: Fault register shall be latched and non-clearable except via power cycle. Verification: fault latch test.
 
@@ -842,7 +843,7 @@ private:
 
 **AM7-L3-SAFE-013**: Interlock output shall be via I2C servo command per ICD-003. Single fault shall result in inhibit. Verification: single fault injection test.
 
-**AM7-L3-SAFE-014**: Safety system shall implement periodic self-test every 100ms testing: comparator function, I2C interlock drive, watchdog timer. Verification: self-test coverage analysis.
+**AM7-L3-SAFE-014**: Safety system shall implement periodic self-test every 100ms testing: comparator function, I2C interlock drive, software watchdog (software-only, no hardware watchdog chip). Verification: self-test coverage analysis.
 
 ### 9.4 Fault Detection and Response
 
