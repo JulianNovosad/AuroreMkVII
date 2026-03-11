@@ -16,8 +16,10 @@ constexpr float kGimbalAzMaxDefault = 90.0f;
 constexpr float kGimbalElMinDefault = -10.0f;
 constexpr float kGimbalElMaxDefault = 45.0f;
 
-// Rate limit default (degrees per second)
+// Rate limit default (degrees per second) - per AM7-L2-ACT-002
 constexpr float kGimbalRateLimitDefault = 60.0f;
+// Acceleration limit default (degrees per second squared) - per AM7-L2-ACT-002
+static constexpr float kGimbalAccelLimitDefault = 120.0f;
 
 // Sequence gap threshold per AM7-L3-SEC-004
 constexpr uint32_t kGimbalSequenceGapThreshold = 1000;
@@ -69,6 +71,15 @@ public:
     // Reset sequence gap flag
     void reset_sequence_gap() { sequence_gap_detected_.store(false, std::memory_order_release); }
 
+    // Reset rate limiter state (call on mode transitions or after homing)
+    void reset_rate_limiter() {
+        prev_az_cmd_.store(az_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        prev_el_cmd_.store(el_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        prev_az_vel_.store(0.0f, std::memory_order_relaxed);
+        prev_el_vel_.store(0.0f, std::memory_order_relaxed);
+        prev_cmd_ns_.store(0, std::memory_order_relaxed);
+    }
+
 private:
     CameraIntrinsics cam_;
     std::atomic<GimbalSource> source_{GimbalSource::AUTO};
@@ -83,6 +94,19 @@ private:
     // Sequence number tracking for gap detection (AM7-L3-SEC-004)
     std::optional<uint32_t> last_sequence_num_;
     std::atomic<bool> sequence_gap_detected_{false};
-};
+
+    // Rate / acceleration limiter state (AM7-L2-ACT-002)
+    // prev_az_cmd_ / prev_el_cmd_ hold the last rate-limited output angle
+    // prev_az_vel_ / prev_el_vel_ hold the last velocity (°/s) for accel clamping
+    // prev_cmd_ns_ holds the timestamp of the last command (0 = not yet set)
+    std::atomic<float>    prev_az_cmd_{0.0f};
+    std::atomic<float>    prev_el_cmd_{0.0f};
+    std::atomic<float>    prev_az_vel_{0.0f};
+    std::atomic<float>    prev_el_vel_{0.0f};
+    std::atomic<uint64_t> prev_cmd_ns_{0};
+
+    // Apply velocity + acceleration clamping to a desired (az, el) pair.
+    // Updates all limiter state and returns the clamped (az, el).
+    std::pair<float, float> apply_rate_limit(float az_desired, float el_desired);};
 
 }  // namespace aurore
