@@ -24,8 +24,7 @@ namespace aurore {
 HudSocket::HudSocket(const HudSocketConfig& config)
     : socket_path_(config.socket_path),
       config_(config),
-      tokens_(config.rate_limit_msgs_per_sec)  // Start with full bucket
-      ,
+      tokens_(config.rate_limit_msgs_per_sec),  // Start with full bucket
       last_refill_ns_(get_timestamp()) {}  // Initialize refill timestamp
 
 HudSocket::~HudSocket() { stop(); }
@@ -221,32 +220,33 @@ size_t HudSocket::get_client_count() const {
 }
 
 // PERF-008: Token bucket rate limiter implementation
-// Refills tokens at configured rate, consumes one token per message
+// Refills tokens at configured rate, consumes one token per message.
+// Mutex guards the read-modify-write across tokens_ and last_refill_ns_
+// to prevent the TOCTOU race where two concurrent callers both read
+// last_refill_ns_ before either updates it, causing a double refill.
 bool HudSocket::try_acquire_token() {
     const uint64_t now_ns = get_timestamp();
-    const uint64_t last_ns = last_refill_ns_.load(std::memory_order_acquire);
+    std::lock_guard<std::mutex> lock(rate_limit_mutex_);
 
     // Calculate elapsed time and refill tokens
     const double max_tokens = config_.rate_limit_msgs_per_sec;
     const double refill_rate = max_tokens;  // tokens per second
 
     // Time elapsed since last refill (in seconds)
-    const double elapsed_sec = static_cast<double>(now_ns - last_ns) / 1e9;
+    const double elapsed_sec = static_cast<double>(now_ns - last_refill_ns_) / 1e9;
 
     // Refill tokens based on elapsed time
-    double tokens = tokens_.load(std::memory_order_acquire);
-    tokens = std::min(max_tokens, tokens + elapsed_sec * refill_rate);
+    tokens_ = std::min(max_tokens, tokens_ + elapsed_sec * refill_rate);
 
     // Try to consume a token
-    if (tokens >= 1.0) {
-        tokens -= 1.0;
-        tokens_.store(tokens, std::memory_order_release);
-        last_refill_ns_.store(now_ns, std::memory_order_release);
+    if (tokens_ >= 1.0) {
+        tokens_ -= 1.0;
+        last_refill_ns_ = now_ns;
         return true;  // Token acquired, message allowed
     }
 
     // Update refill timestamp even when rate limited (prevents token starvation)
-    last_refill_ns_.store(now_ns, std::memory_order_release);
+    last_refill_ns_ = now_ns;
     return false;  // No token available, rate limited
 }
 

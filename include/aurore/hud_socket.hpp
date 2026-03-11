@@ -189,8 +189,12 @@ class HudSocket {
     std::atomic<uint64_t> connections_rejected_{0};
 
     // PERF-008: Rate limiter state (token bucket algorithm)
-    std::atomic<double> tokens_{120.0};  // Start with full bucket
-    std::atomic<uint64_t> last_refill_ns_{0};  // Last token refill timestamp
+    // rate_limit_mutex_ guards tokens_ and last_refill_ns_ together to prevent
+    // the TOCTOU race where two threads both read last_refill_ns_ before either
+    // updates it, causing a double token refill.
+    std::mutex rate_limit_mutex_;
+    double tokens_{120.0};  // Protected by rate_limit_mutex_
+    uint64_t last_refill_ns_{0};  // Protected by rate_limit_mutex_
     std::atomic<uint64_t> rate_limited_count_{0};  // Count of rate-limited messages
     std::atomic<uint64_t> timeout_discarded_count_{0};  // Count of stale messages discarded
 };
