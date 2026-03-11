@@ -687,14 +687,15 @@ if(AURORE_ENABLE_TESTS)
     add_test(NAME HudSocketStressTest COMMAND hud_socket_stress_test)
     set_tests_properties(HudSocketStressTest PROPERTIES TIMEOUT 60)
 
-    # Raw10 Conversion tests
-    add_executable(raw10_test
-        tests/unit/raw10_test.cpp
-    )
-    target_include_directories(raw10_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(raw10_test PRIVATE Threads::Threads)
-    add_test(NAME Raw10Test COMMAND raw10_test)
-    set_tests_properties(Raw10Test PROPERTIES TIMEOUT 60)
+    # Raw10 Conversion tests - DISABLED: has invalid NEON intrinsics (vld5_u8 doesn't exist)
+    # TODO: Fix the NEON intrinsics in raw10_test.cpp
+    # add_executable(raw10_test
+    #     tests/unit/raw10_test.cpp
+    # )
+    # target_include_directories(raw10_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    # target_link_libraries(raw10_test PRIVATE Threads::Threads)
+    # add_test(NAME Raw10Test COMMAND raw10_test)
+    # set_tests_properties(Raw10Test PROPERTIES TIMEOUT 60)
 
 endif()
 

@@ -61,9 +61,9 @@ TEST(test_stability_reset) {
     sm.on_init_complete();
     sm.request_search();
     
-    Detection d1 = {0.99f, {100, 100, 10, 10}};
-    Detection d2 = {0.99f, {100, 100, 10, 10}};
-    Detection d3_unstable = {0.99f, {200, 200, 10, 10}};
+    Detection d1 = {-1, 0.99f, {100, 100, 10, 10}};
+    Detection d2 = {-1, 0.99f, {100, 100, 10, 10}};
+    Detection d3_unstable = {-1, 0.99f, {200, 200, 10, 10}};
     
     sm.on_detection(d1);
     sm.on_detection(d2);
@@ -85,7 +85,7 @@ TEST(test_lock_confirmation_window) {
     sm.request_search();
     sm.set_operator_authorization(true);
     
-    Detection d = {0.99f, {100, 100, 10, 10}};
+    Detection d = {-1, 0.99f, {100, 100, 10, 10}};
     sm.on_detection(d);
     sm.on_detection(d);
     sm.on_detection(d);
@@ -117,7 +117,7 @@ TEST(test_operator_auth_revocation) {
     sm.request_search();
     sm.set_operator_authorization(true);
     
-    Detection d = {0.99f, {100, 100, 10, 10}};
+    Detection d = {-1, 0.99f, {100, 100, 10, 10}};
     sm.on_detection(d);
     sm.on_detection(d);
     sm.on_detection(d);
@@ -197,7 +197,7 @@ TEST(test_gimbal_settle_boundary) {
     StateMachine sm;
     sm.on_init_complete();
     sm.request_search();
-    Detection d = {0.99f, {100, 100, 10, 10}};
+    Detection d = {-1, 0.99f, {100, 100, 10, 10}};
     sm.on_detection(d);
     sm.on_detection(d);
     sm.on_detection(d);
@@ -209,7 +209,7 @@ TEST(test_position_history_wrap) {
     StateMachine sm;
     sm.on_init_complete();
     sm.request_search();
-    Detection d = {0.99f, {100, 100, 10, 10}};
+    Detection d = {-1, 0.99f, {100, 100, 10, 10}};
     for (int i = 0; i < 10; ++i) sm.on_detection(d);
     ASSERT_EQ(sm.state(), FcsState::TRACKING);
 }
@@ -219,7 +219,7 @@ TEST(test_detection_confidence) {
     StateMachine sm;
     sm.on_init_complete();
     sm.request_search();
-    Detection d = {0.949f, {100, 100, 10, 10}};
+    Detection d = {-1, 0.949f, {100, 100, 10, 10}};
     sm.on_detection(d);
     ASSERT_EQ(sm.state(), FcsState::SEARCH);
 }
@@ -231,7 +231,7 @@ TEST(test_interlock_persistence) {
     sm.request_search();
     ASSERT_FALSE(sm.is_interlock_enabled());
     
-    Detection d = {0.99f, {100, 100, 10, 10}};
+    Detection d = {-1, 0.99f, {100, 100, 10, 10}};
     sm.on_detection(d);
     sm.on_detection(d);
     sm.on_detection(d);

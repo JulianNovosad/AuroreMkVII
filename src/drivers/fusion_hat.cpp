@@ -317,6 +317,12 @@ bool FusionHat::init() {
         channels_[static_cast<size_t>(ch)].current_pulse_width.store(1500, std::memory_order_release);  // Center
         channels_[static_cast<size_t>(ch)].current_angle.store(0.0f, std::memory_order_release);
     }
+
+    // Initialize fire interlock to INHIBIT state (ICD-003)
+    // This ensures fire is disabled by default until explicitly enabled
+    if (!setInterlock(false)) {
+        std::cerr << "FusionHat: Warning - failed to initialize interlock to INHIBIT state" << std::endl;
+    }
     
     // Start background command processor thread
     stop_thread_ = false;
@@ -547,6 +553,48 @@ void FusionHat::disable_all_servos() {
 // ============================================================================
 // PWM Control
 // ============================================================================
+
+bool FusionHat::setInterlock(bool enabled) {
+    // Spec: ICD-003 - Fire interlock via PWM channel 2
+    // 1000µs = INHIBIT (fire disabled), 2000µs = ENABLE (fire authorized)
+    if (!initialized_.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    const int pulse_width_us = enabled ? kInterlockEnableUs : kInterlockInhibitUs;
+
+    // Use direct sysfs write for interlock (synchronous, safety-critical)
+    std::string pwm_path = get_pwm_path(kInterlockChannel);
+
+    // Enable the channel first
+    if (!write_sysfs_with_retry(pwm_path + "/enable", 1)) {
+        error_count_.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+
+    // Set period to 50Hz (20000µs) for proper servo pulse timing
+    if (!write_sysfs_with_retry(pwm_path + "/period", 20000)) {
+        error_count_.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+
+    // Set pulse width
+    if (!write_sysfs_with_retry(pwm_path + "/duty_cycle", pulse_width_us)) {
+        error_count_.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+
+    // Update state
+    interlock_enabled_.store(enabled, std::memory_order_release);
+    command_count_.fetch_add(1, std::memory_order_relaxed);
+
+    return true;
+}
+
+bool FusionHat::getInterlockState() const noexcept {
+    // Return cached state
+    return interlock_enabled_.load(std::memory_order_acquire);
+}
 
 bool FusionHat::set_pwm_freq(int channel, int freq_hz) {
     if (channel < 0 || channel >= 12 || freq_hz <= 0 || freq_hz > 1000) {

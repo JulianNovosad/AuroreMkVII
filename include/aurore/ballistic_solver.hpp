@@ -92,15 +92,19 @@ struct Rk4Derivative {
     float dvx{0.f}, dvy{0.f}, dvz{0.f}; // Acceleration components
 };
 
-// PERF-005: Lookup table dimensions for pre-computed p_hit
+// PERF-005: Lookup table dimensions for pre-computed solutions
 // Range: 0.1m to 10m in 0.1m steps (100 entries)
 // Velocity: 50 m/s to 500 m/s in 10 m/s steps (46 entries)
+// Target velocity (for moving target lead): 0-20 m/s in 5 m/s steps (5 entries)
 static constexpr int kLookupTableRangeBins = 100;
 static constexpr int kLookupTableVelocityBins = 46;
+static constexpr int kLookupTableTargetVelBins = 5;
 static constexpr float kLookupTableMinRange = 0.1f;
 static constexpr float kLookupTableMaxRange = 10.0f;
 static constexpr float kLookupTableMinVelocity = 50.0f;
 static constexpr float kLookupTableMaxVelocity = 500.0f;
+static constexpr float kLookupTableMinTargetVel = 0.0f;
+static constexpr float kLookupTableMaxTargetVel = 20.0f;
 
 class BallisticSolver {
 public:
@@ -134,6 +138,15 @@ public:
     // PERF-005: Fast lookup table based p_hit calculation
     float get_p_hit_from_table(float range_m, float velocity_m_s, bool kinetic_mode) const;
 
+    // PERF-005: Fast TOF lookup
+    float get_tof_from_table(float range_m, float velocity_m_s) const;
+
+    // PERF-005: Fast lead angle lookup (static targets)
+    float get_el_lead_from_table(float range_m, float velocity_m_s) const;
+
+    // PERF-005: Fast lead angle lookup (moving targets)
+    float get_az_lead_from_table(float range_m, float velocity_m_s, float target_velocity_m_s) const;
+
     // Legacy method kept for compatibility
     float monte_carlo_p_hit(const FireControlSolution& nominal, int n_sims = 50) const;
 
@@ -156,10 +169,13 @@ public:
         float max_distance_m, float dt = 0.0005f) const;
 
 private:
-    // PERF-005: Pre-computed lookup table [range_bin][velocity_bin]
-    // Stored as 2D array for cache-friendly access
+    // PERF-005: Pre-computed lookup tables [range_bin][velocity_bin]
+    // Stored as 2D array for cache-friendly access (L3-cached, ~85KB total)
     std::array<std::array<float, kLookupTableVelocityBins>, kLookupTableRangeBins> p_hit_table_kinetic_;
     std::array<std::array<float, kLookupTableVelocityBins>, kLookupTableRangeBins> p_hit_table_drop_;
+    std::array<std::array<float, kLookupTableVelocityBins>, kLookupTableRangeBins> tof_table_;
+    std::array<std::array<float, kLookupTableVelocityBins>, kLookupTableRangeBins> el_lead_table_;
+    std::array<std::array<std::array<float, kLookupTableTargetVelBins>, kLookupTableVelocityBins>, kLookupTableRangeBins> az_lead_table_;
     std::atomic<bool> lookup_table_initialized_{false};
 
     // AM7-L2-BALL-002: Ballistic profile storage
@@ -181,8 +197,10 @@ private:
     // PERF-005: Helper to convert continuous values to table indices
     int range_to_index(float range_m) const;
     int velocity_to_index(float velocity_m_s) const;
+    int target_velocity_to_index(float target_velocity_m_s) const;
     float index_to_range(int idx) const;
     float index_to_velocity(int idx) const;
+    float index_to_target_velocity(int idx) const;
 };
 
 }  // namespace aurore

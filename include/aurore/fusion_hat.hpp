@@ -299,6 +299,25 @@ class FusionHat {
     // =========================================================================
 
     /**
+     * @brief Fire interlock control (ICD-003)
+     *
+     * Uses PWM channel 2 for fire interlock:
+     * - 1000µs pulse width = INHIBIT (fire disabled)
+     * - 2000µs pulse width = ENABLE (fire authorized)
+     *
+     * @param enabled true = ENABLE (2000µs), false = INHIBIT (1000µs)
+     * @return true on success
+     */
+    bool setInterlock(bool enabled);
+
+    /**
+     * @brief Get current interlock state
+     *
+     * @return true if interlock is ENABLED (fire authorized), false if INHIBITED
+     */
+    bool getInterlockState() const noexcept;
+
+    /**
      * @brief Set software endstop limits
      *
      * @param channel PWM channel
@@ -462,6 +481,12 @@ class FusionHat {
      * @brief Get PWM channel sysfs path
      */
     std::string get_pwm_path(int channel) const;
+
+    // Interlock state (ICD-003: channel 2, 1000µs=INHIBIT, 2000µs=ENABLE)
+    static constexpr int kInterlockChannel = 2;
+    static constexpr int kInterlockInhibitUs = 1000;  // Fire disabled
+    static constexpr int kInterlockEnableUs = 2000;   // Fire authorized
+    std::atomic<bool> interlock_enabled_{false};
 
     std::string sysfs_base_{SYSFS_BASE};
     std::string proc_base_{DEVICE_TREE_PATH};

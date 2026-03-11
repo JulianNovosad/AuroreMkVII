@@ -56,6 +56,8 @@ enum class LinkMsgId : uint16_t {
     kGimbalCommand = 0x0102,
     kZoomCommand = 0x0103,
     kTargetSelect = 0x0104,
+    kTargetConfirm = 0x0105,  // Spec: ICD-005
+    kTargetReject = 0x0106,   // Spec: ICD-005
     kArmRequest = 0x0107,
     kDisarmRequest = 0x0108,
     kEmergencyInhibit = 0x0109,
@@ -96,6 +98,33 @@ struct LinkPayloadSystemState {
     uint8_t fault_active;
     uint8_t reserved[28];
 };
+
+/**
+ * @brief TARGET_SELECT payload (ICD-005, line 571-575)
+ */
+struct LinkPayloadTargetSelect {
+    uint16_t cursor_x;      ///< Pixel coordinates, 0-1536
+    uint16_t cursor_y;      ///< Pixel coordinates, 0-864
+    uint8_t confidence;     ///< Operator confidence 0-100
+    uint8_t reserved[2];
+};
+
+/**
+ * @brief TARGET_CONFIRM payload (ICD-005, line 577-578)
+ */
+struct LinkPayloadTargetConfirm {
+    uint32_t target_id;     ///< Automatic target identifier
+    uint8_t reserved[28];
+};
+
+/**
+ * @brief TARGET_REJECT payload (ICD-005, line 580-583)
+ */
+struct LinkPayloadTargetReject {
+    uint32_t target_id;     ///< Automatic target identifier
+    uint8_t reason;          ///< 0-255 reason code
+    uint8_t reserved[3];
+};
 #pragma pack(pop)
 
 enum class LinkMode { AUTO = 0, FREECAM = 1 };
@@ -119,6 +148,11 @@ using FreecamCallback = std::function<void(float az_deg, float el_deg, float vel
 using ArmCallback = std::function<void(bool authorized)>;
 using HeartbeatTimeoutCallback = std::function<void()>;
 using EmergencyStopCallback = std::function<void()>;
+using TargetSelectCallback = std::function<void(uint16_t cursor_x, uint16_t cursor_y, uint8_t confidence)>;  // Spec: ICD-005
+using TargetConfirmCallback = std::function<void(uint32_t target_id)>;  // Spec: ICD-005
+using TargetRejectCallback = std::function<void(uint32_t target_id, uint8_t reason)>;  // Spec: ICD-005
+// Spec: AM7-L3-SEC-001 - HMAC security event callback for logging authentication failures
+using SecurityEventCallback = std::function<void(const std::string& event_type, uint32_t sequence)>;
 
 /**
  * AuroreLinkServer - TCP server for remote operator interface
@@ -146,6 +180,10 @@ class AuroreLinkServer {
     void set_arm_callback(ArmCallback cb);
     void set_heartbeat_timeout_callback(HeartbeatTimeoutCallback cb);
     void set_emergency_stop_callback(EmergencyStopCallback cb);
+    void set_target_select_callback(TargetSelectCallback cb);   // Spec: ICD-005
+    void set_target_confirm_callback(TargetConfirmCallback cb); // Spec: ICD-005
+    void set_target_reject_callback(TargetRejectCallback cb);   // Spec: ICD-005
+    void set_security_event_callback(SecurityEventCallback cb); // Spec: AM7-L3-SEC-001
 
     size_t client_count() const;
     LinkMode current_mode() const { return mode_.load(std::memory_order_acquire); }
@@ -179,6 +217,13 @@ class AuroreLinkServer {
     ArmCallback on_arm_;
     HeartbeatTimeoutCallback on_heartbeat_timeout_;
     EmergencyStopCallback on_emergency_stop_;
+    TargetSelectCallback on_target_select_;     // Spec: ICD-005
+    TargetConfirmCallback on_target_confirm_;   // Spec: ICD-005
+    TargetRejectCallback on_target_reject_;     // Spec: ICD-005
+    SecurityEventCallback on_security_event_;   // Spec: AM7-L3-SEC-001
+
+    // Spec: AM7-L3-SEC-001 - Send NACK for failed HMAC verification
+    void send_nack(int client_fd, uint32_t sequence, uint16_t message_id, uint8_t error_code);
 
     // Heartbeat monitoring (500ms timeout → IDLE/SAFE)
     static constexpr uint64_t kHeartbeatTimeoutNs = 500000000ULL;  // 500ms
