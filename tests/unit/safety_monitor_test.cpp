@@ -586,6 +586,112 @@ TEST(test_software_watchdog_config_defaults) {
 }
 
 // ============================================================================
+// StageLatencyStats Tests
+// ============================================================================
+
+TEST(test_stage_latency_recording) {
+    aurore::SafetyMonitorConfig config;
+    config.enable_watchdog = false;
+    config.per_stage.enable_per_stage = true;
+    config.per_stage.stall_threshold_ns = 25000000;  // 25ms
+
+    aurore::SafetyMonitor monitor(config);
+
+    // Record 5 samples with known values
+    const uint64_t samples[] = {1000000, 2000000, 3000000, 4000000, 5000000};
+    for (uint64_t s : samples) {
+        monitor.record_stage_latency(aurore::PipelineStage::VISION, s);
+    }
+
+    const auto& stats = monitor.get_stage_stats(aurore::PipelineStage::VISION);
+
+    // Verify count
+    ASSERT_EQ(stats.sample_count.load(), 5u);
+
+    // Verify max (should be 5ms)
+    ASSERT_EQ(stats.max_latency_ns.load(), 5000000u);
+
+    // Verify average (sum=15ms / 5 = 3ms)
+    ASSERT_EQ(stats.get_avg_latency_ns(), 3000000u);
+}
+
+TEST(test_stage_stall_detection) {
+    aurore::SafetyMonitorConfig config;
+    config.enable_watchdog = false;
+    config.per_stage.enable_per_stage = true;
+    config.per_stage.stall_threshold_ns = 10000000;  // 10ms stall threshold
+
+    aurore::SafetyMonitor monitor(config);
+
+    // Record a latency below threshold — no stall
+    monitor.record_stage_latency(aurore::PipelineStage::TRACK, 5000000u);  // 5ms
+    ASSERT_EQ(monitor.get_stage_stats(aurore::PipelineStage::TRACK).stall_count.load(), 0u);
+
+    // Record a latency above threshold — should increment stall_count
+    monitor.record_stage_latency(aurore::PipelineStage::TRACK, 20000000u);  // 20ms > 10ms
+    ASSERT_EQ(monitor.get_stage_stats(aurore::PipelineStage::TRACK).stall_count.load(), 1u);
+}
+
+TEST(test_health_report_generation) {
+    aurore::SafetyMonitorConfig config;
+    config.enable_watchdog = false;
+    config.per_stage.enable_per_stage = true;
+    config.per_stage.enable_health_report = true;
+
+    aurore::SafetyMonitor monitor(config);
+
+    // Record some latencies across stages
+    monitor.record_stage_latency(aurore::PipelineStage::VISION, 3000000u);
+    monitor.record_stage_latency(aurore::PipelineStage::TRACK, 2000000u);
+    monitor.record_stage_latency(aurore::PipelineStage::ACTUATION, 1000000u);
+    monitor.record_frame_complete(6000000u);
+
+    std::string report = monitor.generate_health_report();
+
+    // Report must be non-empty
+    ASSERT_TRUE(!report.empty());
+
+    // Must contain stage names
+    ASSERT_TRUE(report.find("VISION") != std::string::npos);
+    ASSERT_TRUE(report.find("TRACK") != std::string::npos);
+    ASSERT_TRUE(report.find("ACTUATION") != std::string::npos);
+}
+
+TEST(test_stage_stats_reset) {
+    aurore::SafetyMonitorConfig config;
+    config.enable_watchdog = false;
+    config.per_stage.enable_per_stage = true;
+    config.per_stage.stall_threshold_ns = 10000000;  // 10ms
+
+    aurore::SafetyMonitor monitor(config);
+
+    // Record latencies across all stages
+    monitor.record_stage_latency(aurore::PipelineStage::VISION, 15000000u);   // above threshold
+    monitor.record_stage_latency(aurore::PipelineStage::TRACK, 15000000u);
+    monitor.record_stage_latency(aurore::PipelineStage::ACTUATION, 15000000u);
+    monitor.record_frame_complete(45000000u);
+
+    // Sanity: counts should be non-zero
+    ASSERT_TRUE(monitor.get_stage_stats(aurore::PipelineStage::VISION).sample_count.load() > 0);
+
+    // Reset all stats
+    monitor.reset_stage_stats();
+
+    // Verify all stages are zeroed
+    for (uint8_t i = 0; i < static_cast<uint8_t>(aurore::PipelineStage::NUM_STAGES); ++i) {
+        const auto& s = monitor.get_stage_stats(static_cast<aurore::PipelineStage>(i));
+        ASSERT_EQ(s.sample_count.load(), 0u);
+        ASSERT_EQ(s.max_latency_ns.load(), 0u);
+        ASSERT_EQ(s.total_latency_ns.load(), 0u);
+        ASSERT_EQ(s.stall_count.load(), 0u);
+    }
+
+    // Frame counters should also be reset
+    ASSERT_EQ(monitor.get_total_frames(), 0u);
+    ASSERT_EQ(monitor.get_healthy_frames(), 0u);
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -628,6 +734,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     RUN_TEST(test_watchdog_kick_raii);
     RUN_TEST(test_watchdog_kick_raii_multiple);
     RUN_TEST(test_software_watchdog_config_defaults);
+
+    // StageLatencyStats tests
+    RUN_TEST(test_stage_latency_recording);
+    RUN_TEST(test_stage_stall_detection);
+    RUN_TEST(test_health_report_generation);
+    RUN_TEST(test_stage_stats_reset);
 
     // Summary
     std::cout << "\n=====================================" << std::endl;
