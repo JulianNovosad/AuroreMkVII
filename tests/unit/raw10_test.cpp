@@ -122,8 +122,8 @@ TEST(test_raw10_conversion_logic) {
     
     for (size_t i = 0; i < bgr_scalar.size(); ++i) {
         if (bgr_scalar[i] != bgr_neon[i]) {
-            std::cerr << "Mismatch at index " << i << ": scalar=" << (int)bgr_scalar[i] 
-                      << ", neon=" << (int)bgr_neon[i] << std::endl;
+            std::cerr << "Mismatch at index " << i << ": scalar=" << static_cast<int>(bgr_scalar[i]) 
+                      << ", neon=" << static_cast<int>(bgr_neon[i]) << std::endl;
             throw std::runtime_error("NEON logic mismatch");
         }
     }

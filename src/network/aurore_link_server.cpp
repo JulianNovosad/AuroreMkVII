@@ -24,6 +24,11 @@ static std::mutex client_sequences_mutex_;
 static constexpr uint32_t kSequenceGapReauthThreshold = 100;  // Gap > 100: re-auth required
 static constexpr uint32_t kSequenceGapFaultThreshold = 1000;  // Gap > 1000: security fault
 
+// Spec: AM7-L3-SEC-001 - NACK error codes for HMAC authentication failures
+static constexpr uint8_t kNackErrInvalidHmac = 0x01;      // HMAC verification failed
+static constexpr uint8_t kNackErrReplayDetected = 0x02;   // Replay attack detected
+static constexpr uint8_t kNackErrSequenceGap = 0x03;      // Sequence gap too large
+
 AuroreLinkServer::AuroreLinkServer(const AuroreLinkConfig& cfg) : cfg_(cfg) {}
 
 AuroreLinkServer::~AuroreLinkServer() { stop(); }
@@ -232,15 +237,26 @@ void AuroreLinkServer::command_accept_loop() {
                 }
 
                 // SEC-001: Authenticate command via HMAC-SHA256 (ICD-005)
+                // Spec: AM7-L2-SEC-001 - HMAC-SHA256 with 256-bit keys
+                // Spec: AM7-L3-SEC-001 - HMAC over message + sequence + timestamp
                 if (!cfg_.hmac_key.empty()) {
                     // EMERGENCY_INHIBIT does not require authentication
                     if (msg.header.message_id !=
                         static_cast<uint16_t>(LinkMsgId::kEmergencyInhibit)) {
-                        // Verification failure -> message discarded
+                        // Verification failure -> send NACK and log event
                         if (!security::verify_hmac_sha256_raw(
                                 cfg_.hmac_key, &msg, sizeof(LinkInputHeader) + 32, msg.hmac)) {
-                            std::cerr << "AuroreLink: Authentication failure for msg 0x" << std::hex
-                                      << msg.header.message_id << std::endl;
+                            std::cerr << "AuroreLink: HMAC verification failed for msg 0x" << std::hex
+                                      << msg.header.message_id << " seq=" << std::dec
+                                      << msg.header.sequence << std::endl;
+                            
+                            // Spec: AM7-L3-SEC-001 - Log security event
+                            if (on_security_event_) {
+                                on_security_event_("HMAC_VERIFY_FAIL", msg.header.sequence);
+                            }
+                            
+                            // Spec: ICD-005 - Return NACK for invalid HMAC
+                            send_nack(client, msg.header.sequence, msg.header.message_id, kNackErrInvalidHmac);
                             continue;
                         }
                     }
@@ -261,6 +277,14 @@ void AuroreLinkServer::command_accept_loop() {
                     if (!security::verify_sequence_number(received_seq, expected_seq)) {
                         std::cerr << "AuroreLink: Replay attack detected - seq " << received_seq
                                   << " < expected " << expected_seq << "\n";
+                        
+                        // Spec: AM7-L3-SEC-001 - Log security event for replay attack
+                        if (on_security_event_) {
+                            on_security_event_("REPLAY_ATTACK", received_seq);
+                        }
+                        
+                        // Spec: ICD-005 - Return NACK for replay attack
+                        send_nack(client, msg.header.sequence, msg.header.message_id, kNackErrReplayDetected);
                         continue;  // Discard replayed message
                     }
 
@@ -276,8 +300,11 @@ void AuroreLinkServer::command_accept_loop() {
                                 << (received_seq > old_seq ? received_seq - old_seq
                                                            : (1ULL << 32) - old_seq + received_seq)
                                 << " exceeds threshold " << kSequenceGapFaultThreshold << "\n";
-                            // TODO: Trigger security fault handler
-                            // For now, log and continue
+                            
+                            // Spec: AM7-L3-SEC-001 - Log security fault event
+                            if (on_security_event_) {
+                                on_security_event_("SEQ_GAP_FAULT", received_seq);
+                            }
                         }
                         // Gap > 100: re-authentication required
                         else if (security::is_sequence_gap(old_seq, received_seq,
@@ -287,7 +314,15 @@ void AuroreLinkServer::command_accept_loop() {
                                 << (received_seq > old_seq ? received_seq - old_seq
                                                            : (1ULL << 32) - old_seq + received_seq)
                                 << " exceeds threshold " << kSequenceGapReauthThreshold << "\n";
-                            // TODO: Trigger re-authentication flow
+                            
+                            // Spec: AM7-L3-SEC-001 - Log re-auth required event
+                            if (on_security_event_) {
+                                on_security_event_("REAUTH_REQUIRED", received_seq);
+                            }
+                            
+                            // Spec: ICD-005 - Return NACK for sequence gap
+                            send_nack(client, msg.header.sequence, msg.header.message_id, kNackErrSequenceGap);
+                            continue;
                         }
                     }
 
@@ -360,6 +395,31 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
             }
             break;
         }
+        // Spec: ICD-005 - Target selection commands
+        case LinkMsgId::kTargetSelect: {
+            LinkPayloadTargetSelect payload;
+            std::memcpy(&payload, msg.payload, sizeof(payload));
+            if (on_target_select_) {
+                on_target_select_(payload.cursor_x, payload.cursor_y, payload.confidence);
+            }
+            break;
+        }
+        case LinkMsgId::kTargetConfirm: {
+            LinkPayloadTargetConfirm payload;
+            std::memcpy(&payload, msg.payload, sizeof(payload));
+            if (on_target_confirm_) {
+                on_target_confirm_(payload.target_id);
+            }
+            break;
+        }
+        case LinkMsgId::kTargetReject: {
+            LinkPayloadTargetReject payload;
+            std::memcpy(&payload, msg.payload, sizeof(payload));
+            if (on_target_reject_) {
+                on_target_reject_(payload.target_id, payload.reason);
+            }
+            break;
+        }
         default:
             break;
     }
@@ -396,6 +456,45 @@ void AuroreLinkServer::set_heartbeat_timeout_callback(HeartbeatTimeoutCallback c
 
 void AuroreLinkServer::set_emergency_stop_callback(EmergencyStopCallback cb) {
     on_emergency_stop_ = std::move(cb);
+}
+
+// Spec: AM7-L3-SEC-001 - Send NACK response for failed authentication
+void AuroreLinkServer::send_nack(int client_fd, uint32_t sequence, uint16_t message_id, uint8_t error_code) {
+    (void)message_id;  // Reserved for future use (e.g., to specify which message failed)
+    
+    LinkOutputMessage msg{};
+    msg.header.sync_word = 0xA7060006;  // AURORE06
+    msg.header.message_id = static_cast<uint16_t>(LinkMsgId::kModeNack);  // Use ModeNack for error response
+    msg.header.sequence = sequence;
+    msg.header.timestamp_ns = aurore::get_timestamp();
+    msg.status = 1;  // NACK
+    msg.error_code = error_code;
+    
+    // HMAC generation for outgoing response
+    // Spec: AM7-L2-SEC-001 - HMAC-SHA256 with 256-bit keys
+    if (!cfg_.hmac_key.empty()) {
+        security::compute_hmac_sha256_raw(cfg_.hmac_key, &msg, sizeof(LinkOutputHeader) + 2 + 28,
+                                          msg.hmac);
+    }
+    
+    ::send(client_fd, &msg, sizeof(msg), MSG_NOSIGNAL);
+}
+
+void AuroreLinkServer::set_security_event_callback(SecurityEventCallback cb) {
+    on_security_event_ = std::move(cb);
+}
+
+// Spec: ICD-005 - Target selection callbacks
+void AuroreLinkServer::set_target_select_callback(TargetSelectCallback cb) {
+    on_target_select_ = std::move(cb);
+}
+
+void AuroreLinkServer::set_target_confirm_callback(TargetConfirmCallback cb) {
+    on_target_confirm_ = std::move(cb);
+}
+
+void AuroreLinkServer::set_target_reject_callback(TargetRejectCallback cb) {
+    on_target_reject_ = std::move(cb);
 }
 
 void AuroreLinkServer::heartbeat_monitor_loop() {

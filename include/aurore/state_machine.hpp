@@ -71,6 +71,7 @@ enum class FcsState : uint8_t {
 };
 
 struct Detection {
+    int id{-1};                          ///< Target/marker ID (-1 for visual detection)
     float confidence{0.0f};
     struct {
         int x, y, w, h;
@@ -111,6 +112,18 @@ struct FireControlSolution {
     float p_hit{0.f};
     bool kinetic_mode{true};
 };
+
+struct alignas(64) BallisticsFrameState {
+    TrackSolution track;
+    FireControlSolution fc;
+    PositionHistoryEntry pos_history[3];
+    uint64_t last_update_ns{0};
+    uint8_t stable_frames{0};
+    bool solution_valid{false};
+    uint8_t padding[6]{0};
+};
+
+static_assert(sizeof(BallisticsFrameState) <= 256, "BallisticsFrameState should fit in one cache line region");
 
 // AM7-L3-SAFE-002: Range data structure with timestamp and checksum
 struct RangeData {
