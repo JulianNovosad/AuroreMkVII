@@ -143,6 +143,7 @@ inline bool verify_hmac_sha256_raw(const std::string& key, const void* data, siz
     unsigned char computed[32];
     compute_hmac_sha256_raw(key, data, len, computed);
 
+    // Constant-time comparison: prevents timing side-channel attacks
     unsigned char diff = 0;
     for (int i = 0; i < 32; i++) {
         diff |= static_cast<unsigned char>(computed[i] ^ signature[i]);

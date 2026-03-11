@@ -6,7 +6,7 @@
  * Runs at highest priority (SCHED_FIFO=99) with 1ms period.
  *
  * Safety functions:
- * - Vision pipeline deadline monitoring (20ms max latency per AM7-L2-VIS-003)
+ * - Vision pipeline deadline monitoring (10ms max latency per AM7-L3-VIS-004)
  * - Actuation output deadline monitoring (2ms max latency per AM7-L2-ACT-003)
  * - Frame progression tracking (stall detection)
  * - Software watchdog feeding (safety fault on missed kick per AM7-L3-SAFE-005)
@@ -394,12 +394,13 @@ class SafetyMonitor {
     bool init() noexcept {
         // Start software watchdog thread if enabled
         if (config_.enable_watchdog) {
-            watchdog_running_.store(true, std::memory_order_release);
-            watchdog_thread_ = std::thread(&SafetyMonitor::watchdog_thread_func, this);
-
-            // Set initial kick time to allow startup time
+            // Set initial kick time BEFORE starting watchdog thread
+            // to prevent race condition where watchdog checks before kick time is set
             last_kick_time_ns_.store(get_timestamp(ClockId::MonotonicRaw),
                                      std::memory_order_release);
+
+            watchdog_running_.store(true, std::memory_order_release);
+            watchdog_thread_ = std::thread(&SafetyMonitor::watchdog_thread_func, this);
         }
 
         return true;
