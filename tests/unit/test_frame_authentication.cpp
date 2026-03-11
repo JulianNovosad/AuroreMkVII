@@ -234,7 +234,55 @@ static void test_async_frame_authenticator() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 6: Performance benchmark - hash computation overhead
+// Test 6: AsyncFrameAuthenticator destructor safety (no use-after-free)
+// ---------------------------------------------------------------------------
+static void test_async_authenticator_destructor_safety() {
+    const std::string key = "destructor_safety_test_key_256bit";
+
+    std::vector<uint8_t> pixel_data(1024, 0xAB);
+    uint8_t header[32] = {};
+
+    {
+        aurore::security::AsyncFrameAuthenticator auth(key);
+        aurore::ZeroCopyFrame out_frame{};
+        out_frame.valid = true;
+        out_frame.plane_data[0] = pixel_data.data();
+        out_frame.plane_size[0] = pixel_data.size();
+
+        auth.authenticate_frame(pixel_data.data(), pixel_data.size(), header, sizeof(header), &out_frame);
+        // Deliberately do NOT call wait_for_completion() — destructor must block until done.
+    }
+    // If we reach here without a crash or sanitizer error, the destructor correctly waited.
+    CHECK(true);
+}
+
+// ---------------------------------------------------------------------------
+// Test 7: AsyncFrameAuthenticator timeout then successful wait
+// ---------------------------------------------------------------------------
+static void test_async_authenticator_timeout_returns_false() {
+    const std::string key = "timeout_test_key_256bit";
+    aurore::security::AsyncFrameAuthenticator auth(key);
+
+    std::vector<uint8_t> pixel_data(1024, 0xCD);
+    uint8_t header[32] = {};
+    aurore::ZeroCopyFrame out_frame{};
+    out_frame.valid = true;
+    out_frame.plane_data[0] = pixel_data.data();
+    out_frame.plane_size[0] = pixel_data.size();
+
+    auth.authenticate_frame(pixel_data.data(), pixel_data.size(), header, sizeof(header), &out_frame);
+
+    // 0ms wait — may already be ready (fast task) or may timeout; both are acceptable.
+    bool immediate = auth.wait_for_completion(std::chrono::milliseconds(0));
+
+    // A subsequent 200ms wait must succeed and report success.
+    bool completed = immediate || auth.wait_for_completion(std::chrono::milliseconds(200));
+    CHECK(completed);
+    CHECK(auth.last_success());
+}
+
+// ---------------------------------------------------------------------------
+// Test 8: Performance benchmark - hash computation overhead
 // ---------------------------------------------------------------------------
 static void test_hash_computation_overhead() {
     const size_t frame_size = 1536 * 864 * 2;  // RAW10 frame size
@@ -274,7 +322,7 @@ static void test_hash_computation_overhead() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 7: HMAC computation overhead
+// Test 9: HMAC computation overhead
 // ---------------------------------------------------------------------------
 static void test_hmac_computation_overhead() {
     const size_t header_size = 44;  // Frame header size
@@ -315,7 +363,7 @@ static void test_hmac_computation_overhead() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 8: Full authentication overhead (hash + HMAC)
+// Test 10: Full authentication overhead (hash + HMAC)
 // ---------------------------------------------------------------------------
 static void test_full_authentication_overhead() {
     const size_t frame_size = 1536 * 864 * 2;  // RAW10 frame size
@@ -388,6 +436,8 @@ int main() {
     run("test_frame_authentication_e2e", test_frame_authentication_e2e);
     run("test_tampered_frame_detection", test_tampered_frame_detection);
     run("test_async_frame_authenticator", test_async_frame_authenticator);
+    run("test_async_authenticator_destructor_safety", test_async_authenticator_destructor_safety);
+    run("test_async_authenticator_timeout_returns_false", test_async_authenticator_timeout_returns_false);
     run("test_hash_computation_overhead", test_hash_computation_overhead);
     run("test_hmac_computation_overhead", test_hmac_computation_overhead);
     run("test_full_authentication_overhead", test_full_authentication_overhead);

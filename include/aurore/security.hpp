@@ -4,8 +4,7 @@
 #include <vector>
 #include <cstdint>
 #include <cstring>
-#include <atomic>
-#include <thread>
+#include <future>
 #include <functional>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
@@ -203,10 +202,14 @@ public:
      * @param hmac_key 256-bit HMAC key (32 bytes recommended)
      */
     explicit AsyncFrameAuthenticator(const std::string& hmac_key)
-        : hmac_key_(hmac_key)
-        , busy_(false)
-        , completed_(false)
-        , success_(false) {}
+        : hmac_key_(hmac_key) {}
+
+    ~AsyncFrameAuthenticator() {
+        if (worker_future_.valid()) worker_future_.wait();
+    }
+
+    AsyncFrameAuthenticator(const AsyncFrameAuthenticator&) = delete;
+    AsyncFrameAuthenticator& operator=(const AsyncFrameAuthenticator&) = delete;
 
     /**
      * @brief Authenticate frame asynchronously.
@@ -238,7 +241,8 @@ public:
      * @return true if authentication is running
      */
     bool is_busy() const noexcept {
-        return busy_.load(std::memory_order_acquire);
+        if (!worker_future_.valid()) return false;
+        return worker_future_.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout;
     }
 
     /**
@@ -247,16 +251,14 @@ public:
      * @return true if authentication completed successfully
      */
     bool last_success() const noexcept {
-        return success_.load(std::memory_order_acquire);
+        return result_;
     }
 
 private:
     std::string hmac_key_;
-    std::atomic<bool> busy_;
-    std::atomic<bool> completed_;
-    std::atomic<bool> success_;
-    std::thread worker_;
-    
+    mutable std::future<bool> worker_future_;
+    bool result_ = false;
+
     // Working buffers
     unsigned char pending_hash_[32];
     unsigned char pending_hmac_[32];
@@ -269,86 +271,76 @@ inline void AsyncFrameAuthenticator::authenticate_frame(
     const void* header_data, size_t header_size,
     void* out_frame) {
 
-    if (busy_.exchange(true, std::memory_order_acq_rel)) {
-        // Already busy - contract violation (frame dropped)
+    if (worker_future_.valid() &&
+        worker_future_.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout) {
         std::fprintf(stderr, "FATAL: AsyncFrameAuthenticator is busy. Frame dropped! (backpressure violation)\n");
         std::abort();
     }
 
-    completed_.store(false, std::memory_order_release);
-    success_.store(false, std::memory_order_release);
     pending_frame_ = out_frame;
 
-    // Copy input data for async processing
-    std::memcpy(pending_hash_, pixel_data, std::min(pixel_size, static_cast<size_t>(32)));
+    worker_future_ = std::async(std::launch::async,
+        [this, pixel_data, pixel_size, header_data, header_size]() -> bool {
+            // Compute SHA256 of pixel data
+            unsigned char frame_hash[32];
+            compute_sha256_raw_threadsafe(pixel_data, pixel_size, frame_hash);
 
-    worker_ = std::thread([this, pixel_data, pixel_size, header_data, header_size]() {
-        // Compute SHA256 of pixel data
-        unsigned char frame_hash[32];
-        compute_sha256_raw_threadsafe(pixel_data, pixel_size, frame_hash);
+            // Compute HMAC over header + hash
+            std::vector<uint8_t> hmac_input;
+            hmac_input.reserve(header_size + 32);
+            hmac_input.insert(hmac_input.end(),
+                             static_cast<const uint8_t*>(header_data),
+                             static_cast<const uint8_t*>(header_data) + header_size);
+            hmac_input.insert(hmac_input.end(), frame_hash, frame_hash + 32);
 
-        // Compute HMAC over header + hash
-        std::vector<uint8_t> hmac_input;
-        hmac_input.reserve(header_size + 32);
-        hmac_input.insert(hmac_input.end(),
-                         static_cast<const uint8_t*>(header_data),
-                         static_cast<const uint8_t*>(header_data) + header_size);
-        hmac_input.insert(hmac_input.end(), frame_hash, frame_hash + 32);
+            unsigned char hmac[32];
+            compute_hmac_sha256_raw_threadsafe(hmac_key_, hmac_input.data(), hmac_input.size(), hmac);
 
-        unsigned char hmac[32];
-        compute_hmac_sha256_raw_threadsafe(hmac_key_, hmac_input.data(), hmac_input.size(), hmac);
+            // Write results to ZeroCopyFrame struct
+            // Note: ZeroCopyFrame has frame_hash[32] and hmac[32] as consecutive fields
+            // Offsets: frame_hash at 269, hmac at 301 (on 64-bit platform)
+            struct ZeroCopyFrameAuth {
+                // Fields before frame_hash (must match ZeroCopyFrame layout exactly)
+                uint64_t sequence;         // 0
+                uint64_t timestamp_ns;     // 8
+                uint64_t exposure_us;      // 16
+                float gain;                // 24
+                void* plane_data[4];       // 32
+                size_t plane_size[4];      // 64
+                int stride[4];             // 96
+                int width;                 // 112
+                int height;                // 116
+                uint32_t format;           // 120 (PixelFormat underlying type)
+                void* request_ptr;         // 128
+                uint32_t buffer_id;        // 136
+                bool valid;                // 140
+                char error[128];           // 141
+                // Authentication fields
+                uint8_t frame_hash[32];    // 269
+                uint8_t hmac[32];          // 301
+            };
 
-        // Write results to ZeroCopyFrame struct
-        // Note: ZeroCopyFrame has frame_hash[32] and hmac[32] as consecutive fields
-        // Offsets: frame_hash at 269, hmac at 301 (on 64-bit platform)
-        struct ZeroCopyFrameAuth {
-            // Fields before frame_hash (must match ZeroCopyFrame layout exactly)
-            uint64_t sequence;         // 0
-            uint64_t timestamp_ns;     // 8
-            uint64_t exposure_us;      // 16
-            float gain;                // 24
-            void* plane_data[4];       // 32
-            size_t plane_size[4];      // 64
-            int stride[4];             // 96
-            int width;                 // 112
-            int height;                // 116
-            uint32_t format;           // 120 (PixelFormat underlying type)
-            void* request_ptr;         // 128
-            uint32_t buffer_id;        // 136
-            bool valid;                // 140
-            char error[128];           // 141
-            // Authentication fields
-            uint8_t frame_hash[32];    // 269
-            uint8_t hmac[32];          // 301
-        };
+            ZeroCopyFrameAuth* auth_frame = static_cast<ZeroCopyFrameAuth*>(pending_frame_);
+            if (auth_frame) {
+                std::memcpy(auth_frame->frame_hash, frame_hash, 32);
+                std::memcpy(auth_frame->hmac, hmac, 32);
+            }
 
-        ZeroCopyFrameAuth* auth_frame = static_cast<ZeroCopyFrameAuth*>(pending_frame_);
-        if (auth_frame) {
-            std::memcpy(auth_frame->frame_hash, frame_hash, 32);
-            std::memcpy(auth_frame->hmac, hmac, 32);
-        }
+            std::memcpy(pending_hash_, frame_hash, 32);
+            std::memcpy(pending_hmac_, hmac, 32);
 
-        std::memcpy(pending_hash_, frame_hash, 32);
-        std::memcpy(pending_hmac_, hmac, 32);
-
-        success_.store(true, std::memory_order_release);
-        completed_.store(true, std::memory_order_release);
-        busy_.store(false, std::memory_order_release);
-    });
-
-    worker_.detach();  // Fire-and-forget for async operation
+            return true;
+        });
 }
 
 inline bool AsyncFrameAuthenticator::wait_for_completion(std::chrono::milliseconds timeout) {
-    auto start = std::chrono::steady_clock::now();
-    while (!completed_.load(std::memory_order_acquire)) {
-        auto elapsed = std::chrono::steady_clock::now() - start;
-        if (elapsed >= timeout) {
-            return false;
-        }
-        std::this_thread::yield();
+    if (!worker_future_.valid()) return result_;
+    auto status = worker_future_.wait_for(timeout);
+    if (status == std::future_status::ready) {
+        result_ = worker_future_.get();  // invalidates future
+        return result_;
     }
-    return success_.load(std::memory_order_acquire);
+    return false;  // timed out; destructor will block for cleanup
 }
 
 } // namespace security
