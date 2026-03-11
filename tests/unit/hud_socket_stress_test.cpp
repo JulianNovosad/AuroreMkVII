@@ -1,3 +1,4 @@
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <chrono>
@@ -13,6 +14,7 @@
 
 #include "aurore/hud_socket.hpp"
 #include "aurore/security.hpp"
+#include "aurore/timing.hpp"
 
 namespace fs = std::filesystem;
 
@@ -75,22 +77,48 @@ TEST(test_hud_socket_scenarios) {
     ASSERT_EQ(server.get_client_count(), 1);
     
     HudFrame frame;
-    frame.timestamp_ns = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count());
+    frame.timestamp_ns = aurore::get_timestamp();
     server.broadcast(frame);
-    
-    HudBinaryMessage msg;
-    ssize_t n = read(client_fd, &msg, sizeof(msg));
-    ASSERT_EQ(n, static_cast<ssize_t>(sizeof(msg)));
-    ASSERT_TRUE(security::verify_hmac_sha256_raw(config.hmac_key, &msg, sizeof(HudBinaryHeader) + 32, msg.hmac));
-    
-    msg.hmac[0] ^= 0xFF;
-    ASSERT_FALSE(security::verify_hmac_sha256_raw(config.hmac_key, &msg, sizeof(HudBinaryHeader) + 32, msg.hmac));
+
+    // ICD-006: broadcast() sends exactly 4 messages per call — drain all 4
+    const std::array<uint16_t, 4> kExpectedMsgIds = {
+        static_cast<uint16_t>(HudMsgId::kReticleData),        // 0x0301
+        static_cast<uint16_t>(HudMsgId::kTargetBox),          // 0x0302
+        static_cast<uint16_t>(HudMsgId::kBallisticSolution),  // 0x0303
+        static_cast<uint16_t>(HudMsgId::kSystemStatus),       // 0x0304
+    };
+
+    std::array<HudBinaryMessage, 4> msgs{};
+    for (size_t i = 0; i < 4; ++i) {
+        ssize_t n = read(client_fd, &msgs[i], sizeof(HudBinaryMessage));
+        ASSERT_EQ(n, static_cast<ssize_t>(sizeof(HudBinaryMessage)));
+    }
+
+    // Verify HMAC on each message
+    for (size_t i = 0; i < 4; ++i) {
+        ASSERT_TRUE(security::verify_hmac_sha256_raw(
+            config.hmac_key, &msgs[i], sizeof(HudBinaryHeader) + 32, msgs[i].hmac));
+    }
+
+    // ICD-006: all 4 messages share the same sequence number per broadcast
+    const uint32_t seq0 = msgs[0].header.sequence;
+    for (size_t i = 1; i < 4; ++i) {
+        ASSERT_EQ(msgs[i].header.sequence, seq0);
+    }
+
+    // Verify the 4 expected message IDs are present in order
+    for (size_t i = 0; i < 4; ++i) {
+        ASSERT_EQ(msgs[i].header.message_id, kExpectedMsgIds[i]);
+    }
+
+    // Verify HMAC tamper detection on the first message
+    msgs[0].hmac[0] ^= 0xFF;
+    ASSERT_FALSE(security::verify_hmac_sha256_raw(
+        config.hmac_key, &msgs[0], sizeof(HudBinaryHeader) + 32, msgs[0].hmac));
     
     uint64_t initial_limited = server.get_rate_limited_count();
     for (int i = 0; i < 50; ++i) {
-        frame.timestamp_ns = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count());
+        frame.timestamp_ns = aurore::get_timestamp();
         server.broadcast(frame);
     }
     
