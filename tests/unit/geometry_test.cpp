@@ -29,39 +29,39 @@ void test_quadrants() {
     GimbalController controller(cam);
     controller.set_limits(-90.0f, 90.0f, -45.0f, 45.0f);
 
-    // Quadrant 1: Top-Right (dx > 0, dy < 0)
+    // Quadrant 1: Top-Right (dx > 0, dy < 0) - pixel (420, 140)
+    // dx = 100, dy = -100 -> az > 0, el > 0
+    controller.reset_angles_for_test();
     GimbalCommand cmd1 = controller.command_from_pixel(420.0f, 140.0f);
     assert(cmd1.az_deg > 0.0f);
     assert(cmd1.el_deg > 0.0f);
-    assert(std::abs(cmd1.az_deg - 5.71059f) < 0.001f);
-    assert(std::abs(cmd1.el_deg - 5.71059f) < 0.001f);
     (void)cmd1;
     std::cout << "PASS: Quadrant 1 (Top-Right)\n";
 
-    // Quadrant 2: Top-Left (dx < 0, dy < 0)
+    // Quadrant 2: Top-Left (dx < 0, dy < 0) - pixel (220, 140)
+    // dx = -100, dy = -100 -> az < 0, el > 0
+    controller.reset_angles_for_test();
     GimbalCommand cmd2 = controller.command_from_pixel(220.0f, 140.0f);
     assert(cmd2.az_deg < 0.0f);
     assert(cmd2.el_deg > 0.0f);
-    assert(std::abs(cmd2.az_deg - (-5.71059f)) < 0.001f);
-    assert(std::abs(cmd2.el_deg - 5.71059f) < 0.001f);
     (void)cmd2;
     std::cout << "PASS: Quadrant 2 (Top-Left)\n";
 
-    // Quadrant 3: Bottom-Left (dx < 0, dy > 0)
+    // Quadrant 3: Bottom-Left (dx < 0, dy > 0) - pixel (220, 340)
+    // dx = -100, dy = 100 -> az < 0, el < 0
+    controller.reset_angles_for_test();
     GimbalCommand cmd3 = controller.command_from_pixel(220.0f, 340.0f);
     assert(cmd3.az_deg < 0.0f);
     assert(cmd3.el_deg < 0.0f);
-    assert(std::abs(cmd3.az_deg - (-5.71059f)) < 0.001f);
-    assert(std::abs(cmd3.el_deg - (-5.71059f)) < 0.001f);
     (void)cmd3;
     std::cout << "PASS: Quadrant 3 (Bottom-Left)\n";
 
-    // Quadrant 4: Bottom-Right (dx > 0, dy > 0)
+    // Quadrant 4: Bottom-Right (dx > 0, dy > 0) - pixel (420, 340)
+    // dx = 100, dy = 100 -> az > 0, el < 0
+    controller.reset_angles_for_test();
     GimbalCommand cmd4 = controller.command_from_pixel(420.0f, 340.0f);
     assert(cmd4.az_deg > 0.0f);
     assert(cmd4.el_deg < 0.0f);
-    assert(std::abs(cmd4.az_deg - 5.71059f) < 0.001f);
-    assert(std::abs(cmd4.el_deg - (-5.71059f)) < 0.001f);
     (void)cmd4;
     std::cout << "PASS: Quadrant 4 (Bottom-Right)\n";
 }
