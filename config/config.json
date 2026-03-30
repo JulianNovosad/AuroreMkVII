@@ -102,6 +102,12 @@
     "descriptor_path": "target_signatures/helicopter.yml"
   },
 
+  "lrf": {
+    "uart_device": "/dev/ttyAMA0",
+    "baud": 9600,
+    "protocol": "m01"
+  },
+
   "logging": {
     "level": "info",
     "buffer_size_kb": 64,
