@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aurore MkVII — Calibration</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="calibrate.css">
+</head>
+<body>
+  <div id="cal-app">
+
+    <!-- Header -->
+    <header id="cal-header">
+      <a href="/" id="back-link">← HUD</a>
+      <span id="cal-title">CALIBRATION MODE</span>
+      <span id="cal-status"></span>
+    </header>
+
+    <!-- Dual camera feeds -->
+    <section id="feed-section">
+      <div class="feed-wrap" id="feed-mipi-wrap">
+        <div class="feed-label">MIPI CAM</div>
+        <div class="feed-container">
+          <img id="feed-mipi" src="/stream/mipi" alt="MIPI feed">
+          <svg class="crosshair" id="xhair-mipi" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <line x1="50" y1="0"  x2="50" y2="42"  class="xh-line"/>
+            <line x1="50" y1="58" x2="50" y2="100" class="xh-line"/>
+            <line x1="0"  y1="50" x2="42"  y2="50" class="xh-line"/>
+            <line x1="58" y1="50" x2="100" y2="50" class="xh-line"/>
+            <circle cx="50" cy="50" r="8" class="xh-circle"/>
+          </svg>
+        </div>
+        <div class="lrf-badge" id="lrf-badge-mipi">LRF: --</div>
+      </div>
+
+      <div class="feed-wrap" id="feed-usb-wrap">
+        <div class="feed-label">USB CAM</div>
+        <div class="feed-container">
+          <img id="feed-usb" src="/stream/usb" alt="USB feed">
+          <svg class="crosshair" id="xhair-usb" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <line x1="50" y1="0"  x2="50" y2="42"  class="xh-line"/>
+            <line x1="50" y1="58" x2="50" y2="100" class="xh-line"/>
+            <line x1="0"  y1="50" x2="42"  y2="50" class="xh-line"/>
+            <line x1="58" y1="50" x2="100" y2="50" class="xh-line"/>
+            <circle cx="50" cy="50" r="8" class="xh-circle"/>
+          </svg>
+        </div>
+        <div class="lrf-badge" id="lrf-badge-usb">LRF: --</div>
+      </div>
+    </section>
+
+    <!-- Calibration steps -->
+    <section id="steps-section">
+      <div class="step-tabs">
+        <button class="step-tab active" data-step="1">Step 1 — Center Servos</button>
+        <button class="step-tab" data-step="2">Step 2 — LRF Alignment</button>
+        <button class="step-tab" data-step="3">Step 3 — Camera Offset</button>
+      </div>
+
+      <!-- Step 1: Servo Centering -->
+      <div class="step-panel active" id="step-1">
+        <div class="step-content">
+          <p class="step-desc">Center both servos to mechanical zero, then fine-tune with jog controls.</p>
+          
+          <div class="servo-controls">
+            <div class="servo-row">
+              <button id="btn-center-servos" class="btn-primary">Center Servos (90°/90°)</button>
+            </div>
+            
+            <div class="jog-section">
+              <div class="jog-group">
+                <span class="jog-label">PAN</span>
+                <div class="jog-row">
+                  <button class="btn-jog" data-axis="pan" data-delta="-10">-10°</button>
+                  <button class="btn-jog" data-axis="pan" data-delta="-5">-5°</button>
+                  <button class="btn-jog" data-axis="pan" data-delta="-1">-1°</button>
+                  <span class="jog-readout" id="pan-readout">PAN: 90.0°</span>
+                  <button class="btn-jog" data-axis="pan" data-delta="1">+1°</button>
+                  <button class="btn-jog" data-axis="pan" data-delta="5">+5°</button>
+                  <button class="btn-jog" data-axis="pan" data-delta="10">+10°</button>
+                </div>
+              </div>
+              
+              <div class="jog-group">
+                <span class="jog-label">TILT</span>
+                <div class="jog-row">
+                  <button class="btn-jog" data-axis="tilt" data-delta="-10">-10°</button>
+                  <button class="btn-jog" data-axis="tilt" data-delta="-5">-5°</button>
+                  <button class="btn-jog" data-axis="tilt" data-delta="-1">-1°</button>
+                  <span class="jog-readout" id="tilt-readout">TILT: 90.0°</span>
+                  <button class="btn-jog" data-axis="tilt" data-delta="1">+1°</button>
+                  <button class="btn-jog" data-axis="tilt" data-delta="5">+5°</button>
+                  <button class="btn-jog" data-axis="tilt" data-delta="10">+10°</button>
+                </div>
+              </div>
+            </div>
+            
+            <button id="btn-step1-done" class="btn-primary" disabled>Done — Servos Centered</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: LRF Alignment -->
+      <div class="step-panel" id="step-2">
+        <div class="step-content">
+          <p class="step-desc">Activate LRF laser and jog servos until laser dot is centered in both camera crosshairs.</p>
+          
+          <div class="lrf-controls">
+            <button id="btn-lrf-toggle" class="btn-toggle">Activate LRF Laser</button>
+            <span id="lrf-status" class="lrf-status">LRF: OFF</span>
+            <span id="lrf-distance" class="lrf-distance">-- mm</span>
+          </div>
+          
+          <div class="servo-controls">
+            <div class="jog-section">
+              <div class="jog-group">
+                <span class="jog-label">PAN</span>
+                <div class="jog-row">
+                  <button class="btn-jog" data-axis="pan" data-delta="-10">-10°</button>
+                  <button class="btn-jog" data-axis="pan" data-delta="-5">-5°</button>
+                  <button class="btn-jog" data-axis="pan" data-delta="-1">-1°</button>
+                  <span class="jog-readout" id="pan-readout-s2">PAN: 90.0°</span>
+                  <button class="btn-jog" data-axis="pan" data-delta="1">+1°</button>
+                  <button class="btn-jog" data-axis="pan" data-delta="5">+5°</button>
+                  <button class="btn-jog" data-axis="pan" data-delta="10">+10°</button>
+                </div>
+              </div>
+              
+              <div class="jog-group">
+                <span class="jog-label">TILT</span>
+                <div class="jog-row">
+                  <button class="btn-jog" data-axis="tilt" data-delta="-10">-10°</button>
+                  <button class="btn-jog" data-axis="tilt" data-delta="-5">-5°</button>
+                  <button class="btn-jog" data-axis="tilt" data-delta="-1">-1°</button>
+                  <span class="jog-readout" id="tilt-readout-s2">TILT: 90.0°</span>
+                  <button class="btn-jog" data-axis="tilt" data-delta="1">+1°</button>
+                  <button class="btn-jog" data-axis="tilt" data-delta="5">+5°</button>
+                  <button class="btn-jog" data-axis="tilt" data-delta="10">+10°</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="step-actions">
+            <button id="btn-mark-aligned" class="btn-primary" disabled>Mark Aligned</button>
+            <button id="btn-save-center-offset" class="btn-success" disabled>Save Center Offset</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Camera-to-Camera Alignment -->
+      <div class="step-panel" id="step-3">
+        <div class="step-content">
+          <p class="step-desc">Click corresponding points on both camera feeds to calculate pixel offset.</p>
+          
+          <div class="camera-cal-controls">
+            <button id="btn-clear-points" class="btn-secondary">Clear Points</button>
+            <span id="points-count" class="points-count">Points: 0</span>
+            <span id="pixel-offset" class="pixel-offset">Offset: (0, 0)</span>
+          </div>
+          
+          <div class="step-actions">
+            <button id="btn-save-camera-offset" class="btn-success" disabled>Save Camera Offset</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Save bar -->
+    <footer id="cal-footer">
+      <button id="btn-save-all" class="btn-save-all" disabled>Save All Calibration Data</button>
+      <span id="save-status" class="save-status"></span>
+    </footer>
+
+  </div>
+
+  <script src="calibrate.js"></script>
+</body>
+</html>

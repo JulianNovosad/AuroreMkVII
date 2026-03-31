@@ -1,10 +1,10 @@
 {
   "name": "aurore-link",
   "version": "1.0.0",
-  "description": "Aurore MkVII web remote control station (mock MVP)",
-  "main": "mock-server.js",
+  "description": "Aurore MkVII web remote control station",
+  "main": "server.js",
   "scripts": {
-    "start": "node mock-server.js",
+    "start": "node server.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },

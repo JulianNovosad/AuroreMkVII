@@ -1,0 +1,15 @@
+{
+  "saved_at": "2026-03-31T18:34:21.860Z",
+  "servo": {
+    "pan_channel": 10,
+    "tilt_channel": 11,
+    "pan_center_deg": 92,
+    "tilt_center_deg": 88
+  },
+  "lrf": {
+    "pan_at_center_deg": 92,
+    "tilt_at_center_deg": 88,
+    "distance_at_center_mm": 985
+  },
+  "cameras": null
+}

@@ -1,34 +1,60 @@
 # CLAUDE.md — aurore-link
 
-Web-based remote control station for Aurore MkVII (pre-hardware validation MVP).
+Web-based remote control station and calibration interface for Aurore MkVII.
 
 ## Overview
 
-Vanilla JS/CSS SPA with a Node.js mock server. No build step, no bundler, no framework.
-Uses WebSocket + JSON to communicate with the mock server (not the raw TCP C++ server).
+Vanilla JS/CSS SPA with a Node.js server. No build step, no bundler, no framework.
+Provides two interfaces:
+- **HUD** (`/`) — AC-130 style tactical display with WebSocket telemetry
+- **Calibration** (`/calibrate`) — 3-step servo/LRF/camera calibration workflow
 
 ## Runtime Requirements
 
 - Node.js 18+
 - `npm install` (installs `ws` package only)
+- Optional hardware: libcamera-vid, ffmpeg, Fusion HAT+, UART LRF
 
 ## Running
 
 ```bash
-cd /home/laptop/AuroreMkVII/aurore-link
+cd /home/pi/AuroreMkVII/aurore-link
 npm install
-node mock-server.js
-# Open http://localhost:8080 in browser
+node server.js
+# HUD:          http://localhost:8080/
+# Calibration:  http://localhost:8080/calibrate
 ```
 
 ## File Map
 
 | File | Purpose |
 |------|---------|
-| `mock-server.js` | Node.js HTTP static server + WebSocket on port 8080 |
-| `index.html` | SPA shell: canvas, SVG HUD, sidebar/strip |
-| `style.css` | Responsive layout, CSS variables, HUD styles |
-| `main.js` | WS client, canvas animation, SVG HUD renderer, controls |
+| `server.js` | Node.js HTTP server + WebSocket routing (HUD + calibration) |
+| `index.html` | HUD SPA shell: canvas, SVG reticle, tactical overlays |
+| `style.css` | HUD styles: AC-130 military aesthetic, scanlines |
+| `main.js` | HUD logic: WS client, canvas animation, gimbal smoothing |
+| `calibrate.html` | Calibration SPA: dual camera feeds, 3-step workflow |
+| `calibrate.css` | Calibration styles: jog controls, step tabs |
+| `calibrate.js` | Calibration logic: servo jog, LRF parser, save workflow |
+
+## Endpoints
+
+### HTTP
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | HUD interface |
+| `/calibrate` | GET | Calibration interface |
+| `/stream/mipi` | GET | MJPEG stream from libcamera-vid (1536×864@60) |
+| `/stream/usb` | GET | MJPEG stream from ffmpeg (1280×720@60) |
+| `/api/servo/center` | POST | Center both servos to 90° |
+| `/api/servo/angle` | POST | Set servo angles `{pan_deg, tilt_deg}` |
+| `/api/calibration/save` | POST | Save calibration to `config/calibration.json` |
+
+### WebSocket
+| Endpoint | Description |
+|----------|-------------|
+| `/ws` | HUD telemetry (150ms interval) |
+| `/ws/calib` | Calibration: servo state + LRF distance (~10Hz) |
 
 ## WebSocket Protocol
 
