@@ -763,9 +763,11 @@ hudWss.on('connection', (ws, req) => {
   hudClients.add(ws);
 
   ws.on('message', (raw) => {
+    console.log('[WS-HUD] Received raw:', raw.toString().slice(0, 100));
     let cmd;
     try {
       cmd = JSON.parse(raw.toString());
+      console.log('[WS-HUD] Parsed command:', cmd);
     } catch {
       console.warn('[WS-HUD] Bad JSON from client:', raw.toString().slice(0, 80));
       return;
