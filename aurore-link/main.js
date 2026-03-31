@@ -523,17 +523,27 @@ function updateGimbalSmoothing(timestamp) {
   if (!smoothingInitialized) {
     smoothingInitialized = true;
     console.log('[SMOOTH] Smoothing initialized, video:', videoEl ? videoEl.clientWidth + 'x' + videoEl.clientHeight : 'null');
+    console.log('[SMOOTH] Starting loop, SMOOTHING_ENABLED:', SMOOTHING_ENABLED);
   }
 
   if (!SMOOTHING_ENABLED) {
     // No smoothing - just use target directly
     currentYaw = targetYaw;
     currentPitch = targetPitch;
-    sendCmd({ type: 'freecam', az: currentYaw, el: currentPitch });
+    if (currentMode === 'FREECAM') {
+      console.log('[SMOOTH] No smoothing, sending:', { az: currentYaw, el: currentPitch });
+      sendCmd({ type: 'freecam', az: currentYaw, el: currentPitch });
+    }
   } else {
     const dt = lastSmoothTime ? (timestamp - lastSmoothTime) / 1000 : 0;
     lastSmoothTime = timestamp;
     
+    // Debug: log every 100 frames to avoid spam
+    commandFrameCount++;
+    if (commandFrameCount % 100 === 0) {
+      console.log('[SMOOTH] Loop running, mode:', currentMode, 'targetYaw:', targetYaw.toFixed(2), 'targetPitch:', targetPitch.toFixed(2));
+    }
+
     // Limit dt to prevent huge jumps after tab switch
     const deltaTime = Math.min(dt, 0.05); // Cap at 50ms
     
@@ -638,7 +648,9 @@ function updateGimbalSmoothing(timestamp) {
 }
 
 // Start smoothing loop
+console.log('[SMOOTH] Checking if should start loop, SMOOTHING_ENABLED:', SMOOTHING_ENABLED);
 if (SMOOTHING_ENABLED) {
+  console.log('[SMOOTH] Starting animation loop');
   requestAnimationFrame(updateGimbalSmoothing);
 }
 
