@@ -307,7 +307,7 @@ const MIME = {
 function securityHeaders() {
   return {
     'Content-Security-Policy':
-      "default-src 'self'; connect-src ws: wss:; font-src https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
+      "default-src 'self'; connect-src ws: wss: http: https:; font-src https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     'X-Frame-Options': 'DENY',
     'X-Content-Type-Options': 'nosniff',
     'X-XSS-Protection': '1; mode=block',
