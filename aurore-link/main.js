@@ -769,16 +769,20 @@ function clearTarget() {
 // Global keyboard event listener
 window.addEventListener('keydown', (e) => {
   // Prevent default for control keys
-  if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'Digit1', 'Digit2', 'Equal', 'Minus'].includes(e.code)) {
+  if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'Digit1', 'Digit2', 'KeyM', 'Equal', 'Minus'].includes(e.code)) {
     e.preventDefault();
   }
-  
+
   switch(e.code) {
     case 'Digit1':
       switchMode('AUTO');
       break;
     case 'Digit2':
       switchMode('FREECAM');
+      break;
+    case 'KeyM':
+      // Toggle between AUTO and FREECAM
+      switchMode(currentMode === 'AUTO' ? 'FREECAM' : 'AUTO');
       break;
     case 'KeyW':
     case 'KeyA':
