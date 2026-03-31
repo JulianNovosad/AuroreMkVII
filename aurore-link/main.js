@@ -349,10 +349,14 @@ const modeToggleBtn = document.getElementById('mode-toggle-btn');
 
 // Mode toggle button handler
 if (modeToggleBtn) {
+  console.log('[MODE] Button found, adding click handler');
   modeToggleBtn.addEventListener('click', () => {
+    console.log('[MODE] Button clicked, currentMode:', currentMode);
     const newMode = currentMode === 'AUTO' ? 'FREECAM' : 'AUTO';
     switchMode(newMode);
   });
+} else {
+  console.warn('[MODE] Button NOT found in DOM');
 }
 
 const JOY_MAX_AZ = 45;
@@ -768,6 +772,7 @@ function clearTarget() {
 
 // Global keyboard event listener
 window.addEventListener('keydown', (e) => {
+  console.log('[KEY] Key pressed:', e.code);
   // Prevent default for control keys
   if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'Digit1', 'Digit2', 'KeyM', 'Equal', 'Minus'].includes(e.code)) {
     e.preventDefault();
@@ -775,12 +780,15 @@ window.addEventListener('keydown', (e) => {
 
   switch(e.code) {
     case 'Digit1':
+      console.log('[MODE] Digit1 pressed, switching to AUTO');
       switchMode('AUTO');
       break;
     case 'Digit2':
+      console.log('[MODE] Digit2 pressed, switching to FREECAM');
       switchMode('FREECAM');
       break;
     case 'KeyM':
+      console.log('[MODE] KeyM pressed, toggling mode. currentMode:', currentMode);
       // Toggle between AUTO and FREECAM
       switchMode(currentMode === 'AUTO' ? 'FREECAM' : 'AUTO');
       break;
