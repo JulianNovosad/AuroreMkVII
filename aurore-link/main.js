@@ -69,7 +69,7 @@ let velocityPitch = 0;
 // Gimbal dynamics (MUST match real servo specs: 0.17s per 60°)
 const MAX_ANGULAR_VELOCITY = 353;    // 60° per 0.17s = 353°/sec max
 const MAX_ANGULAR_ACCELERATION = 2000; // 2000°/sec² for smooth accel/decel
-const SMOOTHING_ENABLED = true;
+const SMOOTHING_ENABLED = false;  // DISABLED FOR DEBUGGING - direct control
 
 // Servo latency simulation (real servos have ~70ms delay)
 const SERVO_LATENCY_MS = 70;
