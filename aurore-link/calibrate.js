@@ -218,9 +218,13 @@ function getCurrentUnlockedStep() {
 // ===========================================================================
 
 btnCenterServos.addEventListener('click', async () => {
+  console.log('[UI] Center Servos button clicked');
   try {
+    console.log('[Servo] Fetching /api/servo/center');
     const res = await fetch('/api/servo/center', { method: 'POST' });
+    console.log('[Servo] Response status:', res.status);
     const data = await res.json();
+    console.log('[Servo] Response data:', data);
     if (data.ok) {
       state.pan = data.pan_deg;
       state.tilt = data.tilt_deg;
@@ -230,6 +234,7 @@ btnCenterServos.addEventListener('click', async () => {
       showNotification('Failed to center servos: ' + data.error, 'error');
     }
   } catch (err) {
+    console.error('[Servo] Network error:', err);
     showNotification('Network error: ' + err.message, 'error');
   }
 });
@@ -247,6 +252,7 @@ document.querySelectorAll('#step-1 .btn-jog').forEach((btn) => {
   btn.addEventListener('click', async () => {
     const axis = btn.dataset.axis;
     const delta = parseInt(btn.dataset.delta, 10);
+    console.log('[UI] Jog button clicked:', axis, delta);
     
     if (axis === 'pan') {
       state.pan = Math.max(0, Math.min(180, state.pan + delta));
@@ -254,6 +260,7 @@ document.querySelectorAll('#step-1 .btn-jog').forEach((btn) => {
       state.tilt = Math.max(0, Math.min(180, state.tilt + delta));
     }
     
+    console.log('[Servo] New position:', { pan: state.pan, tilt: state.tilt });
     await sendServoAngle(state.pan, state.tilt);
     updateServoReadouts();
   });

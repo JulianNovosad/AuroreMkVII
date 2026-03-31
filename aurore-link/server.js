@@ -639,10 +639,16 @@ const server = http.createServer((req, res) => {
         }
       });
 
-      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.writeHead(200, { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      });
       res.end(JSON.stringify({ ok: true, pan_deg: 90, tilt_deg: 90 }));
     } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.writeHead(500, { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      });
       res.end(JSON.stringify({ error: err.message }));
     }
     return;
@@ -676,10 +682,16 @@ const server = http.createServer((req, res) => {
           }
         });
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(200, { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        });
         res.end(JSON.stringify({ ok: true, pan_deg: panClamped, tilt_deg: tiltClamped }));
       } catch (err) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.writeHead(400, { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        });
         res.end(JSON.stringify({ error: err.message }));
       }
     });
