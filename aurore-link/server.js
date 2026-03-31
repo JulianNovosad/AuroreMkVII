@@ -804,11 +804,18 @@ hudWss.on('connection', (ws, req) => {
         state.gimbalYaw = Math.max(-90, Math.min(90, state.gimbalYaw));
         state.gimbalPitch = Math.max(-10, Math.min(45, state.gimbalPitch));
 
-        // Write to actual servos
+        // Write to actual servos - convert from -90..90 / -10..45 to 0..180
+        // Note: Invert axes if servos are mounted backwards
+        const INVERT_PAN = false;   // Set true if pan direction is reversed
+        const INVERT_TILT = true;   // Set true if tilt direction is reversed (W moves down instead of up)
+        
+        const panAngle = (INVERT_PAN ? -state.gimbalYaw : state.gimbalYaw) + 90;
+        const tiltAngle = (INVERT_TILT ? -state.gimbalPitch : state.gimbalPitch) + 90;
+        
         try {
-          writeServoAngle(SERVO_PAN_CH, state.gimbalYaw + 90);  // Convert -90..90 to 0..180
-          writeServoAngle(SERVO_TILT_CH, state.gimbalPitch + 90);  // Convert -10..45 to 0..180
-          console.log(`[SERVO] Wrote pan=${(state.gimbalYaw + 90).toFixed(1)}° tilt=${(state.gimbalPitch + 90).toFixed(1)}°`);
+          writeServoAngle(SERVO_PAN_CH, panAngle);
+          writeServoAngle(SERVO_TILT_CH, tiltAngle);
+          console.log(`[SERVO] Wrote pan=${panAngle.toFixed(1)}° tilt=${tiltAngle.toFixed(1)}° (yaw=${state.gimbalYaw.toFixed(1)} pitch=${state.gimbalPitch.toFixed(1)})`);
         } catch (err) {
           console.error('[SERVO] Write failed:', err.message);
         }
