@@ -614,7 +614,9 @@ function updateGimbalSmoothing(timestamp) {
         currentYaw: currentYaw.toFixed(2),
         currentPitch: currentPitch.toFixed(2),
         targetYaw: targetYaw.toFixed(2),
-        targetPitch: targetPitch.toFixed(2)
+        targetPitch: targetPitch.toFixed(2),
+        errorYaw: errorYaw.toFixed(2),
+        errorPitch: errorPitch.toFixed(2)
       });
     }
 
