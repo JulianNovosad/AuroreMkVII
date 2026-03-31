@@ -66,14 +66,14 @@ let currentPitch = 0;
 let velocityYaw = 0;           // Current angular velocity (°/sec)
 let velocityPitch = 0;
 
-// Gimbal dynamics (MUST match real servo specs: 0.17s per 60°)
-const MAX_ANGULAR_VELOCITY = 180;     // 180°/sec max (slower, smoother)
-const MAX_ANGULAR_ACCELERATION = 500; // 500°/sec² (gentle accel/decel)
-const SMOOTHING_ENABLED = true;       // Re-enabled for smooth movement
+// Gimbal dynamics - tuned for smooth, jitter-free movement
+const MAX_ANGULAR_VELOCITY = 90;      // 90°/sec max (slow and smooth)
+const MAX_ANGULAR_ACCELERATION = 200; // 200°/sec² (very gentle)
+const SMOOTHING_ENABLED = true;
 
-// PD control gains for smooth motion
-const SMOOTH_Kp = 8;    // Lower = slower to reach target, smoother
-const SMOOTH_Kd = 0.15; // Higher = more damping, less overshoot
+// PD control gains - very low for smooth, non-jittery movement
+const SMOOTH_Kp = 4;    // Very low = slow approach, no overshoot
+const SMOOTH_Kd = 0.3;  // Higher = more damping, eliminates jitter
 
 // Servo latency simulation (real servos have ~70ms delay)
 const SERVO_LATENCY_MS = 70;
@@ -623,28 +623,24 @@ function updateGimbalSmoothing(timestamp) {
       latencyBufferPitch.shift();
     }
     
-    // Send with latency: use buffered position from 70ms ago
-    // If buffer not full yet, use current position
-    const sendYaw = latencyBufferYaw.length > 0 ? latencyBufferYaw[0].yaw : currentYaw;
-    const sendPitch = latencyBufferPitch.length > 0 ? latencyBufferPitch[0].pitch : currentPitch;
-    
-    // Debug: log buffer state every 50 frames
+    // Send current smoothed position directly (no artificial latency)
+    const sendYaw = currentYaw;
+    const sendPitch = currentPitch;
+
+    // Debug: log every 50 frames
     if (commandFrameCount % 50 === 0) {
-      console.log('[SMOOTH] Buffer state:', { 
-        bufferLen: latencyBufferYaw.length, 
-        sendYaw: sendYaw.toFixed(2), 
+      console.log('[SMOOTH] State:', {
+        sendYaw: sendYaw.toFixed(2),
         sendPitch: sendPitch.toFixed(2),
         currentYaw: currentYaw.toFixed(2),
         currentPitch: currentPitch.toFixed(2),
         targetYaw: targetYaw.toFixed(2),
-        targetPitch: targetPitch.toFixed(2),
-        errorYaw: errorYaw.toFixed(2),
-        errorPitch: errorPitch.toFixed(2)
+        targetPitch: targetPitch.toFixed(2)
       });
     }
 
-    // Throttle sends to ~60Hz to reduce choppiness
-    if (timestamp - lastSendTime >= 16.67) {
+    // Throttle sends to ~30Hz for smoother movement (less jitter)
+    if (timestamp - lastSendTime >= 33.33) {
       console.log('[SMOOTH] Check send:', { 
         mode: currentMode, 
         isFree: currentMode === 'FREECAM',
