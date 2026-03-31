@@ -67,9 +67,13 @@ let velocityYaw = 0;           // Current angular velocity (°/sec)
 let velocityPitch = 0;
 
 // Gimbal dynamics (MUST match real servo specs: 0.17s per 60°)
-const MAX_ANGULAR_VELOCITY = 353;    // 60° per 0.17s = 353°/sec max
-const MAX_ANGULAR_ACCELERATION = 2000; // 2000°/sec² for smooth accel/decel
-const SMOOTHING_ENABLED = false;  // DISABLED FOR DEBUGGING - direct control
+const MAX_ANGULAR_VELOCITY = 180;     // 180°/sec max (slower, smoother)
+const MAX_ANGULAR_ACCELERATION = 500; // 500°/sec² (gentle accel/decel)
+const SMOOTHING_ENABLED = true;       // Re-enabled for smooth movement
+
+// PD control gains for smooth motion
+const SMOOTH_Kp = 8;    // Lower = slower to reach target, smoother
+const SMOOTH_Kd = 0.15; // Higher = more damping, less overshoot
 
 // Servo latency simulation (real servos have ~70ms delay)
 const SERVO_LATENCY_MS = 70;
@@ -551,10 +555,10 @@ function updateGimbalSmoothing(timestamp) {
     const errorYaw = targetYaw - currentYaw;
     const errorPitch = targetPitch - currentPitch;
     
-    // PD control with higher gains for smooth motion
-    const Kp = 25;   // Proportional gain
-    const Kd = 0.08; // Derivative gain (damping)
-    
+    // PD control with tuned gains for smooth motion
+    const Kp = SMOOTH_Kp;
+    const Kd = SMOOTH_Kd;
+
     // Calculate derivative (rate of change of error)
     const derivYaw = (errorYaw - prevErrorYaw) / deltaTime;
     const derivPitch = (errorPitch - prevErrorPitch) / deltaTime;
