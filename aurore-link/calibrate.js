@@ -91,10 +91,11 @@ function connectWebSocket() {
   const host = window.location.host || 'localhost:8080';
   const wsUrl = `${protocol}//${host}/ws/calib`;
   
+  console.log('[WS] Connecting to:', wsUrl);
   state.ws = new WebSocket(wsUrl);
   
   state.ws.addEventListener('open', () => {
-    console.log('[WS] Connected to calibration WebSocket');
+    console.log('[WS] Connected');
     calStatus.textContent = 'WS: CONNECTED';
     calStatus.style.color = '#00ff00';
     state.wsReconnectDelay = 1000;
@@ -103,6 +104,7 @@ function connectWebSocket() {
   state.ws.addEventListener('message', (ev) => {
     try {
       const msg = JSON.parse(ev.data);
+      console.log('[WS] Message:', msg);
       handleWsMessage(msg);
     } catch (err) {
       console.warn('[WS] Bad JSON:', err);
@@ -119,6 +121,8 @@ function connectWebSocket() {
   
   state.ws.addEventListener('error', (err) => {
     console.error('[WS] Error:', err);
+    calStatus.textContent = 'WS: ERROR';
+    calStatus.style.color = '#ff4444';
   });
 }
 
@@ -405,17 +409,21 @@ btnSaveCameraOffset.addEventListener('click', () => {
 
 async function sendServoAngle(pan_deg, tilt_deg) {
   try {
+    console.log('[Servo] Sending:', { pan_deg, tilt_deg });
     const res = await fetch('/api/servo/angle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pan_deg, tilt_deg }),
     });
     const data = await res.json();
+    console.log('[Servo] Response:', data);
     if (!data.ok) {
       console.error('[Servo] Error:', data.error);
+      showNotification('Servo error: ' + data.error, 'error');
     }
   } catch (err) {
     console.error('[Servo] Network error:', err);
+    showNotification('Servo network error: ' + err.message, 'error');
   }
 }
 

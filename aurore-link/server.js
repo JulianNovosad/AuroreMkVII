@@ -561,11 +561,16 @@ const server = http.createServer((req, res) => {
       '-o', '-',
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
-    child.on('error', () => {
+    child.on('error', (err) => {
+      console.error('[MIPI] Spawn error:', err.message);
       if (!res.headersSent) {
         res.writeHead(503, { 'Content-Type': 'text/plain' });
-        res.end('FAIL: libcamera-vid not available');
+        res.end('FAIL: libcamera-vid not available - install with: sudo apt install libcamera-apps');
       }
+    });
+    
+    child.stderr.on('data', (data) => {
+      console.error('[MIPI] libcamera-vid:', data.toString().trim());
     });
 
     pipeAsMjpeg(res, child);
@@ -590,10 +595,19 @@ const server = http.createServer((req, res) => {
       'pipe:1',
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
-    child.on('error', () => {
+    child.on('error', (err) => {
+      console.error('[USB] Spawn error:', err.message);
       if (!res.headersSent) {
         res.writeHead(503, { 'Content-Type': 'text/plain' });
         res.end('FAIL: ffmpeg not available');
+      }
+    });
+    
+    child.stderr.on('data', (data) => {
+      // FFmpeg outputs a lot, only log errors
+      const str = data.toString();
+      if (str.includes('Error') || str.includes('Invalid')) {
+        console.error('[USB] ffmpeg:', str.trim());
       }
     });
 
@@ -862,8 +876,8 @@ process.on('SIGINT', () => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Aurore server running at http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Aurore server running at http://0.0.0.0:${PORT}`);
   console.log(`WebSocket endpoints:`);
   console.log(`  - HUD: ws://localhost:${PORT}/ws`);
   console.log(`  - Calibration: ws://localhost:${PORT}/ws/calib`);
