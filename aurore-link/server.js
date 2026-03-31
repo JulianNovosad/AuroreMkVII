@@ -551,7 +551,8 @@ const calibWss = new WebSocketServer({ noServer: true });
 const server = http.createServer((req, res) => {
   // MJPEG stream endpoints
   if (req.url === '/stream/mipi') {
-    const child = spawn('libcamera-vid', [
+    // Try rpicam-vid first (newer Pi), fall back to libcamera-vid
+    const child = spawn('rpicam-vid', [
       '--codec', 'mjpeg',
       '--width', '1536',
       '--height', '864',
@@ -565,12 +566,12 @@ const server = http.createServer((req, res) => {
       console.error('[MIPI] Spawn error:', err.message);
       if (!res.headersSent) {
         res.writeHead(503, { 'Content-Type': 'text/plain' });
-        res.end('FAIL: libcamera-vid not available - install with: sudo apt install libcamera-apps');
+        res.end('FAIL: rpicam-vid not available');
       }
     });
     
     child.stderr.on('data', (data) => {
-      console.error('[MIPI] libcamera-vid:', data.toString().trim());
+      console.error('[MIPI] rpicam-vid:', data.toString().trim());
     });
 
     pipeAsMjpeg(res, child);
