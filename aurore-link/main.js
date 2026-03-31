@@ -345,6 +345,15 @@ function sendCmd(cmd) {
 const joystick = document.getElementById('joystick');
 const joyDot   = document.getElementById('joy-dot');
 const joyReadout = document.getElementById('joy-readout');
+const modeToggleBtn = document.getElementById('mode-toggle-btn');
+
+// Mode toggle button handler
+if (modeToggleBtn) {
+  modeToggleBtn.addEventListener('click', () => {
+    const newMode = currentMode === 'AUTO' ? 'FREECAM' : 'AUTO';
+    switchMode(newMode);
+  });
+}
 
 const JOY_MAX_AZ = 45;
 const JOY_MAX_EL = 45;
@@ -469,7 +478,26 @@ function switchMode(newMode) {
   if (newMode === 'AUTO' || newMode === 'FREECAM') {
     currentMode = newMode; // Update local state immediately
     sendCmd({ type: 'mode_switch', mode: newMode });
-    showNotification(`MODE: ${newMode} — ${newMode === 'AUTO' ? 'Click to target' : 'WASD to slew, R to center, +/-/wheel zoom'}`);
+    
+    // Update mode indicator
+    const modeInd = document.getElementById('mode-ind');
+    const modeBtn = document.getElementById('mode-toggle-btn');
+    
+    if (newMode === 'FREECAM') {
+      if (modeInd) modeInd.textContent = '[X] FREECAM';
+      if (modeBtn) {
+        modeBtn.textContent = 'MODE: FREECAM (Press M)';
+        modeBtn.classList.add('active');
+      }
+    } else {
+      if (modeInd) modeInd.textContent = '[ ] AUTO';
+      if (modeBtn) {
+        modeBtn.textContent = 'MODE: AUTO (Press M)';
+        modeBtn.classList.remove('active');
+      }
+    }
+    
+    showNotification(`MODE: ${newMode} — ${newMode === 'AUTO' ? 'Click to target' : 'WASD to slew, R to center'}`);
   }
 }
 

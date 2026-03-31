@@ -444,6 +444,30 @@ html, body {
   color: var(--ac130-dim);
 }
 
+/* --- Mode toggle button --------------------------------- */
+.mode-btn {
+  margin-top: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: var(--ac130-white);
+  padding: 6px 12px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: var(--ac130-white);
+}
+
+.mode-btn.active {
+  background: rgba(0, 255, 0, 0.2);
+  border-color: #00ff00;
+  color: #00ff00;
+}
+
 /* --- Scrollbar ------------------------------------------ */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: #0a0a0a; }
