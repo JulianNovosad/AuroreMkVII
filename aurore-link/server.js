@@ -806,7 +806,7 @@ hudWss.on('connection', (ws, req) => {
 
         // Write to actual servos - convert from -90..90 / -10..45 to 0..180
         // Note: Invert axes if servos are mounted backwards
-        const INVERT_PAN = false;   // Set true if pan direction is reversed
+        const INVERT_PAN = true;    // Set true if pan direction is reversed (A/D swapped)
         const INVERT_TILT = true;   // Set true if tilt direction is reversed (W moves down instead of up)
         
         const panAngle = (INVERT_PAN ? -state.gimbalYaw : state.gimbalYaw) + 90;
