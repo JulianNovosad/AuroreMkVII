@@ -551,8 +551,8 @@ const calibWss = new WebSocketServer({ noServer: true });
 const server = http.createServer((req, res) => {
   // MJPEG stream endpoints
   if (req.url === '/stream/mipi') {
-    // Try rpicam-vid first (newer Pi), fall back to libcamera-vid
-    const child = spawn('rpicam-vid', [
+    // rpicam-vid needs sudo for camera access
+    const child = spawn('sudo', ['rpicam-vid',
       '--codec', 'mjpeg',
       '--width', '1536',
       '--height', '864',
@@ -571,7 +571,10 @@ const server = http.createServer((req, res) => {
     });
     
     child.stderr.on('data', (data) => {
-      console.error('[MIPI] rpicam-vid:', data.toString().trim());
+      const str = data.toString().trim();
+      if (str.includes('ERROR') || str.includes('Failed')) {
+        console.error('[MIPI] rpicam-vid:', str);
+      }
     });
 
     pipeAsMjpeg(res, child);
