@@ -1,15 +1,15 @@
 /**
  * Aurore MkVII — Remote Control Station
- * main.js: WebSocket client, canvas animation, HUD updates
+ * AC-130 Military HUD Aesthetic
+ * main.js: WebSocket client, real camera stream, HUD updates
  */
 
 'use strict';
 
 // ---------------------------------------------------------------------------
-// DOM refs — Video / Canvas
+// DOM refs — Video Stream
 // ---------------------------------------------------------------------------
-const canvas  = document.getElementById('video');
-const ctx     = canvas.getContext('2d');
+const videoEl = document.getElementById('video');
 
 // ---------------------------------------------------------------------------
 // DOM refs — HUD Overlay Quadrants
@@ -86,97 +86,6 @@ let smoothingInitialized = false;  // Track if smoothing has started
 let holdInterval = null;
 
 // ---------------------------------------------------------------------------
-// Canvas sizing — match display size for crisp render
-// ---------------------------------------------------------------------------
-const SCENE_W = 1536;
-const SCENE_H = 864;
-
-function resizeCanvas() {
-  const area = document.getElementById('video-area');
-  const rect = area.getBoundingClientRect();
-  canvas.width  = rect.width;
-  canvas.height = rect.height;
-}
-
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
-
-// Scale from scene coords (1536×864) to canvas display coords
-function scaleX(x) { return x * canvas.width  / SCENE_W; }
-function scaleY(y) { return y * canvas.height / SCENE_H; }
-
-// ---------------------------------------------------------------------------
-// Canvas — fake thermal video (mock for development)
-// ---------------------------------------------------------------------------
-
-// Simple LCG noise
-let _seed = 42;
-function lcgRand() {
-  _seed = (_seed * 1664525 + 1013904223) & 0xffffffff;
-  return (_seed >>> 0) / 0xffffffff;
-}
-
-// Each "target" blob wanders on a Lissajous figure
-const blobs = [
-  { ax: 0.8, ay: 0.7, px: 0.5, py: 0.5, fx: 1.3, fy: 0.9, phase: 0 },
-  { ax: 0.3, ay: 0.2, px: 0.2, py: 0.3, fx: 0.7, fy: 1.1, phase: 1.2 },
-  { ax: 0.2, ay: 0.15, px: 0.75, py: 0.7, fx: 1.7, fy: 0.6, phase: 2.4 },
-];
-
-let blobT = 0;
-let trackState = { valid: false, cx: 768, cy: 432 };
-
-function drawThermal(timestamp) {
-  const W = canvas.width;
-  const H = canvas.height;
-  blobT = timestamp * 0.0012;
-
-  // Dark thermal background — redraw with fade for motion blur effect
-  ctx.fillStyle = 'rgba(10, 12, 10, 0.85)';
-  ctx.fillRect(0, 0, W, H);
-
-  // Noise grain
-  const imgData = ctx.createImageData(W, H);
-  const d = imgData.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const v = Math.floor(lcgRand() * 18);
-    d[i] = v; d[i+1] = v + 2; d[i+2] = v; d[i+3] = 255;
-  }
-  ctx.putImageData(imgData, 0, 0);
-
-  // Draw blobs — crisper, less glow
-  blobs.forEach((b, idx) => {
-    const t = blobT + b.phase;
-    let bx, by;
-
-    // If track is valid and this is the primary blob (idx===0), snap to track position
-    if (idx === 0 && trackState.valid) {
-      bx = scaleX(trackState.cx);
-      by = scaleY(trackState.cy);
-    } else {
-      bx = (b.px + Math.sin(t * b.fx) * b.ax * 0.3) * W;
-      by = (b.py + Math.sin(t * b.fy) * b.ay * 0.5) * H;
-    }
-
-    const radius = W * 0.03; // Smaller radius for crisper look
-    const grad = ctx.createRadialGradient(bx, by, 0, bx, by, radius);
-    grad.addColorStop(0,   'rgba(255, 255, 240, 0.9)');
-    grad.addColorStop(0.4, 'rgba(180, 200, 180, 0.4)');
-    grad.addColorStop(1,   'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.ellipse(bx, by, radius, radius * 0.65, 0, 0, Math.PI * 2);
-    ctx.fill();
-  });
-}
-
-function animationLoop(ts) {
-  drawThermal(ts);
-  requestAnimationFrame(animationLoop);
-}
-requestAnimationFrame(animationLoop);
-
-// ---------------------------------------------------------------------------
 // HUD Update Functions
 // ---------------------------------------------------------------------------
 
@@ -220,8 +129,9 @@ function triggerGlitch() {
 function updateGimbalPipper(gimbal) {
   // Offset crosshair shows gimbal pointing position relative to camera center
   // Gimbal yaw/pitch in degrees; convert to pixel offset
-  const W = canvas.width;
-  const H = canvas.height;
+  const videoEl = document.getElementById('video');
+  const W = videoEl.clientWidth;
+  const H = videoEl.clientHeight;
   const cx = W / 2;
   const cy = H / 2;
 
@@ -252,30 +162,35 @@ function updateTrackBrackets(track) {
     bracketsVisible = false;
     return;
   }
+
+  const videoEl = document.getElementById('video');
+  const W = videoEl.clientWidth;
+  const H = videoEl.clientHeight;
   
   // Detect lock transition (brackets transitioning from hidden to visible)
   if (!bracketsVisible) {
     triggerGlitch(); // Glitch feedback on new lock
     bracketsVisible = true;
   }
-  
-  const W = canvas.width;
-  const H = canvas.height;
-  const tx = scaleX(track.cx);
-  const ty = scaleY(track.cy);
-  const tw = scaleX(track.w);
-  const th = scaleY(track.h);
-  
+
+  // Scale track coordinates (from 1536x864 to video element size)
+  const tx = (track.cx / 1536) * W;
+  const ty = (track.cy / 864) * H;
+  const tw = (track.w / 1536) * W;
+  const th = (track.h / 864) * H;
+
+
   const halfW = tw / 2;
   const halfH = th / 2;
   const bracketSize = 20; // SVG bracket size
-  
+
   // Top-Left bracket (position at corner, bracket extends inward)
   bracketTL.style.display = 'block';
   bracketTL.style.left = (tx - halfW) + 'px';
   bracketTL.style.top  = (ty - halfH) + 'px';
   bracketTL.classList.add('locked'); // Add locked state color
-  
+
+
   // Top-Right bracket
   bracketTR.style.display = 'block';
   bracketTR.style.left = (tx + halfW - bracketSize) + 'px';
