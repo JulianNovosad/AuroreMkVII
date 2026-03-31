@@ -804,6 +804,15 @@ hudWss.on('connection', (ws, req) => {
         state.gimbalYaw = Math.max(-90, Math.min(90, state.gimbalYaw));
         state.gimbalPitch = Math.max(-10, Math.min(45, state.gimbalPitch));
 
+        // Write to actual servos
+        try {
+          writeServoAngle(SERVO_PAN_CH, state.gimbalYaw + 90);  // Convert -90..90 to 0..180
+          writeServoAngle(SERVO_TILT_CH, state.gimbalPitch + 90);  // Convert -10..45 to 0..180
+          console.log(`[SERVO] Wrote pan=${(state.gimbalYaw + 90).toFixed(1)}° tilt=${(state.gimbalPitch + 90).toFixed(1)}°`);
+        } catch (err) {
+          console.error('[SERVO] Write failed:', err.message);
+        }
+
         console.log(`[CMD] freecam az=${az.toFixed(2)} el=${el.toFixed(2)} → yaw=${state.gimbalYaw.toFixed(2)} pitch=${state.gimbalPitch.toFixed(2)}`);
         break;
       }
