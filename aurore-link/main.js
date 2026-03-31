@@ -329,11 +329,12 @@ function connect() {
 }
 
 function sendCmd(cmd) {
+  console.log('[WS] sendCmd called:', cmd, 'ws:', ws ? 'exists' : 'null', 'readyState:', ws ? ws.readyState : 'N/A');
   if (ws && ws.readyState === WebSocket.OPEN) {
-    console.log('[WS] Sending command:', cmd);
+    console.log('[WS] Sending:', JSON.stringify(cmd));
     ws.send(JSON.stringify(cmd));
   } else {
-    console.warn('[WS] WebSocket not open, cannot send:', cmd, 'readyState:', ws ? ws.readyState : 'null');
+    console.error('[WS] Cannot send - WebSocket not open. readyState:', ws ? ws.readyState : 'null');
   }
 }
 
@@ -596,6 +597,7 @@ function updateGimbalSmoothing(timestamp) {
       if (currentMode === 'FREECAM' &&
           typeof sendYaw === 'number' && typeof sendPitch === 'number' &&
           isFinite(sendYaw) && isFinite(sendPitch)) {
+        console.log('[SMOOTH] Sending freecam:', { az: sendYaw, el: sendPitch, mode: currentMode });
         sendCmd({ type: 'freecam', az: sendYaw, el: sendPitch });
         lastSendTime = timestamp;
 
