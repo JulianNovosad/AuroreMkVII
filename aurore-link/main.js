@@ -541,7 +541,7 @@ function updateGimbalSmoothing(timestamp) {
     // Debug: log every 100 frames to avoid spam
     commandFrameCount++;
     if (commandFrameCount % 100 === 0) {
-      console.log('[SMOOTH] Loop running, mode:', currentMode, 'targetYaw:', targetYaw.toFixed(2), 'targetPitch:', targetPitch.toFixed(2));
+      console.log('[SMOOTH] Loop running, mode:', currentMode, 'targetYaw:', targetYaw.toFixed(2), 'targetPitch:', targetPitch.toFixed(2), 'accumulatedYaw:', accumulatedYaw.toFixed(2), 'accumulatedPitch:', accumulatedPitch.toFixed(2));
     }
 
     // Limit dt to prevent huge jumps after tab switch
@@ -656,9 +656,11 @@ if (SMOOTHING_ENABLED) {
 
 // Gimbal control command
 function sendGimbalCommand(azDelta, elDelta) {
+  console.log('[GIMBAL] sendGimbalCommand called:', { azDelta, elDelta });
   // Accumulate deltas for absolute position
   accumulatedYaw += azDelta;
   accumulatedPitch += elDelta;
+  console.log('[GIMBAL] After accumulate:', { accumulatedYaw, accumulatedPitch });
 
   // Clamp to gimbal limits (MUST match C++: src/actuation/gimbal_controller.hpp)
   accumulatedYaw = Math.max(GIMBAL_YAW_MIN, Math.min(GIMBAL_YAW_MAX, accumulatedYaw));
@@ -667,6 +669,7 @@ function sendGimbalCommand(azDelta, elDelta) {
   // Set target for smoothing
   targetYaw = accumulatedYaw;
   targetPitch = accumulatedPitch;
+  console.log('[GIMBAL] After set target:', { targetYaw, targetPitch });
 }
 
 // Key event handlers
