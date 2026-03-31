@@ -600,6 +600,19 @@ function updateGimbalSmoothing(timestamp) {
     // If buffer not full yet, use current position
     const sendYaw = latencyBufferYaw.length > 0 ? latencyBufferYaw[0].yaw : currentYaw;
     const sendPitch = latencyBufferPitch.length > 0 ? latencyBufferPitch[0].pitch : currentPitch;
+    
+    // Debug: log buffer state every 50 frames
+    if (commandFrameCount % 50 === 0) {
+      console.log('[SMOOTH] Buffer state:', { 
+        bufferLen: latencyBufferYaw.length, 
+        sendYaw: sendYaw.toFixed(2), 
+        sendPitch: sendPitch.toFixed(2),
+        currentYaw: currentYaw.toFixed(2),
+        currentPitch: currentPitch.toFixed(2),
+        targetYaw: targetYaw.toFixed(2),
+        targetPitch: targetPitch.toFixed(2)
+      });
+    }
 
     // Throttle sends to ~60Hz to reduce choppiness
     if (timestamp - lastSendTime >= 16.67) {
