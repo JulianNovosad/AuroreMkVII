@@ -683,6 +683,12 @@ function sendGimbalCommand(azDelta, elDelta) {
   targetYaw = accumulatedYaw;
   targetPitch = accumulatedPitch;
   console.log('[GIMBAL] After set target:', { targetYaw, targetPitch });
+  
+  // If smoothing is disabled, send immediately
+  if (!SMOOTHING_ENABLED) {
+    console.log('[GIMBAL] Smoothing disabled, sending immediately:', { az: targetYaw, el: targetPitch });
+    sendCmd({ type: 'freecam', az: targetYaw, el: targetPitch });
+  }
 }
 
 // Key event handlers
