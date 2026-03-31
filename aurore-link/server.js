@@ -589,12 +589,15 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // USB camera may not support MJPEG, use YUYV and let ffmpeg convert
     const child = spawn('ffmpeg', [
       '-f', 'v4l2',
-      '-input_format', 'mjpeg',
-      '-framerate', '60',
-      '-video_size', '1280x720',
+      '-framerate', '30',
+      '-video_size', '640x480',
       '-i', usbDev,
+      '-vf', 'format=yuv420p',
+      '-c:v', 'mjpeg',
+      '-q:v', '3',
       '-f', 'mjpeg',
       'pipe:1',
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -610,7 +613,7 @@ const server = http.createServer((req, res) => {
     child.stderr.on('data', (data) => {
       // FFmpeg outputs a lot, only log errors
       const str = data.toString();
-      if (str.includes('Error') || str.includes('Invalid')) {
+      if (str.includes('Error') || str.includes('Invalid') || str.includes('failed')) {
         console.error('[USB] ffmpeg:', str.trim());
       }
     });
