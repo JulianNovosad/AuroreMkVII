@@ -514,7 +514,7 @@ function updateGimbalSmoothing(timestamp) {
   // Mark smoothing as initialized on first run
   if (!smoothingInitialized) {
     smoothingInitialized = true;
-    console.log('[SMOOTH] Smoothing initialized, canvas:', canvas ? canvas.width + 'x' + canvas.height : 'null');
+    console.log('[SMOOTH] Smoothing initialized, video:', videoEl ? videoEl.clientWidth + 'x' + videoEl.clientHeight : 'null');
   }
 
   if (!SMOOTHING_ENABLED) {
@@ -592,9 +592,9 @@ function updateGimbalSmoothing(timestamp) {
         lastSendTime = timestamp;
 
         // Update pipper display directly from smoothing loop
-        if (pipperLead && canvas && canvas.width > 0 && canvas.height > 0) {
-          const W = canvas.width;
-          const H = canvas.height;
+        if (pipperLead && videoEl && videoEl.clientWidth > 0 && videoEl.clientHeight > 0) {
+          const W = videoEl.clientWidth;
+          const H = videoEl.clientHeight;
           const cx = W / 2;
           const cy = H / 2;
           const degScaleX = W / 66;
@@ -733,9 +733,9 @@ function adjustZoom(delta) {
 
 // Target assignment
 function assignTargetAtPosition(screenX, screenY) {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = SCENE_W / rect.width;
-  const scaleY = SCENE_H / rect.height;
+  const rect = videoEl.getBoundingClientRect();
+  const scaleX = 1536 / rect.width;
+  const scaleY = 864 / rect.height;
 
   const frameX = (screenX - rect.left) * scaleX;
   const frameY = (screenY - rect.top) * scaleY;
@@ -843,8 +843,11 @@ window.addEventListener('wheel', (e) => {
   adjustZoom(delta);
 }, { passive: false });
 
+// Track current mode
+let currentMode = 'AUTO';
+
 // Click-to-target
-canvas.addEventListener('mousedown', (e) => {
+videoEl.addEventListener('mousedown', (e) => {
   if (e.button === 0) { // Left click
     if (currentMode === 'AUTO') {
       assignTargetAtPosition(e.clientX, e.clientY);
@@ -855,38 +858,15 @@ canvas.addEventListener('mousedown', (e) => {
   }
 });
 
-// Block context menu on canvas
-canvas.addEventListener('contextmenu', (e) => {
+// Block context menu on video
+videoEl.addEventListener('contextmenu', (e) => {
   e.preventDefault();
 });
 
-// Track current mode
-let currentMode = 'AUTO';
 let previousMode = 'AUTO';
 let bracketsVisible = false; // Track if brackets are currently shown (locked)
-
-// Override mode indicator update to track mode
-const originalUpdateHUD = typeof updateHUD !== 'undefined' ? updateHUD : null;
-
-// ---------------------------------------------------------------------------
-// Initialize pipper at center on load
-// ---------------------------------------------------------------------------
-function initPipper() {
-  if (pipperLead && canvas && canvas.width > 0 && canvas.height > 0) {
-    const W = canvas.width;
-    const H = canvas.height;
-    const cx = W / 2;
-    const cy = H / 2;
-    pipperLead.style.left = (cx - 20) + 'px';
-    pipperLead.style.top  = (cy - 20) + 'px';
-    pipperLead.style.display = 'block';
-    console.log('[INIT] Pipper initialized at center:', cx, cy);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
-resizeCanvas();  // Ensure canvas is sized
-initPipper();    // Initialize pipper at center
 connect();
