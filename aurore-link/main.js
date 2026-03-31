@@ -592,8 +592,9 @@ function updateGimbalSmoothing(timestamp) {
 
     // Throttle sends to ~60Hz to reduce choppiness
     if (timestamp - lastSendTime >= 16.67) {
-      // Only send if values are valid numbers
-      if (typeof sendYaw === 'number' && typeof sendPitch === 'number' && 
+      // Only send if values are valid numbers AND we're in FREECAM mode
+      if (currentMode === 'FREECAM' &&
+          typeof sendYaw === 'number' && typeof sendPitch === 'number' &&
           isFinite(sendYaw) && isFinite(sendPitch)) {
         sendCmd({ type: 'freecam', az: sendYaw, el: sendPitch });
         lastSendTime = timestamp;
@@ -785,6 +786,7 @@ function clearTarget() {
 }
 
 // Global keyboard event listener
+console.log('[KEYBOARD] Adding keydown listener');
 window.addEventListener('keydown', (e) => {
   console.log('[KEY] Key pressed:', e.code);
   // Prevent default for control keys
