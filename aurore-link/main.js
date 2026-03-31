@@ -334,7 +334,10 @@ function connect() {
 
 function sendCmd(cmd) {
   if (ws && ws.readyState === WebSocket.OPEN) {
+    console.log('[WS] Sending command:', cmd);
     ws.send(JSON.stringify(cmd));
+  } else {
+    console.warn('[WS] WebSocket not open, cannot send:', cmd, 'readyState:', ws ? ws.readyState : 'null');
   }
 }
 
@@ -649,11 +652,16 @@ function sendGimbalCommand(azDelta, elDelta) {
 
 // Key event handlers
 function handleWASDKey(key, isPressed) {
-  if (currentMode !== 'FREECAM') return;
-  
+  console.log('[WASD] handleWASDKey called:', key, isPressed, 'currentMode:', currentMode);
+  if (currentMode !== 'FREECAM') {
+    console.log('[WASD] Not in FREECAM mode, ignoring');
+    return;
+  }
+
   const now = Date.now();
-  
+
   if (isPressed) {
+    console.log('[WASD] Key pressed, stopping hold slew');
     // Stop any existing hold interval first
     stopHoldSlew();
     
@@ -685,12 +693,14 @@ function handleWASDKey(key, isPressed) {
 }
 
 function applyGimbalDelta(key, delta) {
+  console.log('[WASD] applyGimbalDelta:', key, delta);
   switch(key) {
     case 'KeyW': sendGimbalCommand(0, delta); break;      // Pitch up
     case 'KeyS': sendGimbalCommand(0, -delta); break;     // Pitch down
     case 'KeyA': sendGimbalCommand(-delta, 0); break;     // Yaw left
     case 'KeyD': sendGimbalCommand(delta, 0); break;      // Yaw right
   }
+  console.log('[WASD] After sendGimbalCommand:', { targetYaw, targetPitch, accumulatedYaw, accumulatedPitch });
 }
 
 function startHoldSlew(key) {
