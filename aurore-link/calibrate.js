@@ -136,13 +136,17 @@ function handleWsMessage(msg) {
     state.tilt = msg.tilt_deg;
     updateServoReadouts();
   }
-  
+
   // Update LRF state
   if (typeof msg.lrf_mm === 'number') {
     state.lrfDistanceMm = msg.lrf_mm;
     updateLrfDisplay();
+    // Enable Mark Aligned button when we have LRF reading
+    if (btnMarkAligned && btnMarkAligned.disabled) {
+      btnMarkAligned.disabled = false;
+    }
   }
-  
+
   // Error handling
   if (msg.error === 'lrf_unavailable') {
     console.error('[LRF] Unavailable:', msg.detail);
@@ -229,7 +233,9 @@ btnCenterServos.addEventListener('click', async () => {
       state.pan = data.pan_deg;
       state.tilt = data.tilt_deg;
       updateServoReadouts();
-      showNotification('Servos centered to 90°/90°', 'success');
+      // Enable the "Done" button after centering
+      btnStep1Done.disabled = false;
+      showNotification('Servos centered to 90°/90° — click "Done" to continue', 'success');
     } else {
       showNotification('Failed to center servos: ' + data.error, 'error');
     }
@@ -263,6 +269,8 @@ document.querySelectorAll('#step-1 .btn-jog').forEach((btn) => {
     console.log('[Servo] New position:', { pan: state.pan, tilt: state.tilt });
     await sendServoAngle(state.pan, state.tilt);
     updateServoReadouts();
+    // Enable the "Done" button after any manual adjustment
+    btnStep1Done.disabled = false;
   });
 });
 
