@@ -546,12 +546,12 @@ function updateGimbalSmoothing(timestamp) {
     currentYaw += alpha * (targetYaw - currentYaw);
     currentPitch += alpha * (targetPitch - currentPitch);
     
-    // Send smoothed position at 30Hz
+    // Send smoothed position at 30Hz (both AUTO and FREECAM modes)
     const sendYaw = currentYaw;
     const sendPitch = currentPitch;
     
     if (timestamp - lastSendTime >= 33.33) {
-      if (currentMode === 'FREECAM' && isFinite(sendYaw) && isFinite(sendPitch)) {
+      if (isFinite(sendYaw) && isFinite(sendPitch)) {
         sendCmd({ type: 'freecam', az: sendYaw, el: sendPitch });
         lastSendTime = timestamp;
       }
