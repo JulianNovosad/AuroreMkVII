@@ -528,6 +528,10 @@ function updateGimbalSmoothing(timestamp) {
     smoothingInitialized = true;
     console.log('[SMOOTH] Smoothing initialized, video:', videoEl ? videoEl.clientWidth + 'x' + videoEl.clientHeight : 'null');
     console.log('[SMOOTH] Starting loop, SMOOTHING_ENABLED:', SMOOTHING_ENABLED);
+    // Initialize current position to match target (no sudden jump)
+    currentYaw = targetYaw;
+    currentPitch = targetPitch;
+    lastSmoothTime = timestamp;
   }
 
   if (!SMOOTHING_ENABLED) {
@@ -541,6 +545,13 @@ function updateGimbalSmoothing(timestamp) {
   } else {
     const dt = lastSmoothTime ? (timestamp - lastSmoothTime) / 1000 : 0;
     lastSmoothTime = timestamp;
+    
+    // Guard against NaN and invalid dt
+    if (!dt || dt <= 0 || dt > 0.1) {
+      // Skip this frame if dt is invalid (first frame or tab switch)
+      requestAnimationFrame(updateGimbalSmoothing);
+      return;
+    }
     
     // Debug: log every 100 frames to avoid spam
     commandFrameCount++;
@@ -562,29 +573,41 @@ function updateGimbalSmoothing(timestamp) {
     // Calculate derivative (rate of change of error)
     const derivYaw = (errorYaw - prevErrorYaw) / deltaTime;
     const derivPitch = (errorPitch - prevErrorPitch) / deltaTime;
-    
+
     prevErrorYaw = errorYaw;
     prevErrorPitch = errorPitch;
-    
+
     // PD output = proportional + derivative
     let cmdVelocityYaw = Kp * errorYaw + Kd * derivYaw;
     let cmdVelocityPitch = Kp * errorPitch + Kd * derivPitch;
+    
+    // Guard against NaN
+    if (!isFinite(cmdVelocityYaw)) cmdVelocityYaw = 0;
+    if (!isFinite(cmdVelocityPitch)) cmdVelocityPitch = 0;
     
     // Apply acceleration limits for smoothness
     const maxAccelDt = MAX_ANGULAR_ACCELERATION * deltaTime;
     const accelYaw = cmdVelocityYaw - velocityYaw;
     const accelPitch = cmdVelocityPitch - velocityPitch;
-    
+
     velocityYaw += Math.max(-maxAccelDt, Math.min(maxAccelDt, accelYaw));
     velocityPitch += Math.max(-maxAccelDt, Math.min(maxAccelDt, accelPitch));
-    
+
     // Clamp velocity to max
     velocityYaw = Math.max(-MAX_ANGULAR_VELOCITY, Math.min(MAX_ANGULAR_VELOCITY, velocityYaw));
     velocityPitch = Math.max(-MAX_ANGULAR_VELOCITY, Math.min(MAX_ANGULAR_VELOCITY, velocityPitch));
     
+    // Guard against NaN in velocity
+    if (!isFinite(velocityYaw)) velocityYaw = 0;
+    if (!isFinite(velocityPitch)) velocityPitch = 0;
+
     // Update position
     currentYaw += velocityYaw * deltaTime;
     currentPitch += velocityPitch * deltaTime;
+    
+    // Guard against NaN in position
+    if (!isFinite(currentYaw)) currentYaw = targetYaw;
+    if (!isFinite(currentPitch)) currentPitch = targetPitch;
     
     // Snap to target if very close
     if (Math.abs(errorYaw) < 0.01) currentYaw = targetYaw;
