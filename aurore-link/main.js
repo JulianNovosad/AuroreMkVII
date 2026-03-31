@@ -251,14 +251,10 @@ function updateHUD(s) {
 
     // Update track brackets
     updateTrackBrackets(s.track);
-
-    // Update blob snap for thermal viz
-    trackState = { valid: true, cx: s.track.cx, cy: s.track.cy };
   } else {
     rangeEl.textContent = 'RNG ---M';
     trkConfEl.textContent = 'TRK --';
     updateTrackBrackets({ valid: false });
-    trackState.valid = false;
   }
 
   // Update gimbal pipper (offset crosshair shows gimbal position)
@@ -411,7 +407,11 @@ joystick.addEventListener('mousedown', (e) => {
   joyActive = true;
   joystick.classList.add('active');
   updateJoyDot(e.clientX, e.clientY);
-  joyInterval = setInterval(() => sendCmd({ type: 'freecam', az: joyAz, el: joyEl }), 100);
+  joyInterval = setInterval(() => {
+    if (joyActive && currentMode === 'FREECAM') {
+      sendCmd({ type: 'freecam', az: joyAz, el: joyEl });
+    }
+  }, 100);
 });
 window.addEventListener('mousemove', (e) => {
   if (!joyActive) return;
@@ -425,7 +425,11 @@ joystick.addEventListener('touchstart', (e) => {
   joystick.classList.add('active');
   const t = e.touches[0];
   updateJoyDot(t.clientX, t.clientY);
-  joyInterval = setInterval(() => sendCmd({ type: 'freecam', az: joyAz, el: joyEl }), 100);
+  joyInterval = setInterval(() => {
+    if (joyActive && currentMode === 'FREECAM') {
+      sendCmd({ type: 'freecam', az: joyAz, el: joyEl });
+    }
+  }, 100);
 }, { passive: false });
 window.addEventListener('touchmove', (e) => {
   if (!joyActive) return;
