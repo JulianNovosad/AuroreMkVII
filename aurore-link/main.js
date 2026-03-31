@@ -687,34 +687,31 @@ function adjustZoom(delta) {
 // Target assignment
 function assignTargetAtPosition(screenX, screenY) {
   const rect = videoEl.getBoundingClientRect();
-  const scaleX = 1536 / rect.width;
-  const scaleY = 864 / rect.height;
-
-  const frameX = (screenX - rect.left) * scaleX;
-  const frameY = (screenY - rect.top) * scaleY;
-
-  // Convert pixel position to gimbal angles
-  // Center of screen = (0°, 0°)
-  // RPI Cam Module 3: 66° horizontal FOV, 41° vertical FOV
-  const centerX = rect.width / 2;
-  const centerY = rect.height / 2;
-  const offsetX = screenX - centerX;
-  const offsetY = screenY - centerY;
   
-  // Calculate gimbal angles based on click position
-  const yaw = (offsetX / centerX) * 33;  // ±33° (half of 66° horizontal FOV)
-  const pitch = -(offsetY / centerY) * 20.5;  // ±20.5° (half of 41° vertical FOV), negative because Y is inverted
+  // Calculate click position relative to center of screen
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  const offsetX = screenX - centerX;  // Positive = right, Negative = left
+  const offsetY = screenY - centerY;  // Positive = down, Negative = up
+  
+  // RPI Cam Module 3: 66° horizontal FOV, 41° vertical FOV
+  // Convert pixel offset to degrees
+  const yaw = (offsetX / (rect.width / 2)) * 33;   // ±33° (half of 66°)
+  const pitch = -(offsetY / (rect.height / 2)) * 20.5;  // ±20.5° (half of 41°), negative because Y is inverted
   
   // Clamp to gimbal limits
   const clampedYaw = Math.max(GIMBAL_YAW_MIN, Math.min(GIMBAL_YAW_MAX, yaw));
   const clampedPitch = Math.max(GIMBAL_PITCH_MIN, Math.min(GIMBAL_PITCH_MAX, pitch));
+  
+  console.log('[CLICK] Screen:', { x: screenX, y: screenY }, 'Offset:', { x: offsetX.toFixed(0), y: offsetY.toFixed(0) });
+  console.log('[CLICK] Angles:', { yaw: yaw.toFixed(1), pitch: pitch.toFixed(1), clampedYaw: clampedYaw.toFixed(1), clampedPitch: clampedPitch.toFixed(1) });
 
   // Update accumulated position and target for smoothing
   accumulatedYaw = clampedYaw;
   accumulatedPitch = clampedPitch;
   targetYaw = clampedYaw;
   targetPitch = clampedPitch;
-  
+
   showNotification(`TARGET: AZ ${clampedYaw.toFixed(1)}° EL ${clampedPitch.toFixed(1)}°`);
 }
 
