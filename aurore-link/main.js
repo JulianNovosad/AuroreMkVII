@@ -620,6 +620,13 @@ function updateGimbalSmoothing(timestamp) {
 
     // Throttle sends to ~60Hz to reduce choppiness
     if (timestamp - lastSendTime >= 16.67) {
+      console.log('[SMOOTH] Check send:', { 
+        mode: currentMode, 
+        isFree: currentMode === 'FREECAM',
+        sendYaw: sendYaw.toFixed(2), 
+        sendPitch: sendPitch.toFixed(2),
+        valid: typeof sendYaw === 'number' && isFinite(sendYaw)
+      });
       // Only send if values are valid numbers AND we're in FREECAM mode
       if (currentMode === 'FREECAM' &&
           typeof sendYaw === 'number' && typeof sendPitch === 'number' &&
