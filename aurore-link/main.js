@@ -66,14 +66,10 @@ let currentPitch = 0;
 let velocityYaw = 0;           // Current angular velocity (°/sec)
 let velocityPitch = 0;
 
-// Gimbal dynamics - tuned for smooth, jitter-free movement
-const MAX_ANGULAR_VELOCITY = 90;      // 90°/sec max (slow and smooth)
-const MAX_ANGULAR_ACCELERATION = 200; // 200°/sec² (very gentle)
+// Gimbal smoothing using exponential moving average (EMA)
+// Much simpler and more reliable than PD control
 const SMOOTHING_ENABLED = true;
-
-// PD control gains - very low for smooth, non-jittery movement
-const SMOOTH_Kp = 4;    // Very low = slow approach, no overshoot
-const SMOOTH_Kd = 0.3;  // Higher = more damping, eliminates jitter
+const SMOOTH_ALPHA = 0.08;  // 0.08 = very smooth, 8% of new value per frame
 
 // Servo latency simulation (real servos have ~70ms delay)
 const SERVO_LATENCY_MS = 70;
@@ -543,151 +539,25 @@ function updateGimbalSmoothing(timestamp) {
       sendCmd({ type: 'freecam', az: currentYaw, el: currentPitch });
     }
   } else {
-    const dt = lastSmoothTime ? (timestamp - lastSmoothTime) / 1000 : 0;
-    lastSmoothTime = timestamp;
+    // Simple exponential moving average smoothing
+    // current = current + alpha * (target - current)
+    const alpha = SMOOTH_ALPHA;
     
-    // Guard against NaN and invalid dt
-    if (!dt || dt <= 0 || dt > 0.1) {
-      // Skip this frame if dt is invalid (first frame or tab switch)
-      requestAnimationFrame(updateGimbalSmoothing);
-      return;
-    }
+    currentYaw += alpha * (targetYaw - currentYaw);
+    currentPitch += alpha * (targetPitch - currentPitch);
     
-    // Debug: log every 100 frames to avoid spam
-    commandFrameCount++;
-    if (commandFrameCount % 100 === 0) {
-      console.log('[SMOOTH] Loop running, mode:', currentMode, 'targetYaw:', targetYaw.toFixed(2), 'targetPitch:', targetPitch.toFixed(2), 'accumulatedYaw:', accumulatedYaw.toFixed(2), 'accumulatedPitch:', accumulatedPitch.toFixed(2));
-    }
-
-    // Limit dt to prevent huge jumps after tab switch
-    const deltaTime = Math.min(dt, 0.05); // Cap at 50ms
-    
-    // Calculate error to target
-    const errorYaw = targetYaw - currentYaw;
-    const errorPitch = targetPitch - currentPitch;
-    
-    // PD control with tuned gains for smooth motion
-    const Kp = SMOOTH_Kp;
-    const Kd = SMOOTH_Kd;
-
-    // Calculate derivative (rate of change of error)
-    const derivYaw = (errorYaw - prevErrorYaw) / deltaTime;
-    const derivPitch = (errorPitch - prevErrorPitch) / deltaTime;
-
-    prevErrorYaw = errorYaw;
-    prevErrorPitch = errorPitch;
-
-    // PD output = proportional + derivative
-    let cmdVelocityYaw = Kp * errorYaw + Kd * derivYaw;
-    let cmdVelocityPitch = Kp * errorPitch + Kd * derivPitch;
-    
-    // Guard against NaN
-    if (!isFinite(cmdVelocityYaw)) cmdVelocityYaw = 0;
-    if (!isFinite(cmdVelocityPitch)) cmdVelocityPitch = 0;
-    
-    // Apply acceleration limits for smoothness
-    const maxAccelDt = MAX_ANGULAR_ACCELERATION * deltaTime;
-    const accelYaw = cmdVelocityYaw - velocityYaw;
-    const accelPitch = cmdVelocityPitch - velocityPitch;
-
-    velocityYaw += Math.max(-maxAccelDt, Math.min(maxAccelDt, accelYaw));
-    velocityPitch += Math.max(-maxAccelDt, Math.min(maxAccelDt, accelPitch));
-
-    // Clamp velocity to max
-    velocityYaw = Math.max(-MAX_ANGULAR_VELOCITY, Math.min(MAX_ANGULAR_VELOCITY, velocityYaw));
-    velocityPitch = Math.max(-MAX_ANGULAR_VELOCITY, Math.min(MAX_ANGULAR_VELOCITY, velocityPitch));
-    
-    // Guard against NaN in velocity
-    if (!isFinite(velocityYaw)) velocityYaw = 0;
-    if (!isFinite(velocityPitch)) velocityPitch = 0;
-
-    // Update position
-    currentYaw += velocityYaw * deltaTime;
-    currentPitch += velocityPitch * deltaTime;
-    
-    // Guard against NaN in position
-    if (!isFinite(currentYaw)) currentYaw = targetYaw;
-    if (!isFinite(currentPitch)) currentPitch = targetPitch;
-    
-    // Snap to target if very close
-    if (Math.abs(errorYaw) < 0.01) currentYaw = targetYaw;
-    if (Math.abs(errorPitch) < 0.01) currentPitch = targetPitch;
-    
-    // Add to latency buffer
-    latencyBufferYaw.push({ yaw: currentYaw, pitch: currentPitch });
-    latencyBufferPitch.push({ yaw: currentYaw, pitch: currentPitch });
-    
-    // Remove old entries (keep only last N frames)
-    if (latencyBufferYaw.length > SERVO_LATENCY_FRAMES) {
-      latencyBufferYaw.shift();
-      latencyBufferPitch.shift();
-    }
-    
-    // Send current smoothed position directly (no artificial latency)
+    // Send smoothed position at 30Hz
     const sendYaw = currentYaw;
     const sendPitch = currentPitch;
-
-    // Debug: log every 50 frames
-    if (commandFrameCount % 50 === 0) {
-      console.log('[SMOOTH] State:', {
-        sendYaw: sendYaw.toFixed(2),
-        sendPitch: sendPitch.toFixed(2),
-        currentYaw: currentYaw.toFixed(2),
-        currentPitch: currentPitch.toFixed(2),
-        targetYaw: targetYaw.toFixed(2),
-        targetPitch: targetPitch.toFixed(2)
-      });
-    }
-
-    // Throttle sends to ~30Hz for smoother movement (less jitter)
+    
     if (timestamp - lastSendTime >= 33.33) {
-      console.log('[SMOOTH] Check send:', { 
-        mode: currentMode, 
-        isFree: currentMode === 'FREECAM',
-        sendYaw: sendYaw.toFixed(2), 
-        sendPitch: sendPitch.toFixed(2),
-        valid: typeof sendYaw === 'number' && isFinite(sendYaw)
-      });
-      // Only send if values are valid numbers AND we're in FREECAM mode
-      if (currentMode === 'FREECAM' &&
-          typeof sendYaw === 'number' && typeof sendPitch === 'number' &&
-          isFinite(sendYaw) && isFinite(sendPitch)) {
-        console.log('[SMOOTH] Sending freecam:', { az: sendYaw, el: sendPitch, mode: currentMode });
+      if (currentMode === 'FREECAM' && isFinite(sendYaw) && isFinite(sendPitch)) {
         sendCmd({ type: 'freecam', az: sendYaw, el: sendPitch });
         lastSendTime = timestamp;
-
-        // Update pipper display directly from smoothing loop
-        if (pipperLead && videoEl && videoEl.clientWidth > 0 && videoEl.clientHeight > 0) {
-          const W = videoEl.clientWidth;
-          const H = videoEl.clientHeight;
-          const cx = W / 2;
-          const cy = H / 2;
-          const degScaleX = W / 66;
-          const degScaleY = H / 41;
-          const px = cx + sendYaw * degScaleX;
-          const py = cy - sendPitch * degScaleY;
-          pipperLead.style.left = (px - 20) + 'px';
-          pipperLead.style.top  = (py - 20) + 'px';
-          pipperLead.style.display = 'block';  // Ensure pipper is visible
-          // Debug: log first few updates
-          if (lastSendTime < 1000) {
-            console.log('[PIP] Update:', sendYaw.toFixed(2), sendPitch.toFixed(2), '-> px:', px.toFixed(0), py.toFixed(0));
-          }
-        }
-
-        // Update gimbal coords display
-        if (gimbalCoordsEl) {
-          gimbalCoordsEl.textContent = `AZ ${sendYaw.toFixed(1)}° EL ${sendPitch.toFixed(1)}°`;
-        }
-
-        // Update gimbal dial (analog needle)
-        if (gimbalNeedle) {
-          gimbalNeedle.style.transform = `rotate(${sendYaw}deg)`;
-        }
       }
     }
   }
-  
+
   // Continue animation loop
   requestAnimationFrame(updateGimbalSmoothing);
 }
