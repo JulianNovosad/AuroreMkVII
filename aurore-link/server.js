@@ -19,6 +19,8 @@ const TELEMETRY_INTERVAL_MS = 150;
 const STATIC_ROOT = __dirname;
 const HUD_SOCKET_PATH = '/tmp/aurore_hud.sock';
 const HUD_RECONNECT_MS = 2000;
+const CMD_SOCKET_PATH = '/tmp/aurore_cmd.sock';
+const CMD_RECONNECT_MS = 2000;
 
 // FCS state enum (must match C++ FcsState: BOOT=0, IDLE_SAFE=1, FREECAM=2, SEARCH=3, TRACKING=4, ARMED=5, FAULT=6)
 const FCS_STATES = ['BOOT', 'IDLE_SAFE', 'FREECAM', 'SEARCH', 'TRACKING', 'ARMED', 'FAULT'];
@@ -364,7 +366,7 @@ const state = {
   deadline_misses: 0,
   // HUD socket state
   hud_socket_connected: false,
-  use_hud_socket: false,  // Disabled by default - enable only when C++ HUD socket is available
+  use_hud_socket: true,   // Always enabled — launched together with C++ binary
 };
 
 function buildTelemetry() {
@@ -505,9 +507,15 @@ function scheduleHudSocketReconnect() {
 function mapHudFrameToTelemetry(hudData) {
   const stateName = FCS_STATES[hudData.state] || 'UNKNOWN';
 
+  // Derive mode from actual FCS state reported by C++ binary
+  const derivedMode = stateName === 'FREECAM' ? 'FREECAM'
+    : (stateName === 'SEARCH' || stateName === 'TRACKING' || stateName === 'ARMED') ? 'AUTO'
+    : 'IDLE_SAFE';
+  state.mode = derivedMode;
+
   return {
     ts: Date.now(),
-    mode: state.mode,
+    mode: derivedMode,
     fcs_state: stateName,
     frame_count: state.frame_count,
     gimbal: {
@@ -540,6 +548,50 @@ function mapHudFrameToTelemetry(hudData) {
 
 // Start HUD socket connection on startup
 connectHudSocket();
+
+// ===========================================================================
+// Command Socket Client (Node.js → C++ binary)
+// ===========================================================================
+
+let cmdSocket = null;
+let cmdSocketReconnectTimer = null;
+
+function sendCmd(line) {
+  if (cmdSocket && !cmdSocket.destroyed) {
+    cmdSocket.write(line + '\n');
+  }
+}
+
+function connectCmdSocket() {
+  if (cmdSocket !== null) return;
+
+  cmdSocket = net.createConnection({ path: CMD_SOCKET_PATH }, () => {
+    console.log('[CMD Socket] Connected to C++ binary');
+  });
+
+  cmdSocket.on('error', (err) => {
+    console.warn('[CMD Socket] Error:', err.message);
+    cmdSocket = null;
+    scheduleCmdSocketReconnect();
+  });
+
+  cmdSocket.on('close', () => {
+    console.log('[CMD Socket] Disconnected — will retry');
+    cmdSocket = null;
+    scheduleCmdSocketReconnect();
+  });
+}
+
+function scheduleCmdSocketReconnect() {
+  if (cmdSocketReconnectTimer) return;
+  cmdSocketReconnectTimer = setTimeout(() => {
+    cmdSocketReconnectTimer = null;
+    connectCmdSocket();
+  }, CMD_RECONNECT_MS);
+}
+
+// Start command socket connection on startup (with short delay for C++ binary to be ready)
+setTimeout(connectCmdSocket, 1000);
 
 // ===========================================================================
 // WebSocket Servers (split by URL)
@@ -775,12 +827,17 @@ hudWss.on('connection', (ws, req) => {
 
     switch (cmd.type) {
       case 'mode_switch':
-        if (['AUTO', 'FREECAM'].includes(cmd.mode)) {
+        if (['AUTO', 'FREECAM', 'IDLE_SAFE'].includes(cmd.mode)) {
           state.mode = cmd.mode;
           if (cmd.mode === 'FREECAM') {
             state.fcs_state = 'FREECAM';
+            sendCmd('MODE FREECAM');
+          } else if (cmd.mode === 'AUTO') {
+            state.fcs_state = 'SEARCH';
+            sendCmd('MODE AUTO');
           } else {
-            state.fcs_state = 'TRACKING';
+            state.fcs_state = 'IDLE_SAFE';
+            sendCmd('MODE IDLE');
           }
           console.log(`[CMD] mode_switch → ${cmd.mode}`);
         } else {
@@ -820,6 +877,7 @@ hudWss.on('connection', (ws, req) => {
           console.error('[SERVO] Write failed:', err.message);
         }
 
+        sendCmd(`FREECAM ${state.gimbalYaw.toFixed(3)} ${state.gimbalPitch.toFixed(3)}`);
         console.log(`[CMD] freecam az=${az.toFixed(2)} el=${el.toFixed(2)} → yaw=${state.gimbalYaw.toFixed(2)} pitch=${state.gimbalPitch.toFixed(2)}`);
         break;
       }
@@ -905,6 +963,12 @@ process.on('SIGINT', () => {
   }
   if (hudSocketReconnectTimer) {
     clearTimeout(hudSocketReconnectTimer);
+  }
+  if (cmdSocket) {
+    cmdSocket.destroy();
+  }
+  if (cmdSocketReconnectTimer) {
+    clearTimeout(cmdSocketReconnectTimer);
   }
   lrfClose();
   server.close(() => {

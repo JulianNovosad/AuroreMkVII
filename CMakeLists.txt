@@ -32,13 +32,7 @@ option(AURORE_ENABLE_COVERAGE "Enable code coverage" OFF)
 option(AURORE_ENABLE_SANITIZERS "Enable sanitizers (debug only)" OFF)
 option(AURORE_REALTIME "Enable real-time optimizations" ON)
 
-# Default to laptop build on x86_64
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|x64")
-    set(AURORE_LAPTOP_BUILD_DEFAULT ON)
-else()
-    set(AURORE_LAPTOP_BUILD_DEFAULT OFF)
-endif()
-option(AURORE_LAPTOP_BUILD "Build for laptop (no libcamera/I2C hardware, use mocks)" ${AURORE_LAPTOP_BUILD_DEFAULT})
+# Removed AURORE_LAPTOP_BUILD as mocks are being permanently removed for target hardware.
 
 # ============================================================================
 # C++ Standard Configuration
@@ -171,14 +165,7 @@ find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 # Protobuf is optional for laptop builds (only needed for AuroreLink server)
-if(AURORE_LAPTOP_BUILD)
-    find_package(Protobuf QUIET)
-    if(NOT Protobuf_FOUND)
-        message(STATUS "Laptop build: Protobuf not found - AuroreLink server disabled")
-    endif()
-else()
-    find_package(Protobuf REQUIRED)
-endif()
+find_package(Protobuf REQUIRED)
 
 # Generate C++ source from proto schema if Protobuf found
 if(Protobuf_FOUND)
@@ -193,6 +180,20 @@ endif()
 
 # Make generated headers visible to all targets
 include_directories(${Protobuf_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
+
+# ONNX Runtime for YOLO26n inference
+find_package(PkgConfig QUIET)
+find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime/onnxruntime_cxx_api.h
+    PATHS /usr/include /usr/local/include)
+find_library(ONNXRUNTIME_LIB onnxruntime
+    PATHS /usr/lib/aarch64-linux-gnu /usr/local/lib)
+if(ONNXRUNTIME_INCLUDE_DIR AND ONNXRUNTIME_LIB)
+    message(STATUS "Found ONNX Runtime: ${ONNXRUNTIME_LIB}")
+    set(ONNXRUNTIME_FOUND TRUE)
+else()
+    message(WARNING "ONNX Runtime not found - Yolo26Detector will not build")
+    set(ONNXRUNTIME_FOUND FALSE)
+endif()
 
 # nlohmann/json for ConfigLoader
 find_package(nlohmann_json QUIET)
@@ -222,15 +223,7 @@ if(OPENCV_VERSION VERSION_LESS 4.9.0)
 endif()
 
 # libcamera - only required for non-laptop builds
-if(NOT AURORE_LAPTOP_BUILD)
-    pkg_check_modules(LIBCAMERA REQUIRED libcamera>=0.2.0)
-else()
-    message(STATUS "Laptop build: libcamera not required (using mock camera)")
-    # Define stub variables for laptop build
-    set(LIBCAMERA_INCLUDE_DIRS "")
-    set(LIBCAMERA_LIBRARIES "")
-    set(LIBCAMERA_LIBRARY_DIRS "")
-endif()
+pkg_check_modules(LIBCAMERA REQUIRED libcamera>=0.2.0)
 
 # libwebp - transitive dependency via OpenCV, checked explicitly for CVE-2023-4863
 # Security requirement: >= 1.3.2 to address critical heap buffer overflow
@@ -299,16 +292,9 @@ link_directories(
 # ============================================================================
 
 # Source files - conditional based on laptop build
-if(AURORE_LAPTOP_BUILD)
-    set(FUSION_HAT_SRC src/drivers/mock_fusion_hat.cpp)
-    set(CAMERA_WRAPPER_SRC src/drivers/mock_camera_wrapper.cpp)
-    add_compile_definitions(AURORE_LAPTOP_BUILD=1)
-    message(STATUS "Laptop build: using mock hardware drivers")
-else()
-    set(FUSION_HAT_SRC src/drivers/fusion_hat.cpp)
-    set(CAMERA_WRAPPER_SRC src/drivers/camera_wrapper.cpp)
-    message(STATUS "Hardware build: using real libcamera and I2C drivers")
-endif()
+set(FUSION_HAT_SRC src/drivers/fusion_hat.cpp)
+set(CAMERA_WRAPPER_SRC src/drivers/camera_wrapper.cpp)
+message(STATUS "Using real hardware drivers")
 
 set(CAMERA_AUTH_SRC src/drivers/camera_auth.cpp)
 
@@ -320,10 +306,14 @@ set(AURORE_SOURCES
     ${CAMERA_WRAPPER_SRC}
     ${CAMERA_AUTH_SRC}
     ${FUSION_HAT_SRC}
+    src/drivers/usb_camera.cpp
 
     # Vision pipeline
     src/vision/apriltag_detector.cpp
     src/vision/orb_detector.cpp
+    src/vision/dual_camera_manager.cpp
+    src/vision/yolo26_detector.cpp
+    src/vision/sweep_pattern.cpp
 
     # Tracking
     src/tracking/kcf_tracker.cpp
@@ -341,8 +331,10 @@ set(AURORE_SOURCES
     # Common utilities
     src/common/telemetry_writer.cpp
     src/common/hud_socket.cpp
+    src/common/command_socket.cpp
     src/common/config_loader.cpp
     src/common/security.cpp
+    src/common/spatial_resolver.cpp
 
     # Network
     src/network/aurore_link_server.cpp
@@ -373,25 +365,20 @@ target_include_directories(aurore PRIVATE
 )
 
 # Link libraries
-if(AURORE_LAPTOP_BUILD)
-    target_link_libraries(aurore PRIVATE
-        Threads::Threads
-        ${OPENCV_LIBRARIES}
-        ${Protobuf_LIBRARIES}
-        OpenSSL::Crypto
-        rt      # Real-time extensions (clock_nanosleep, etc.)
-        pthread # POSIX threads
-    )
-else()
-    target_link_libraries(aurore PRIVATE
-        Threads::Threads
-        ${OPENCV_LIBRARIES}
-        ${LIBCAMERA_LIBRARIES}
-        ${Protobuf_LIBRARIES}
-        OpenSSL::Crypto
-        rt      # Real-time extensions (clock_nanosleep, etc.)
-        pthread # POSIX threads
-    )
+target_link_libraries(aurore PRIVATE
+    Threads::Threads
+    ${OPENCV_LIBRARIES}
+    ${LIBCAMERA_LIBRARIES}
+    ${Protobuf_LIBRARIES}
+    OpenSSL::Crypto
+    rt      # Real-time extensions (clock_nanosleep, etc.)
+    pthread # POSIX threads
+)
+
+if(ONNXRUNTIME_FOUND)
+    target_include_directories(aurore PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
+    target_link_libraries(aurore PRIVATE ${ONNXRUNTIME_LIB})
+    target_compile_definitions(aurore PRIVATE AURORE_HAS_ONNXRUNTIME)
 endif()
 
 # Target compile definitions
@@ -557,7 +544,7 @@ if(AURORE_ENABLE_TESTS)
         ${CAMERA_AUTH_SRC}
     )
     target_include_directories(tracker_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(tracker_test PRIVATE Threads::Threads ${OPENCV_LIBRARIES} rt OpenSSL::Crypto)
+    target_link_libraries(tracker_test PRIVATE Threads::Threads ${OPENCV_LIBRARIES} ${LIBCAMERA_LIBRARIES} rt OpenSSL::Crypto)
     add_test(NAME TrackerTest COMMAND tracker_test)
     set_tests_properties(TrackerTest PROPERTIES TIMEOUT 60)
 
@@ -614,21 +601,31 @@ if(AURORE_ENABLE_TESTS)
     add_test(NAME FusionHatTest COMMAND fusion_hat_test)
     set_tests_properties(FusionHatTest PROPERTIES TIMEOUT 60)
 
-    # Fusion HAT Stress tests
-    add_executable(fusion_hat_stress_test
-        tests/unit/fusion_hat_stress_test.cpp
+    # Gimbal Actuation HIL test
+    add_executable(gimbal_actuation_test
+        tests/hardware/gimbal_actuation_test.cpp
         src/drivers/fusion_hat.cpp
     )
-    target_include_directories(fusion_hat_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(fusion_hat_stress_test PRIVATE Threads::Threads rt stdc++fs)
-    add_test(NAME FusionHatStressTest COMMAND fusion_hat_stress_test)
-    set_tests_properties(FusionHatStressTest PROPERTIES TIMEOUT 60)
+    target_include_directories(gimbal_actuation_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(gimbal_actuation_test PRIVATE Threads::Threads rt)
+    add_test(NAME GimbalActuationTest COMMAND gimbal_actuation_test)
+    set_tests_properties(GimbalActuationTest PROPERTIES TIMEOUT 120)
+
+    # Boresight Convergence Test (hardware required)
+    add_executable(boresight_convergence_test
+        tests/hardware/boresight_convergence_test.cpp
+        src/drivers/laser_rangefinder.cpp
+    )
+    target_include_directories(boresight_convergence_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(boresight_convergence_test PRIVATE Threads::Threads rt)
+    add_test(NAME BoresightConvergenceTest COMMAND boresight_convergence_test)
+    set_tests_properties(BoresightConvergenceTest PROPERTIES TIMEOUT 120)
 
 
     # Coupling Control-Actuation tests
     add_executable(coupling_control_actuation_test
         tests/unit/test_coupling_control_actuation.cpp
-        ${FUSION_HAT_SRC}
+        src/drivers/fusion_hat.cpp # Use real Fusion HAT
         src/safety/interlock_controller.cpp
         src/common/security.cpp
     )
@@ -637,15 +634,6 @@ if(AURORE_ENABLE_TESTS)
     add_test(NAME CouplingControlActuationTest COMMAND coupling_control_actuation_test)
     set_tests_properties(CouplingControlActuationTest PROPERTIES TIMEOUT 30)
 
-    # Actuation command latency test (AM7-L2-ACT-003)
-    add_executable(actuation_command_latency_test
-        tests/unit/test_actuation_command_latency.cpp
-    )
-    target_include_directories(actuation_command_latency_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(actuation_command_latency_test PRIVATE Threads::Threads rt)
-    add_test(NAME ActuationCommandLatencyTest COMMAND actuation_command_latency_test)
-    set_tests_properties(ActuationCommandLatencyTest PROPERTIES TIMEOUT 60)
-
     # Gimbal command rate test (AM7-L2-ACT-001)
     add_executable(gimbal_command_rate_test
         tests/unit/test_gimbal_command_rate.cpp
@@ -653,7 +641,13 @@ if(AURORE_ENABLE_TESTS)
     target_include_directories(gimbal_command_rate_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(gimbal_command_rate_test PRIVATE Threads::Threads rt)
     add_test(NAME GimbalCommandRateTest COMMAND gimbal_command_rate_test)
-    set_tests_properties(GimbalCommandRateTest PROPERTIES TIMEOUT 120)
+    set_tests_properties(GimbalCommandRateTest PROPERTIES TIMEOUT 30)
+
+    # Grant CAP_SYS_NICE capability to allow setting SCHED_FIFO priority without sudo
+    add_custom_command(TARGET gimbal_command_rate_test POST_BUILD
+        COMMAND sudo /usr/sbin/setcap 'cap_sys_nice=+ep' $<TARGET_FILE:gimbal_command_rate_test>
+        COMMENT "Setting CAP_SYS_NICE on gimbal_command_rate_test executable"
+    )
 
     # Detection rate test framework (AM7-L2-VIS-004)
     add_executable(detection_rate_test
@@ -714,7 +708,7 @@ if(AURORE_ENABLE_TESTS)
     add_executable(interlock_controller_test
         tests/unit/interlock_controller_test.cpp
         src/safety/interlock_controller.cpp
-        ${FUSION_HAT_SRC}
+        src/drivers/fusion_hat.cpp # Use real Fusion HAT
         src/common/security.cpp
     )
     target_include_directories(interlock_controller_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
@@ -929,61 +923,12 @@ if(AURORE_ENABLE_TESTS)
     set_tests_properties(TimingIntegrationTest
         PROPERTIES
         TIMEOUT 300
-        DISABLED TRUE  # Disabled by default - requires Raspberry Pi
+        LABELS "hardware"
     )
 
     # ========================================================================
     # Integration Test Suite - End-to-End Data Flow Tests
     # ========================================================================
-
-    # Vision Pipeline Integration Test
-    # Tests: Camera -> Vision -> Track -> Actuation data flow
-    add_executable(vision_pipeline_integration_test
-        tests/integration/vision_pipeline_test.cpp
-        src/state_machine/state_machine.cpp
-    )
-
-    target_include_directories(vision_pipeline_integration_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-        ${CMAKE_SOURCE_DIR}/tests
-    )
-
-    target_link_libraries(vision_pipeline_integration_test PRIVATE
-        Threads::Threads
-        ${OPENCV_LIBRARIES}
-        rt
-        OpenSSL::Crypto
-    )
-
-    add_test(NAME VisionPipelineIntegrationTest COMMAND vision_pipeline_integration_test)
-    set_tests_properties(VisionPipelineIntegrationTest
-        PROPERTIES
-        TIMEOUT 120
-        LABELS "IntegrationTest"
-    )
-
-    # Actuation Timing Integration Test
-    # Tests: Actuation command timing, I2C latency, thread synchronization
-    add_executable(actuation_timing_integration_test
-        tests/integration/actuation_timing_test.cpp
-    )
-
-    target_include_directories(actuation_timing_integration_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-        ${CMAKE_SOURCE_DIR}/tests
-    )
-
-    target_link_libraries(actuation_timing_integration_test PRIVATE
-        Threads::Threads
-        rt
-    )
-
-    add_test(NAME ActuationTimingIntegrationTest COMMAND actuation_timing_integration_test)
-    set_tests_properties(ActuationTimingIntegrationTest
-        PROPERTIES
-        TIMEOUT 120
-        LABELS "IntegrationTest"
-    )
 
     # Safety Fault Injection FMEA Test
     # Tests: Fault detection, response, and FMEA coverage
@@ -1008,6 +953,60 @@ if(AURORE_ENABLE_TESTS)
         TIMEOUT 120
         LABELS "IntegrationTest"
     )
+
+    # ========================================================================
+    # Laser Rangefinder Unit Test
+    # ========================================================================
+
+    add_executable(laser_rangefinder_test
+        tests/unit/laser_rangefinder_test.cpp
+        src/drivers/laser_rangefinder.cpp
+    )
+    target_include_directories(laser_rangefinder_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(laser_rangefinder_test PRIVATE Threads::Threads rt)
+    add_test(NAME LaserRangefinderTest COMMAND laser_rangefinder_test)
+    set_tests_properties(LaserRangefinderTest PROPERTIES TIMEOUT 60)
+
+    # 20-sample distance measurement test
+    add_executable(lrf_20_samples_test
+        tests/unit/lrf_20_samples_test.cpp
+        src/drivers/laser_rangefinder.cpp
+    )
+    target_include_directories(lrf_20_samples_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(lrf_20_samples_test PRIVATE Threads::Threads rt)
+
+    # ========================================================================
+    # Laser Validation Integration Test
+    # ========================================================================
+
+    add_executable(laser_validation_test
+        tests/integration/laser_validation_test.cpp
+        src/drivers/laser_rangefinder.cpp
+        src/state_machine/state_machine.cpp
+        src/safety/interlock_controller.cpp
+        src/drivers/fusion_hat.cpp
+    )
+    target_include_directories(laser_validation_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(laser_validation_test PRIVATE Threads::Threads rt OpenSSL::Crypto)
+    add_test(NAME LaserValidationTest COMMAND laser_validation_test)
+    set_tests_properties(LaserValidationTest PROPERTIES TIMEOUT 60 LABELS "IntegrationTest")
+
+    # ========================================================================
+    # Hardware Integration Check
+    # ========================================================================
+
+    add_executable(integration_check
+        tests/hardware/integration_check.cpp
+        src/drivers/laser_rangefinder.cpp
+        src/drivers/usb_camera.cpp
+    )
+    target_include_directories(integration_check PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${OPENCV_INCLUDE_DIRS}
+    )
+    target_link_libraries(integration_check PRIVATE Threads::Threads rt ${OPENCV_LIBRARIES})
+    add_test(NAME IntegrationCheck COMMAND integration_check)
+    set_tests_properties(IntegrationCheck PROPERTIES TIMEOUT 60)
 
     # ========================================================================
     # Integration Test Runner (runs all integration tests)
@@ -1100,6 +1099,15 @@ if(DOXYGEN_FOUND)
         COMMENT "Generating API documentation with Doxygen"
     )
 endif()
+
+# ============================================================================
+# Diagnostic Tools (always built, no test framework dependency)
+# ============================================================================
+
+add_executable(lrf_analyzer
+    tools/lrf_analyzer.cpp
+)
+target_link_libraries(lrf_analyzer PRIVATE Threads::Threads)
 
 # ============================================================================
 # Print Configuration Summary

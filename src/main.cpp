@@ -50,6 +50,11 @@
 #include "aurore/telemetry_writer.hpp"
 #include "aurore/timing.hpp"
 #include "aurore/tracker.hpp"  // For KcfTracker
+#include "aurore/dual_camera_manager.hpp"
+#include "aurore/usb_camera.hpp"
+#include "aurore/command_socket.hpp"
+#include "aurore/yolo26_detector.hpp"
+#include "aurore/sweep_pattern.hpp"
 
 namespace {
 
@@ -365,6 +370,10 @@ int main(int argc, char* argv[]) {
         std::cerr << "Warning: HUD socket failed to start" << std::endl;
     }
 
+    // Command socket: receives JSON-derived text commands from aurore-link (Node.js)
+    aurore::CommandSocket cmd_socket;
+    cmd_socket.start();
+
     // Gimbal controller (FusionHAT+ sysfs driver — fails gracefully without hardware)
     aurore::FusionHat fusion_hat;
     fusion_hat.init();
@@ -435,6 +444,22 @@ int main(int argc, char* argv[]) {
         std::cout << "Detector: Loaded descriptors from " << descriptor_path << std::endl;
     }
 
+    // Dual-stream camera manager (MIPI + USB)
+    aurore::DualCameraManager dual_camera;
+    dual_camera.init_mipi(camera.get());
+    
+    aurore::UsbCameraConfig usb_config;
+    usb_config.width = 640;
+    usb_config.height = 480;
+    usb_config.fps = 30;
+    if (dual_camera.init_usb(usb_config)) {
+        std::cout << "DualCamera: USB stream initialized for辅助 detection\n";
+    } else {
+        std::cerr << "DualCamera: WARN - USB stream failed to initialize\n";
+        std::cerr << "      Check: ls /dev/video*\n";
+        std::cerr << "      Fix: Connect USB webcam or system operates without optical gate\n";
+    }
+
     // State machine for FCS mode management
     aurore::StateMachine state_machine;
 
@@ -493,6 +518,27 @@ int main(int argc, char* argv[]) {
         state_machine.on_fault(aurore::FaultCode::WATCHDOG_TIMEOUT);
     });
 
+    // Command socket callbacks: browser UI → state machine
+    cmd_socket.set_mode_callback([&](const std::string& mode) {
+        std::cout << "CommandSocket: mode → " << mode << std::endl;
+        if (mode == "AUTO") {
+            gimbal_ctrl.set_source(aurore::GimbalSource::AUTO);
+            state_machine.request_search();
+        } else if (mode == "FREECAM") {
+            gimbal_ctrl.set_source(aurore::GimbalSource::FREECAM);
+            state_machine.request_freecam();
+        } else if (mode == "IDLE") {
+            state_machine.request_cancel();
+        }
+    });
+    cmd_socket.set_freecam_callback([&](float az_deg, float el_deg) {
+        gimbal_ctrl.command_absolute(az_deg, el_deg);
+    });
+    cmd_socket.set_reset_callback([&]() {
+        std::cout << "CommandSocket: reset" << std::endl;
+        state_machine.on_manual_reset();
+    });
+
     // Control loop state
     std::atomic<uint64_t> frame_sequence(0);
     std::atomic<bool> vision_running(false);
@@ -503,9 +549,72 @@ int main(int argc, char* argv[]) {
     // Signal hardware init complete (BOOT -> IDLE_SAFE)
     state_machine.on_init_complete();
 
-    // Vision pipeline thread
+    // ---------------------------------------------------------------------------
+    // Detect thread shared state: track_compute → detect thread (frame supply)
+    //                             detect thread → track_compute (result)
+    // Uses mutex+cv (non-blocking try_lock in RT thread) to avoid heap alloc in RT.
+    // ---------------------------------------------------------------------------
+    struct DetectShared {
+        std::mutex         frame_mtx;
+        cv::Mat            frame;           // latest BGR frame for detection
+        bool               frame_ready{false};
+        std::condition_variable frame_cv;
+
+        std::mutex         result_mtx;
+        aurore::Detection  latest;          // latest detection result
+        bool               result_valid{false};
+        std::atomic<bool>  result_fresh{false};  // set by detect thread, cleared by track_compute
+    };
+    DetectShared detect_shared;
+
+    // Load YOLO26n detector
+    aurore::Yolo26Detector::Config yolo_cfg;
+    yolo_cfg.model_path = config.get_string("vision.yolo_model_path",
+                                             "/home/pi/AuroreMkVII/models/yolo26n.onnx");
+    yolo_cfg.num_threads = 3;
+    aurore::Yolo26Detector yolo_detector(yolo_cfg);
+    const bool yolo_loaded = yolo_detector.load();
+    if (!yolo_loaded) {
+        std::cerr << "Warning: YOLO26n model not loaded — SEARCH will use ORB detector only\n";
+    }
+
+    // Detect thread: runs YOLO asynchronously, non-RT
+    std::atomic<bool> detect_running{false};
+    std::thread detect_thread([&]() {
+        detect_running.store(true, std::memory_order_release);
+        std::cout << "detect_thread started" << std::endl;
+
+        while (!g_shutdown_requested.load(std::memory_order_acquire)) {
+            cv::Mat local_frame;
+            {
+                std::unique_lock<std::mutex> lk(detect_shared.frame_mtx);
+                detect_shared.frame_cv.wait_for(lk, std::chrono::milliseconds(100),
+                    [&]{ return detect_shared.frame_ready ||
+                              g_shutdown_requested.load(std::memory_order_acquire); });
+                if (!detect_shared.frame_ready) continue;
+                local_frame = detect_shared.frame.clone();
+                detect_shared.frame_ready = false;
+            }
+
+            if (local_frame.empty()) continue;
+
+            auto det = yolo_detector.detect(local_frame);
+            if (det.has_value()) {
+                std::lock_guard<std::mutex> lk(detect_shared.result_mtx);
+                detect_shared.latest     = *det;
+                detect_shared.result_valid = true;
+                detect_shared.result_fresh.store(true, std::memory_order_release);
+            }
+        }
+
+        detect_running.store(false, std::memory_order_release);
+        std::cout << "detect_thread stopped" << std::endl;
+    });
+
+    // Vision pipeline thread - pinned to CPU 3 for isolation from track thread (CPU 2)
+    // This reduces jitter from ISP interrupts and track_compute context switching
     std::thread vision_thread([&]() {
-        if (!configure_rt_thread("vision_pipeline", 90, 2)) {
+        if (!configure_rt_thread("vision_pipeline", 90, 3)) {
             return;
         }
 
@@ -573,6 +682,14 @@ int main(int argc, char* argv[]) {
         aurore::KcfTracker tracker;
         tracker.set_camera(camera.get());  // Zero-copy: tracker holds DMA buffer references
 
+        // Autonomous sweep pattern for SEARCH state
+        aurore::SweepPattern sweep;
+        uint64_t last_tick_ns = aurore::get_timestamp();
+
+        // Frame counter for detect thread feed rate (every 4th frame → ~30fps detection)
+        uint64_t detect_frame_count = 0;
+        constexpr uint64_t kDetectEveryN = 4;
+
         // Vision watchdog: track last frame timestamp
         uint64_t last_frame_ns = aurore::get_timestamp();
         constexpr uint64_t kVisionWatchdogNs = 10000000;  // 10ms timeout
@@ -603,23 +720,55 @@ int main(int argc, char* argv[]) {
                     aurore::FcsState state = state_machine.state();
 
                     if (state == aurore::FcsState::SEARCH) {
-                        // SEARCH mode: use ORB detector to find target
-                        auto detection = detector.detect(bgr_frame);
+                        // --- Autonomous sweep: drive gimbal in oval pattern ---
+                        uint64_t now_tick = aurore::get_timestamp();
+                        const float dt_sec = static_cast<float>(now_tick - last_tick_ns) * 1e-9f;
+                        last_tick_ns = now_tick;
+                        auto sweep_pt = sweep.tick(dt_sec);
+                        gimbal_ctrl.command_absolute(sweep_pt.az_deg, sweep_pt.el_deg);
+
+                        // --- YOLO26 detection (non-blocking check of detect thread result) ---
+                        std::optional<aurore::Detection> detection;
+
+                        // Feed detect thread every kDetectEveryN frames
+                        if (yolo_loaded && (++detect_frame_count % kDetectEveryN == 0)) {
+                            if (detect_shared.frame_mtx.try_lock()) {
+                                detect_shared.frame = bgr_frame;  // shallow copy (ref-counted)
+                                detect_shared.frame_ready = true;
+                                detect_shared.frame_mtx.unlock();
+                                detect_shared.frame_cv.notify_one();
+                            }
+                        }
+
+                        // Check for fresh detection result (non-blocking)
+                        if (detect_shared.result_fresh.load(std::memory_order_acquire)) {
+                            if (detect_shared.result_mtx.try_lock()) {
+                                if (detect_shared.result_valid) {
+                                    detection = detect_shared.latest;
+                                }
+                                detect_shared.result_fresh.store(false, std::memory_order_release);
+                                detect_shared.result_mtx.unlock();
+                            }
+                        }
+
+                        // Fall back to ORB detector if YOLO not loaded
+                        if (!yolo_loaded) {
+                            detection = detector.detect(bgr_frame);
+                        }
+
                         if (detection.has_value()) {
-                            // Target found - initialize tracker
+                            // Target found — stop sweep, initialize KCF tracker
+                            sweep.reset();
                             cv::Rect2d det_bbox(static_cast<float>(detection->bbox.x),
                                                 static_cast<float>(detection->bbox.y),
                                                 static_cast<float>(detection->bbox.w),
                                                 static_cast<float>(detection->bbox.h));
                             if (tracker.init(bgr_frame, det_bbox)) {
-                                // AM7-L3-VIS-001: Zero-copy reference template capture
-                                // Pass ZeroCopyFrame descriptor, NOT the wrapped cv::Mat
                                 tracker.capture_reference_template(frame, det_bbox);
-                                // Signal detection to state machine with ORB confidence
                                 state_machine.on_detection(*detection);
                             }
                         }
-                        // No detection - stay in SEARCH
+                        // Stay in SEARCH — centroid at frame center
                         current_solution.valid = false;
                         current_solution.centroid_x = static_cast<float>(frame.width) / 2.0f;
                         current_solution.centroid_y = static_cast<float>(frame.height) / 2.0f;
@@ -629,6 +778,31 @@ int main(int argc, char* argv[]) {
                         current_solution = tracker.update(bgr_frame);
 
                         if (current_solution.valid) {
+                            // Optical Logic Gate: Validate alignment between USB and MIPI streams
+                            if (dual_camera.is_usb_connected()) {
+                                auto roi = dual_camera.get_latest_roi();
+                                if (roi.has_value()) {
+                                    // Calculate alignment: ROI center vs tracking centroid
+                                    float roi_cx = roi->x + roi->w * 0.5f;
+                                    float roi_cy = roi->y + roi->h * 0.5f;
+                                    float dx = std::abs(current_solution.centroid_x - roi_cx);
+                                    float dy = std::abs(current_solution.centroid_y - roi_cy);
+                                    
+                                    bool aligned = (dx < 50.0f && dy < 50.0f);  // 50px variance
+                                    dual_camera.set_usb_aligned(aligned);
+                                    dual_camera.set_optical_gate_passed(aligned);
+                                    
+                                    if (!aligned) {
+                                        std::cerr << "[OpticalGate] WARN: USB/MIPI misalignment - "
+                                                  << "dx=" << dx << "px, dy=" << dy << "px\n";
+                                        telemetry.log_event(
+                                            aurore::TelemetryEventId::DUAL_STREAM_OPTICAL_GATE_FAIL,
+                                            aurore::TelemetrySeverity::kWarning,
+                                            "USB/MIPI misalignment");
+                                    }
+                                }
+                            }
+                            
                             // Validate solution bounds
                             if (current_solution.centroid_x < 0 ||
                                 current_solution.centroid_x > static_cast<float>(frame.width) ||
@@ -649,8 +823,10 @@ int main(int argc, char* argv[]) {
                             float redetect_score = tracker.redetect(bgr_frame);
                             state_machine.on_redetection_score(redetect_score);
                             if (redetect_score < 0.85f) {
-                                // Redetection failed - reset tracker and fall back to SEARCH
+                                // Redetection failed - reset tracker and resume sweep
                                 tracker.reset();
+                                sweep.reset();
+                                last_tick_ns = aurore::get_timestamp();
                             }
                             current_solution.centroid_x = static_cast<float>(frame.width) / 2.0f;
                             current_solution.centroid_y = static_cast<float>(frame.height) / 2.0f;
@@ -671,6 +847,29 @@ int main(int argc, char* argv[]) {
                     // Buffer full - solution dropped
                 }
                 last_track_sequence.store(frame.sequence, std::memory_order_release);
+
+                // Dual-stream telemetry: Log MIPI and USB frame stats
+                auto stream_status = dual_camera.get_status();
+                dual_camera.record_mipi_frame(now_ns);
+                
+                // Log dual-stream metrics every 100 frames to avoid overwhelming telemetry
+                if (frame.sequence % 100 == 0) {
+                    aurore::CsvLogEntry entry;
+                    entry.mipi_frame_id = stream_status.mipi_frame_id;
+                    entry.usb_frame_id = stream_status.usb_frame_id;
+                    entry.mipi_latency_us = stream_status.mipi_latency_us;
+                    entry.usb_latency_us = stream_status.usb_latency_us;
+                    entry.optical_gate_passed = stream_status.optical_gate_passed;
+                    entry.set_module("vision");
+                    entry.set_event("dual_stream");
+                    
+                    // Check for latency warnings on critical path
+                    if (stream_status.mipi_latency_us > 5000) {
+                        telemetry.log_event(aurore::TelemetryEventId::DUAL_STREAM_LATENCY_WARNING,
+                                          aurore::TelemetrySeverity::kWarning,
+                                          "MIPI latency exceeded 5ms");
+                    }
+                }
 
                 // Zero-copy release
                 camera->release_frame(frame);
@@ -754,11 +953,12 @@ int main(int argc, char* argv[]) {
             }
 
             // Send servo commands only if actuation is gated and we're in a command state
+            // Per HIL spec: Azimuth=Ch10, Elevation=Ch11, Trigger=Ch8
             if (actuation_allowed &&
                 (state == aurore::FcsState::TRACKING || state == aurore::FcsState::ARMED ||
                  state == aurore::FcsState::FREECAM)) {
-                fusion_hat.set_servo_angle(0, gimbal_cmd.az_deg);  // ch0 = azimuth
-                fusion_hat.set_servo_angle(1, gimbal_cmd.el_deg);  // ch1 = elevation
+                fusion_hat.set_servo_angle(10, gimbal_cmd.az_deg);  // ch10 = azimuth
+                fusion_hat.set_servo_angle(11, gimbal_cmd.el_deg);  // ch11 = elevation
             }
 
             // Check I2C error threshold and trigger fault if exceeded
@@ -794,12 +994,12 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            // Read gimbal status from actual servo feedback
+            // Read gimbal status from actual servo feedback (ch10=az, ch11=el)
             aurore::GimbalStatusSm gimbal_status;
-            if (auto az = fusion_hat.get_servo_angle(0)) {
+            if (auto az = fusion_hat.get_servo_angle(10)) {
                 gimbal_status.az_error_deg = std::abs(*az - gimbal_cmd.az_deg);
             }
-            if (auto el = fusion_hat.get_servo_angle(1)) {
+            if (auto el = fusion_hat.get_servo_angle(11)) {
                 gimbal_status.el_error_deg = std::abs(*el - gimbal_cmd.el_deg);
             }
             gimbal_status.velocity_deg_s = 0.0f;  // TODO: Read from gimbal
@@ -994,14 +1194,19 @@ int main(int argc, char* argv[]) {
         }
     };
 
+    // Wake detect thread so it exits cleanly
+    detect_shared.frame_cv.notify_all();
+
     join_with_timeout(vision_thread, 2000);
     join_with_timeout(track_thread, 2000);
     join_with_timeout(actuation_thread, 2000);
+    join_with_timeout(detect_thread, 3000);
     join_with_timeout(safety_thread, 2000);
 
     // Stop servers
     link_server.stop();
     hud_socket.stop();
+    cmd_socket.stop();
 
     // Stop camera
     if (camera) {
