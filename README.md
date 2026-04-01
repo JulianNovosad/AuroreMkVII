@@ -1,14 +1,14 @@
-# Aurore MkVII - Fire Control System
+# Aurore MkVII - Turret
 
 **Personal Hobby Project - Educational Use Only**
 
-Real-time vision-based fire control system for Raspberry Pi 5. Designed for 120Hz frame processing with deterministic timing and safety monitoring.
+Automated, wide-area, visible-light-optical, electro-optical, gimbal-actuated, laser-rangefinding, real-time, AI-augmented computer-vision-directed, static-mount, ground-based, autonomous-surveillance, target-acquisition, and ballistic-tracking turret defense system based on the Raspberry Pi 5. The entire compute, sensor, effector, and power assembly is mounted on a 2-DOF gimbal atop a ground tripod. Designed for 120Hz frame processing with deterministic timing and safety monitoring.
 
 ---
 
 ## ⚠️ Disclaimer
 
-This project is for **educational and skill acquisition purposes only**. The Raspberry Pi 5 platform is NOT suitable for safety-critical, military, or certification-bound applications. Do not deploy this system in any application where failure could cause injury, death, or property damage.
+This project is for **skill acquisition purposes only**. The Raspberry Pi 5 platform is NOT suitable for safety-critical, military, or certification-bound applications. Will not deploy this system in any application where failure could cause injury, death, or property damage.
 
 ---
 
@@ -23,13 +23,7 @@ This project is for **educational and skill acquisition purposes only**. The Ras
 | glibc | >= 2.39-1ubuntu3 | CVE-2024-2961 (High) |
 | Linux Kernel | >= 6.8.0-25 | CVE-2024-26581 (Medium) |
 
-**Before building**, ensure your system is updated:
-
-```bash
-sudo apt update && sudo apt upgrade -y
-```
-
-See [docs/dependencies.md](docs/dependencies.md) for complete SBOM and vulnerability remediation details.
+See `docs` for complete SBOM and vulnerability remediation details.
 
 ---
 
@@ -109,106 +103,34 @@ AuroreMkVII/
 
 ---
 
+## Running
+
+### Dev / field
+
+```bash
+sudo ./scripts/launch.sh          # starts aurore + aurore-link HUD
+# HUD available at http://<pi-ip>:8080/
+# Ctrl+C stops both cleanly
+```
+
+### Boot-time auto-start (production)
+
+```bash
+sudo cp systemd/aurore.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now aurore
+
+sudo systemctl status aurore      # check status
+journalctl -u aurore -f           # follow logs
+```
+
+---
+
 ## Build Instructions
 
+Standard cmake
+
 ### Prerequisites
-
-#### For Native Build (laptop/desktop development):
-
-**Step 1: Update system packages** (addresses CVE-2024-2961, CVE-2024-26581):
-```bash
-sudo apt update && sudo apt upgrade -y
-```
-
-**Step 2: Install build dependencies**:
-```bash
-# Ubuntu 24.04 / Debian 12
-sudo apt install -y libopencv-dev libcamera-dev cmake g++ pkg-config libwebp7 libwebp-dev
-```
-
-**Step 3: Verify minimum versions** (security requirement):
-```bash
-# OpenCV >= 4.9.0
-pkg-config --modversion opencv4
-
-# libwebp >= 1.3.2
-dpkg -l libwebp7 libwebp-dev | grep libwebp
-
-# glibc >= 2.39-1ubuntu3
-ldd --version
-
-# Kernel >= 6.8.0-25
-uname -r
-```
-
-If any version is below the minimum, run `sudo apt update && sudo apt upgrade` again or check Ubuntu security notices.
-
-#### For Cross-Compilation (Raspberry Pi 5 target):
-```bash
-# Install ARM64 cross-compiler toolchain
-sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-
-# Verify installation
-aarch64-linux-gnu-g++ --version
-```
-
-### Quick Start
-
-#### Native Build (for development/testing on laptop):
-```bash
-./scripts/build-native.sh Release
-cd build-native && ctest --output-on-failure
-```
-
-#### Cross-Compile for Raspberry Pi 5:
-```bash
-./scripts/build-rpi.sh Release
-```
-
-#### Deploy to Raspberry Pi 5:
-```bash
-# Set environment variables (optional, defaults shown)
-export RPI_USER=pi
-export RPI_HOST=aurorpi.local  # or IP address like 192.168.1.100
-
-# Deploy binaries
-./scripts/deploy-to-rpi.sh
-```
-
-### Manual Build
-
-#### Native (x86_64):
-```bash
-mkdir build-native && cd build-native
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . -j$(nproc)
-```
-
-#### Cross-Compile for Raspberry Pi 5 (aarch64):
-```bash
-mkdir build-rpi && cd build-rpi
-cmake .. \
-  -DCMAKE_TOOLCHAIN_FILE=../cmake/aarch64-rpi5-toolchain.cmake \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build . -j$(nproc)
-
-# Verify architecture
-file aurore
-# Should show: ELF 64-bit LSB executable, ARM aarch64
-```
-
-### Run Tests
-
-```bash
-# Native tests (on laptop)
-cd build-native
-ctest --output-on-failure
-
-# Target tests (deploy to RPi 5 first, then SSH in)
-ssh pi@aurorpi.local
-cd ~/aurore/build-rpi
-ctest --output-on-failure
-```
 
 ---
 
@@ -360,7 +282,7 @@ telemetry.stop();
 
 ### 6. State Machine (`state_machine.hpp`)
 
-FCS state machine implementing BOOT→IDLE_SAFE→FREECAM→SEARCH→TRACKING→ARMED→FAULT transitions:
+turret state machine implementing BOOT→IDLE_SAFE→FREECAM→SEARCH→TRACKING→ARMED→FAULT transitions:
 
 ```cpp
 #include "aurore/state_machine.hpp"
@@ -387,7 +309,7 @@ fsm.on_fault(aurore::FaultCode::CAMERA_TIMEOUT);
 ```
 
 **Features:**
-- 7-state FCS state machine per spec.md AM7-L1-MODE-002
+- 7-state turret state machine per spec.md AM7-L1-MODE-002
 - Guarded transitions with validation
 - FAULT state latching (requires power cycle/reset)
 - Operator authorization for ARMED state
@@ -542,7 +464,7 @@ The following subsystems are implemented and functional:
 **Implemented:**
 - `LockFreeRingBuffer`, `ThreadTiming`, `DeadlineMonitor`, `SafetyMonitor`, `CameraWrapper`
 - `TelemetryWriter` - async telemetry logging with CSV/JSON output
-- `StateMachine` - 7-state FCS state machine (BOOT→IDLE_SAFE→FREECAM→SEARCH→TRACKING→ARMED→FAULT)
+- `StateMachine` - 7-state turret state machine (BOOT→IDLE_SAFE→FREECAM→SEARCH→TRACKING→ARMED→FAULT)
 - `BallisticSolver` - ballistic trajectory computation with lookup tables
 - `FusionHat` - I2C driver for Fusion HAT+ gimbal controller
 - `KcfTracker` - KCF visual tracker (1-2ms execution time)

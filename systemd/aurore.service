@@ -1,0 +1,15 @@
+[Unit]
+Description=Aurore MkVII Fire Control System
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/pi/AuroreMkVII/scripts/launch.sh
+WorkingDirectory=/home/pi/AuroreMkVII
+User=root
+Restart=on-failure
+RestartSec=5
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
