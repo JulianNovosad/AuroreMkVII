@@ -1,6 +1,5 @@
 /**
  * Aurore MkVII — Remote Control Station
- * AC-130 Military HUD Aesthetic
  * main.js: WebSocket client, canvas animation, HUD updates
  */
 
@@ -202,6 +201,20 @@ function updateFcsState(state) {
   if (state !== 'FAULT') {
     fcsStateEl.style.opacity = 1.0;
   }
+  triggerGlitch(); // Visual feedback on state change
+}
+
+/**
+ * Trigger glitch effect on state/mode change
+ * Duration: 200ms (matches CSS animation)
+ */
+function triggerGlitch() {
+  const hudOverlay = document.querySelector('.hud-overlay');
+  hudOverlay.classList.add('glitch-active');
+  
+  setTimeout(() => {
+    hudOverlay.classList.remove('glitch-active');
+  }, 200);
 }
 
 function updateGimbalPipper(gimbal) {
@@ -236,7 +249,14 @@ function updateTrackBrackets(track) {
     bracketTR.style.display = 'none';
     bracketBL.style.display = 'none';
     bracketBR.style.display = 'none';
+    bracketsVisible = false;
     return;
+  }
+  
+  // Detect lock transition (brackets transitioning from hidden to visible)
+  if (!bracketsVisible) {
+    triggerGlitch(); // Glitch feedback on new lock
+    bracketsVisible = true;
   }
   
   const W = canvas.width;
@@ -254,21 +274,25 @@ function updateTrackBrackets(track) {
   bracketTL.style.display = 'block';
   bracketTL.style.left = (tx - halfW) + 'px';
   bracketTL.style.top  = (ty - halfH) + 'px';
+  bracketTL.classList.add('locked'); // Add locked state color
   
   // Top-Right bracket
   bracketTR.style.display = 'block';
   bracketTR.style.left = (tx + halfW - bracketSize) + 'px';
   bracketTR.style.top  = (ty - halfH) + 'px';
+  bracketTR.classList.add('locked');
   
   // Bottom-Left bracket
   bracketBL.style.display = 'block';
   bracketBL.style.left = (tx - halfW) + 'px';
   bracketBL.style.top  = (ty + halfH - bracketSize) + 'px';
+  bracketBL.classList.add('locked');
   
   // Bottom-Right bracket
   bracketBR.style.display = 'block';
   bracketBR.style.left = (tx + halfW - bracketSize) + 'px';
   bracketBR.style.top  = (ty + halfH - bracketSize) + 'px';
+  bracketBR.classList.add('locked');
 }
 
 function updateGimbalDial(yaw) {
@@ -285,6 +309,10 @@ function updateHUD(s) {
   phitEl.textContent = 'PHIT ' + pct;
   
   // Mode indicator
+  if (s.mode !== previousMode) {
+    triggerGlitch(); // Mode changed, trigger visual feedback
+    previousMode = s.mode;
+  }
   currentMode = s.mode; // Sync with server state
   const modeActive = s.mode === 'AUTO' ? '[X]' : '[ ]';
   modeIndEl.textContent = modeActive + ' AUTO';
@@ -879,6 +907,8 @@ canvas.addEventListener('contextmenu', (e) => {
 
 // Track current mode
 let currentMode = 'AUTO';
+let previousMode = 'AUTO';
+let bracketsVisible = false; // Track if brackets are currently shown (locked)
 
 // Override mode indicator update to track mode
 const originalUpdateHUD = typeof updateHUD !== 'undefined' ? updateHUD : null;
