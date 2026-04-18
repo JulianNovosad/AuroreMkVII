@@ -93,6 +93,32 @@ html, body {
 .hud-quadrant {
   pointer-events: none;
   padding: 12px;
+  position: relative;
+}
+
+/* Vertical delimiter lines on left and right quadrants */
+.hud-top-left::before,
+.hud-mid-left::before,
+.hud-bottom-left::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10%;
+  height: 80%;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.hud-top-right::after,
+.hud-mid-right::after,
+.hud-bottom-right::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 10%;
+  height: 80%;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .hud-top-left {
@@ -193,6 +219,38 @@ html, body {
   50% { opacity: 0.3; }
 }
 
+/* Glitch effect — triggered on state change */
+.hud-overlay.glitch-active {
+  animation: hud-glitch 0.2s linear;
+}
+
+@keyframes hud-glitch {
+  0% {
+    text-shadow: 2px 0 0 rgba(255, 0, 0, 0.8), -2px 0 0 rgba(255, 255, 255, 0.4);
+    transform: translate(1px, 1px);
+  }
+  20% {
+    text-shadow: -2px 0 0 rgba(255, 0, 0, 0.8), 2px 0 0 rgba(255, 255, 255, 0.4);
+    transform: translate(-1px, -2px);
+  }
+  40% {
+    text-shadow: 2px 0 0 rgba(255, 0, 0, 0.8), -2px 0 0 rgba(255, 255, 255, 0.4);
+    transform: translate(-2px, 1px);
+  }
+  60% {
+    text-shadow: -2px 0 0 rgba(255, 0, 0, 0.8), 2px 0 0 rgba(255, 255, 255, 0.4);
+    transform: translate(2px, 2px);
+  }
+  80% {
+    text-shadow: 2px 0 0 rgba(255, 0, 0, 0.8), -2px 0 0 rgba(255, 255, 255, 0.4);
+    transform: translate(1px, -1px);
+  }
+  100% {
+    text-shadow: none;
+    transform: translate(0, 0);
+  }
+}
+
 /* --- Mode indicator ------------------------------------- */
 #mode-ind {
   font-size: 16px;
@@ -279,6 +337,25 @@ html, body {
   /* Positioned via JS: left/top */
 }
 
+/* --- Scanning Ring Animation --------------------------- */
+.scan-ring {
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+  opacity: 0;
+}
+
+@keyframes pulse-ring {
+  0% {
+    r: 24px;
+    opacity: 0.8;
+    stroke-width: 2px;
+  }
+  100% {
+    r: 150px;
+    opacity: 0;
+    stroke-width: 0.5px;
+  }
+}
+
 /* --- Target Corner Brackets ----------------------------- */
 .track-bracket {
   position: absolute;
@@ -289,6 +366,27 @@ html, body {
   pointer-events: none;
   z-index: 30;
   display: none; /* Hidden by default, shown when track.valid */
+  transition: top 0.1s linear, left 0.1s linear;
+  animation: bracket-snap 0.3s ease-out forwards;
+}
+
+.track-bracket.locked line {
+  stroke: #ff3333;
+}
+
+@keyframes bracket-snap {
+  0% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 /* --- Invisible Joystick ------------------------------- */
