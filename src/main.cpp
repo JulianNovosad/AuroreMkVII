@@ -20,12 +20,14 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <cmath>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <filesystem>
 #include <thread>
@@ -957,6 +959,11 @@ int main(int argc, char* argv[]) {
         // Last ballistics solution for state machine feedback
         std::optional<aurore::FireControlSolution> last_ballistics_sol;
 
+        // Gimbal velocity estimation: finite-difference over successive angle reads
+        float prev_az_deg = 0.0f;
+        float prev_el_deg = 0.0f;
+        aurore::TimestampNs prev_gimbal_ts = 0;
+
         while (!g_shutdown_requested.load(std::memory_order_acquire) &&
                !safety_monitor.is_emergency_active()) {
             // RAII watchdog kick - auto-kick at end of each loop iteration
@@ -1032,14 +1039,30 @@ int main(int argc, char* argv[]) {
             }
 
             // Read gimbal status from actual servo feedback (ch10=az, ch11=el)
+            // Velocity is estimated by finite-difference over consecutive angle reads.
             aurore::GimbalStatusSm gimbal_status;
-            if (auto az = fusion_hat.get_servo_angle(10)) {
-                gimbal_status.az_error_deg = std::abs(*az - gimbal_cmd.az_deg);
+            const aurore::TimestampNs gimbal_ts = aurore::get_timestamp();
+            const auto az_opt = fusion_hat.get_servo_angle(10);
+            const auto el_opt = fusion_hat.get_servo_angle(11);
+            if (az_opt) {
+                gimbal_status.az_error_deg = std::abs(*az_opt - gimbal_cmd.az_deg);
             }
-            if (auto el = fusion_hat.get_servo_angle(11)) {
-                gimbal_status.el_error_deg = std::abs(*el - gimbal_cmd.el_deg);
+            if (el_opt) {
+                gimbal_status.el_error_deg = std::abs(*el_opt - gimbal_cmd.el_deg);
             }
-            gimbal_status.velocity_deg_s = 0.0f;  // TODO: Read from gimbal
+            if (prev_gimbal_ts > 0 && az_opt && el_opt) {
+                const float dt_s =
+                    static_cast<float>(gimbal_ts - prev_gimbal_ts) * 1e-9f;
+                if (dt_s > 0.0f) {
+                    const float daz = *az_opt - prev_az_deg;
+                    const float del = *el_opt - prev_el_deg;
+                    gimbal_status.velocity_deg_s =
+                        std::sqrt(daz * daz + del * del) / dt_s;
+                }
+            }
+            if (az_opt) prev_az_deg = *az_opt;
+            if (el_opt) prev_el_deg = *el_opt;
+            prev_gimbal_ts = gimbal_ts;
             state_machine.on_gimbal_status(gimbal_status);
 
             // Update safety monitor for actuation frame
