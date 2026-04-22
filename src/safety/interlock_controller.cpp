@@ -31,15 +31,6 @@ static constexpr uint32_t GPLEV0 = 0x34;   // GPIO Pin Level
 
 // GpioState implementation
 bool InterlockController::GpioState::init() {
-#ifdef AURORE_LAPTOP_BUILD
-    gpio_map_size = 4096;
-    gpio_map = static_cast<volatile uint32_t*>(calloc(1, gpio_map_size));
-    if (!gpio_map) {
-        std::cerr << "Failed to allocate dummy GPIO memory" << std::endl;
-        return false;
-    }
-    return true;
-#else
     // Open /dev/gpiomem (preferred - no root required)
     mem_fd = open("/dev/gpiomem", O_RDWR | O_SYNC);
     if (mem_fd < 0) {
@@ -68,16 +59,9 @@ bool InterlockController::GpioState::init() {
     }
 
     return true;
-#endif
 }
 
 void InterlockController::GpioState::cleanup() {
-#ifdef AURORE_LAPTOP_BUILD
-    if (gpio_map) {
-        free(const_cast<uint32_t*>(gpio_map));
-        gpio_map = nullptr;
-    }
-#else
     if (gpio_map && gpio_map != MAP_FAILED) {
         munmap(const_cast<uint32_t*>(gpio_map), gpio_map_size);
         gpio_map = nullptr;
@@ -86,7 +70,6 @@ void InterlockController::GpioState::cleanup() {
         close(mem_fd);
         mem_fd = -1;
     }
-#endif
 }
 
 void InterlockController::GpioState::set_pin_mode(int pin, int mode) {
@@ -134,6 +117,12 @@ bool InterlockController::init() {
         return false;
     }
 
+    // Fail-safe: set servo to INHIBIT state before GPIO init so the servo is always
+    // in the safe position even if GPIO is unavailable.
+    if (hat_) {
+        hat_->set_servo_pulse_width(config_.inhibit_channel, 1000);  // 1000us = safe/inhibit
+    }
+
     if (!impl_ || !impl_->init()) {
         std::cerr << "GPIO initialization failed" << std::endl;
         return false;
@@ -143,10 +132,6 @@ bool InterlockController::init() {
     impl_->set_pin_mode(config_.input_pin, 0);       // Input
     impl_->set_pin_mode(config_.status_led_pin, 1);  // Output
 
-    // Set initial output state (inhibit active)
-    if (hat_) {
-        hat_->set_servo_pulse_width(config_.inhibit_channel, 1000);  // 1000us = safe/inhibit
-    }
     impl_->write_pin(config_.status_led_pin, 0);
 
     std::cout << "Interlock controller initialized:" << " input=GPIO" << config_.input_pin
@@ -163,8 +148,8 @@ void InterlockController::start() {
 
     running_.store(true, std::memory_order_release);
 
-    // Start monitoring thread
-    std::thread(&InterlockController::monitor_thread_func, this).detach();
+    // Start monitoring thread (joined in stop())
+    monitor_thread_ = std::thread(&InterlockController::monitor_thread_func, this);
 
     std::cout << "Interlock monitoring started" << std::endl;
 }
@@ -175,6 +160,10 @@ void InterlockController::stop() {
     }
 
     running_.store(false, std::memory_order_release);
+
+    if (monitor_thread_.joinable()) {
+        monitor_thread_.join();
+    }
 
     // Set inhibit output (safe state)
     if (hat_) {
@@ -277,16 +266,7 @@ void InterlockController::watchdog_feed() noexcept {
     const TimestampNs now = get_timestamp(ClockId::MonotonicRaw);
     last_watchdog_feed_ns_.store(now, std::memory_order_release);
     watchdog_feeds_.fetch_add(1, std::memory_order_relaxed);
-
-    // Check for watchdog timeout
-    const TimestampNs last_feed = last_watchdog_feed_ns_.load(std::memory_order_acquire);
-    const int64_t elapsed = timestamp_diff_ns(now, last_feed);
-
-    if (elapsed > static_cast<int64_t>(config_.watchdog_timeout_ms * 1000000UL)) {
-        // Watchdog timeout - trigger fault
-        fault_count_.fetch_add(1, std::memory_order_relaxed);
-        force_state(InterlockState::FAULT);
-    }
+    // Timeout detection is performed by monitor_thread_func(), not here.
 }
 
 void InterlockController::set_inhibit(bool inhibit) noexcept {

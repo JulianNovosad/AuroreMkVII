@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "fusion_hat.hpp"
@@ -328,6 +329,7 @@ class InterlockController {
     FusionHat* hat_;
     InterlockConfig config_;
     std::atomic<bool> running_{false};
+    std::thread monitor_thread_;
     std::atomic<InterlockState> state_{InterlockState::UNKNOWN};
     std::atomic<int> input_value_{0};
     std::atomic<int> output_value_{0};

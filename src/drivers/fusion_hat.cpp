@@ -316,24 +316,28 @@ bool FusionHat::init() {
         channels_[static_cast<size_t>(ch)].enabled.store(false, std::memory_order_release);
         channels_[static_cast<size_t>(ch)].current_pulse_width.store(1500, std::memory_order_release);  // Center
         channels_[static_cast<size_t>(ch)].current_angle.store(0.0f, std::memory_order_release);
+        // Sync per-channel endstop limits from global config so set_servo_angle works correctly
+        channels_[static_cast<size_t>(ch)].min_angle = config_.min_angle_deg;
+        channels_[static_cast<size_t>(ch)].max_angle = config_.max_angle_deg;
     }
+
+    // Mark initialized before setInterlock so the guard inside passes
+    initialized_.store(true, std::memory_order_release);
 
     // Initialize fire interlock to INHIBIT state (ICD-003)
     // This ensures fire is disabled by default until explicitly enabled
     if (!setInterlock(false)) {
         std::cerr << "FusionHat: Warning - failed to initialize interlock to INHIBIT state" << std::endl;
     }
-    
+
     // Start background command processor thread
     stop_thread_ = false;
     command_thread_ = std::thread(&FusionHat::command_processor, this);
-    
+
     // Set thread name if possible
 #ifdef __linux__
     pthread_setname_np(command_thread_.native_handle(), "fusion_hat_io");
 #endif
-
-    initialized_.store(true, std::memory_order_release);
     
     std::cout << "FusionHat: Initialized (" << get_driver_version() 
               << ", firmware " << get_firmware_version() << ")" << std::endl;
@@ -496,6 +500,7 @@ bool FusionHat::set_servo_pulse_width(int channel, int pulse_width_us) {
 
     push_command({ServoCommand::Type::SET_PULSE_WIDTH, channel, pulse_width_us});
 
+    channels_[static_cast<size_t>(channel)].current_pulse_width.store(pulse_width_us, std::memory_order_release);
     command_count_.fetch_add(1, std::memory_order_relaxed);
     return true;
 }
@@ -505,8 +510,7 @@ int FusionHat::get_pulse_width(int channel) const {
         return -1;
     }
 
-    std::string pwm_path = get_pwm_path(channel);
-    return read_sysfs(pwm_path + "/duty_cycle");  // Const method - use simple read
+    return channels_[static_cast<size_t>(channel)].current_pulse_width.load(std::memory_order_acquire);
 }
 
 bool FusionHat::set_servo_enabled(int channel, bool enable) {
@@ -703,7 +707,7 @@ float FusionHat::pulse_width_to_angle(int pulse_width_us) const noexcept {
 }
 
 std::string FusionHat::get_pwm_path(int channel) const {
-    return std::string(sysfs_base_) + "/pwm" + std::to_string(channel);
+    return std::string(sysfs_base_) + "/pwm/pwm" + std::to_string(channel);
 }
 
 }  // namespace aurore

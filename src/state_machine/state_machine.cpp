@@ -25,9 +25,11 @@ bool StateMachine::is_position_stable() const noexcept {
     }
 
     // Check deltas between consecutive frames in history
-    const int idx0 = position_history_idx_;
-    const int idx1 = (position_history_idx_ - 1 + 3) % 3;
-    const int idx2 = (position_history_idx_ - 2 + 3) % 3;
+    // position_history_idx_ points to NEXT slot after write-then-increment
+    // so most recent is at (idx - 1), previous at (idx - 2), oldest at (idx - 3)
+    const int idx0 = (position_history_idx_ - 1 + 3) % 3;  // Most recent
+    const int idx1 = (position_history_idx_ - 2 + 3) % 3;  // Previous
+    const int idx2 = (position_history_idx_ - 3 + 3) % 3;  // Oldest
 
     const auto& p0 = position_history_[idx0];
     const auto& p1 = position_history_[idx1];
@@ -332,7 +334,12 @@ void StateMachine::on_tracker_update(const TrackSolution& sol) {
 }
 
 void StateMachine::on_gimbal_status(const GimbalStatusSm& g) {
+    // Preserve settled_frames counter across updates — the incoming status from
+    // main.cpp always has settled_frames=0 (default-constructed), so we must
+    // keep our own count and copy it back after overwriting gimbal_.
+    const int saved_settled = gimbal_.settled_frames;
     gimbal_ = g;
+    gimbal_.settled_frames = saved_settled;
 
     if (state_ == FcsState::SEARCH) {
         // AM7-L2-MODE-004: SEARCH - wait for gimbal to settle

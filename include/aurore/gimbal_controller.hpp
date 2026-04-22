@@ -39,6 +39,7 @@ struct CameraIntrinsics {
 };
 
 // Converts pixel offset → servo angle, accepts commands from AUTO or FREECAM source.
+// Camera is rigidly mounted on turret payload (identity transform to gimbal frame).
 class GimbalController {
 public:
     explicit GimbalController(const CameraIntrinsics& cam = {});
@@ -78,6 +79,13 @@ public:
         prev_az_vel_.store(0.0f, std::memory_order_relaxed);
         prev_el_vel_.store(0.0f, std::memory_order_relaxed);
         prev_cmd_ns_.store(0, std::memory_order_relaxed);
+    }
+
+    // Reset angles and rate limiter to zero for test isolation
+    void reset_angles_for_test() {
+        az_.store(0.0f, std::memory_order_relaxed);
+        el_.store(0.0f, std::memory_order_relaxed);
+        reset_rate_limiter();
     }
 
 private:
