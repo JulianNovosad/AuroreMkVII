@@ -430,7 +430,7 @@ void AuroreLinkServer::broadcast_status(const LinkPayloadSystemState& state) {
     LinkOutputMessage msg{};
     msg.header.sync_word = 0xA7060006;  // AURORE06 mnemonic -> 0xA7060006
     msg.header.message_id = static_cast<uint16_t>(LinkMsgId::kSystemState);
-    msg.header.timestamp_ns = 0;  // TODO
+    msg.header.timestamp_ns = aurore::get_timestamp();
     msg.status = 0;               // ACK
     std::memcpy(msg.payload.data(), &state, sizeof(state));
 
