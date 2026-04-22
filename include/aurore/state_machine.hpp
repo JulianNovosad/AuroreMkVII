@@ -215,6 +215,10 @@ class StateMachine {
     bool has_zero_faults() const;
     bool has_operator_authorization() const;
 
+    // Report timing stability from safety_monitor.deadline_misses().
+    // Call once per actuation cycle: stable = (safety_monitor.deadline_misses() == 0).
+    void set_timing_stable(bool stable) noexcept { timing_stable_ = stable; }
+
    private:
     void transition(FcsState next);
     void enter_state(FcsState s);
@@ -261,6 +265,9 @@ class StateMachine {
     // AM7-L3-SAFE-002: Range data validation state
     RangeData last_valid_range_{};
     bool have_valid_range_{false};
+
+    // Timing stability flag updated from safety_monitor.deadline_misses() each cycle.
+    bool timing_stable_{true};
     std::chrono::milliseconds range_age_ms_{0};
 
     // AM7-L2-TGT-003/004: Target validation state

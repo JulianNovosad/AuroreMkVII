@@ -1069,6 +1069,7 @@ int main(int argc, char* argv[]) {
             if (el_opt) prev_el_deg = *el_opt;
             prev_gimbal_ts = gimbal_ts;
             state_machine.on_gimbal_status(gimbal_status);
+            state_machine.set_timing_stable(safety_monitor.deadline_misses() == 0);
 
             // Update safety monitor for actuation frame
             if (last_actuation_sequence > 0) {

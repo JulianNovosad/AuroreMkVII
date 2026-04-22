@@ -582,8 +582,9 @@ void StateMachine::set_operator_authorization(bool authorized) {
 bool StateMachine::has_valid_lock() const { return redetection_score_ >= kRedetectionScoreMin; }
 
 bool StateMachine::has_stable_timing() const {
-    // Jitter ≤5% at 99.9th percentile - checked externally
-    return true;  // Placeholder
+    // Driven by set_timing_stable(), which main loop calls each actuation cycle
+    // with (safety_monitor.deadline_misses() == 0).
+    return timing_stable_;
 }
 
 bool StateMachine::has_zero_faults() const { return !fault_latched_; }
