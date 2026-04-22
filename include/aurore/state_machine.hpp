@@ -100,6 +100,8 @@ struct TrackSolution {
     float centroid_y{0.f};
     float velocity_x{0.f};
     float velocity_y{0.f};
+    float bbox_w{0.f};  // bounding-box width in pixels (from tracker.last_bbox())
+    float bbox_h{0.f};  // bounding-box height in pixels
     bool valid{false};
     float psr{0.f};
 };

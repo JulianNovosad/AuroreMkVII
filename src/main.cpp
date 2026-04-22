@@ -813,6 +813,11 @@ int main(int argc, char* argv[]) {
                                state == aurore::FcsState::ARMED) {
                         // TRACKING/ARMED: update KCF tracker
                         current_solution = tracker.update(bgr_frame);
+                        {
+                            const cv::Rect2d bb = tracker.last_bbox();
+                            current_solution.bbox_w = static_cast<float>(bb.width);
+                            current_solution.bbox_h = static_cast<float>(bb.height);
+                        }
 
                         if (current_solution.valid) {
                             // Optical Logic Gate: Validate alignment between USB and MIPI streams
@@ -1079,8 +1084,8 @@ int main(int argc, char* argv[]) {
             hud_frame.el_deg = gimbal_cmd.el_deg;
             hud_frame.target_cx = latest_solution.centroid_x;
             hud_frame.target_cy = latest_solution.centroid_y;
-            hud_frame.target_w = latest_solution.valid ? 50.0f : 0.0f;  // Placeholder bbox size
-            hud_frame.target_h = latest_solution.valid ? 50.0f : 0.0f;
+            hud_frame.target_w = latest_solution.valid ? latest_solution.bbox_w : 0.0f;
+            hud_frame.target_h = latest_solution.valid ? latest_solution.bbox_h : 0.0f;
             hud_frame.velocity_x = latest_solution.velocity_x;
             hud_frame.velocity_y = latest_solution.velocity_y;
             hud_frame.confidence = latest_solution.psr > 0 ? latest_solution.psr : 0.0f;
