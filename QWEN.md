@@ -4,7 +4,7 @@ This file provides guidance to QWEN when working with code in this repository.
 
 ## Project Overview
 
-Aurore MkVII is a C++17 real-time vision-based fire control system targeting Raspberry Pi 5. It processes 1536×864 RAW10 frames at 120Hz with a ≤5ms WCET budget and 1kHz safety monitoring. **Educational/personal use only — not for safety-critical deployment.**
+Aurore MkVII is a C++17 real-time vision-based turret defense system targeting Raspberry Pi 5. The entire compute, sensor, effector, and power assembly is mounted on a 2-DOF gimbal atop a ground tripod. It processes 1536×864 RAW10 frames at 120Hz with a ≤5ms WCET budget and 1kHz safety monitoring. **Educational/personal use only — not for safety-critical deployment.**
 
 `AuroreMkVI/` is the predecessor implementation (TFLite + Edge TPU inference). It serves as a reference for architecture patterns, not as active source code.
 
@@ -100,7 +100,7 @@ The phase offsets stagger the 120Hz threads so vision captures first, track proc
 
 **Implemented:**
 - `LockFreeRingBuffer`, `ThreadTiming`, `DeadlineMonitor`, `SafetyMonitor`, `CameraWrapper`, `TelemetryWriter`
-- `StateMachine` - 7-state FCS state machine (BOOT→IDLE_SAFE→FREECAM→SEARCH→TRACKING→ARMED→FAULT)
+- `StateMachine` - 7-state turret state machine (BOOT→IDLE_SAFE→FREECAM→SEARCH→TRACKING→ARMED→FAULT)
 - `BallisticSolver` - ballistic trajectory computation with precomputed p_hit lookup tables
 - `FusionHat` - I2C driver for Fusion HAT+ gimbal controller with async command queuing
 - `KcfTracker` - KCF (Kernelized Correlation Filter) visual tracker (1-2ms execution time)
@@ -136,6 +136,18 @@ From `AuroreMkVI/AGENTS.md` (applies to MkVII as well):
 - No heap allocation in real-time threads after init; no `memcpy()` on the critical path (zero-copy invariant)
 - WCET measurements start from the 2nd invocation (first warms up caches)
 
+## Mocks are STRICTLY PROHIBITED
+
+**Mocks, simulations, and fake hardware are 100% banned from this project.**
+
+- All tests MUST run against real hardware only
+- No mock objects, mock classes, or simulated hardware drivers
+- Unit tests should test pure logic functions without dependencies, or skip if hardware is required
+- Integration tests must connect to actual sensors (camera, LRF, IMU, Fusion HAT+)
+- Any test file containing "mock" or "Mock" in class/variable names will be rejected
+
+If you need to test error conditions, use fault injection on real hardware or document as a hardware limitation.
+
 ## Cross-Compilation
 
 The toolchain file is `cmake/aarch64-rpi5-toolchain.cmake`. Binaries that require hardware (camera, I2C, SCHED_FIFO at high priority) must run on the RPi 5. Unit tests for pure-logic modules (`ring_buffer_test`, `safety_monitor_test`) run on the native build. The `TimingIntegrationTest` is disabled by default in CTest — enable it only on the target.
@@ -143,3 +155,6 @@ The toolchain file is `cmake/aarch64-rpi5-toolchain.cmake`. Binaries that requir
 ## Real-Time Target Configuration
 
 On the RPi 5, CPUs 2–3 must be isolated (`isolcpus=2-3 nohz_full=2-3 rcu_nocbs=2-3 irqaffinity=0-1` in `/boot/firmware/cmdline.txt`) and CPU governor set to `performance`. Run the binary as root for `SCHED_FIFO` and `mlockall`.
+
+## Qwen Added Memories
+- If the LRF hardware is not detecting a laser reflection, it is not because the baud rate is wrong, ENA pin is not HIGH, or UART TX/RX is swapped. The issue is in the code itself, be it in the driver or the implementation

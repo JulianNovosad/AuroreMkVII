@@ -72,6 +72,16 @@ enum class TelemetryEventId : uint16_t {
     TEMPERATURE_WARNING = 0x0503,
     TEMPERATURE_CRITICAL = 0x0504,
     I2C_FAULT = 0x0505,
+
+    // Dual-stream vision events (AM7-L3-VIS-002)
+    DUAL_STREAM_MIPI_FRAME = 0x0601,
+    DUAL_STREAM_USB_FRAME = 0x0602,
+    DUAL_STREAM_USB_DETECTION = 0x0603,
+    DUAL_STREAM_OPTICAL_GATE_PASS = 0x0604,
+    DUAL_STREAM_OPTICAL_GATE_FAIL = 0x0605,
+    DUAL_STREAM_USB_DISCONNECT = 0x0606,
+    DUAL_STREAM_USB_RECONNECT = 0x0607,
+    DUAL_STREAM_LATENCY_WARNING = 0x0608,
 };
 
 /**
@@ -431,6 +441,15 @@ struct CsvLogEntry {
     // System health
     float cpu_temp_c = 0.0f;
     float cpu_usage_percent = 0.0f;
+
+    // Dual-stream vision data (AM7-L3-VIS-002)
+    uint32_t mipi_frame_id = 0;      ///< MIPI CSI-2 frame ID
+    uint32_t usb_frame_id = 0;        ///< USB webcam frame ID
+    uint64_t mipi_latency_us = 0;     ///< MIPI frame capture to process latency
+    uint64_t usb_latency_us = 0;       ///< USB frame capture to process latency
+    float usb_roi_x = 0.0f;           ///< USB detection ROI center X
+    float usb_roi_y = 0.0f;            ///< USB detection ROI center Y
+    bool optical_gate_passed = false; ///< Optical Logic Gate validation result
 
     // SEC-009: Fixed-size buffers with explicit constants
     char module[kModule_name_max] = {};

@@ -1,8 +1,8 @@
 # Aurore Mk VII — Integrated Defense Engineering Requirements Package
 
 **Document Classification:** PERSONAL DEVELOPMENT / EDUCATIONAL USE
-**Document Version:** 5.0 (Hardware & Architecture Revision)
-**Date:** 2026-03-03
+**Document Version:** 6.0 (Turret Architecture Revision)
+**Date:** 2026-03-31
 **Status:** PERSONAL DEVELOPMENT VERSION — NOT FOR SAFETY-CRITICAL USE
 
 **Disclaimer:** This document is for educational and skill acquisition purposes only. The Raspberry Pi 5 platform is NOT suitable for safety-critical, military, or certification-bound applications. Do not deploy this system in any application where failure could cause injury, death, or property damage.
@@ -11,14 +11,13 @@
 
 ## 1. Document Authority and Scope
 
-This document is the single authoritative engineering control artifact for the Aurore Mk VII Man-portable Picatinny-mounted Fire Control System (FCS) — Personal Development Edition. It consolidates system requirements, decomposed subsystem requirements, interface control requirements, requirements traceability, and verification planning.
+This document is the single authoritative engineering control artifact for the Aurore Mk VII Gimbal-Mounted Turret Defense System — Personal Development Edition. The entire compute, sensor, effector, and power assembly is mounted on a 2-DOF gimbal atop a ground tripod. It consolidates system requirements, decomposed subsystem requirements, interface control requirements, requirements traceability, and verification planning.
 
 **Note:** This is a personal development project. No regulatory compliance (ITAR, MIL-STD, ISO) is claimed or required.
 
 **External Standards Referenced (as design guidance only):**
 - MIL-STD-810H — Environmental Engineering Considerations (design target, not certified)
 - MIL-STD-461G — Electromagnetic Interference Characteristics (design target, not certified)
-- MIL-STD-1913 — Picatinny Rail Specification
 - ISO 13849-1/2 — Safety of Machinery (design inspiration, not certification)
 - IEC 61508 — Functional Safety (design inspiration, not certification)
 - IEC 60529 — Ingress Protection (design target)
@@ -139,9 +138,9 @@ All L2 requirements trace to exactly one L1 parent. All L3 requirements trace to
 
 ### 5.1 System Identity
 
-**AM7-L1-SYS-001**: System mass shall be ≤ 2.5 kg including battery. System dimensions shall fit within 200mm × 150mm × 100mm envelope. System shall mount to MIL-STD-1913 Picatinny rail per specification.
+**AM7-L1-SYS-001**: Turret payload mass (all components on gimbal: RPi 5, Fusion HAT+, dual cameras, LRF, battery, effector) shall be ≤ 1.5 kg. Total system mass including tripod shall be ≤ 5.0 kg. System shall mount on a ground tripod via standard 3/8"-16 or 1/4"-20 tripod thread.
 
-**AM7-L1-SYS-002**: System enclosure shall achieve IP67 ingress protection per IEC 60529 (design target). System shall not require user service. Tamper-evident seals shall be applied to all enclosure fasteners.
+**AM7-L1-SYS-002**: System enclosure design is TBD (physical design, not software-controlled). Enclosure shall protect rotating payload assembly from dust and light rain (design target).
 
 **AM7-L1-SYS-003**: System timing shall be bounded with: (a) WCET ≤ 5.0ms per AM7-L2-TIM-002, (b) jitter ≤ 5% at 99.9th percentile per AM7-L2-TIM-003, (c) all execution loops shall have statically bounded iteration counts.
 
@@ -213,7 +212,7 @@ All L2 requirements trace to exactly one L1 parent. All L3 requirements trace to
 
 **AM7-L2-ACT-001**: Gimbal command updates shall be issued at 120 Hz ±1% synchronized to frame boundary with tolerance ±50μs.
 
-**AM7-L2-ACT-002**: Gimbal motion shall be constrained to: elevation -10° to +45°, azimuth ±90°, velocity ≤ 60°/s, acceleration ≤ 120°/s².
+**AM7-L2-ACT-002**: Gimbal motion shall be constrained to: elevation -10° to +45°, azimuth ±90°, velocity ≤ 60°/s, acceleration ≤ 120°/s². Note: with full turret payload on gimbal, achievable velocity and acceleration may be lower than these software limits — verify on hardware.
 
 **AM7-L2-ACT-003**: Actuation command latency shall be ≤ 2.0ms from compute output to gimbal servo command.
 
@@ -1588,16 +1587,21 @@ private:
 6. **MicroSD Write Latency:** Unbounded; use high-endurance cards with care.
 7. **No Safety Manual:** Broadcom does not provide safety manual for BCM2712.
 
-**User Hardware Configuration:**
+**User Hardware Configuration (Turret Payload — all on gimbal):**
 1. Raspberry Pi 5 4GB RAM (user-provided hardware)
 2. Boot from 128GB MicroSD card
-3. Camera: Raspberry Pi Camera Module 3 (naked, no cooler or cable extensions)
-4. Audio: Fusion HAT+ onboard speaker/microphone (for situational awareness)
-5. Gimbal/Interlock Control: SunFounder Fusion HAT+ (I2C address 0x17, GD32 MCU)
+3. Primary Camera: Raspberry Pi Camera Module 3 (MIPI CSI-2, naked, no cooler or cable extensions)
+4. Secondary Camera: USB camera (optical gate / wide-angle)
+5. Laser Rangefinder: UART LRF, boresighted with primary camera
+6. Audio: Fusion HAT+ onboard speaker/microphone (for situational awareness)
+7. Gimbal/Interlock Control: SunFounder Fusion HAT+ (I2C address 0x17, GD32 MCU)
    - 12-channel PWM (16-bit resolution, 50Hz for servos)
    - Channels 0-1: Gimbal servos (elevation, azimuth)
    - Channel 2: Interlock servo
-6. I2C Connection: GPIO2 (SDA) / GPIO3 (SCL) on 40-pin header; 10KΩ pull-ups onboard Fusion HAT+
+8. I2C Connection: GPIO2 (SDA) / GPIO3 (SCL) on 40-pin header; 10KΩ pull-ups onboard Fusion HAT+
+9. Power: Battery mounted on turret payload (no slip ring or cable twist required)
+10. Effector: Nerf gun, rigidly mounted, boresighted with primary camera
+11. Mount: Ground tripod (3/8"-16 thread), MG996R servos for 2-DOF gimbal
 
 **Recommended Mitigations:**
 1. Enable PREEMPT_RT kernel (`sudo rpi-update` for RT kernel)
@@ -1652,6 +1656,7 @@ This project is designed to teach:
 | 3.0 | 2026-03-02 | Pi 5 Educational Revision | Removed certification claims, adapted for personal development |
 | 4.0 | 2026-03-03 | Remote Control & Modes Extension | Added Section 10: Operating Modes, Control Interfaces, and Remote Operation (79 new requirements); Added ICD-005: Operator Control Application Interface; Updated traceability and V&V matrices |
 | 5.0 | 2026-03-03 | Hardware & Architecture Revision | Unified C++17 architecture (removed Rust/C dual-channel); Added libcamera/OpenCV/CSRT vision stack; Added Physical Target Definitions; Added HUD Telemetry (ICD-006); Added Fusion HAT interface (ICD-007); Changed interlock to I2C servo command; Added CMake build system; Added NEON/GPU optimization requirements; Updated hardware config (4GB RPi, 128GB MicroSD, naked camera, Audio HAT) |
+| 6.0 | 2026-03-31 | Turret Architecture Revision | Converted from Picatinny-mounted FCS to gimbal-mounted turret; entire payload (RPi, Fusion HAT+, dual cameras, LRF, battery, nerf gun) now on gimbal; removed Picatinny/MIL-STD-1913 references; updated mass budget, coordinate systems (camera=gimbal identity transform), hardware config; added dual camera and tripod mount specs |
 
 **Document Classification:** PERSONAL DEVELOPMENT / EDUCATIONAL USE
 
@@ -1660,7 +1665,7 @@ This project is designed to teach:
 ## 16. End of Document
 
 **Document Classification:** PERSONAL DEVELOPMENT / EDUCATIONAL USE
-**Platform:** Raspberry Pi 5 4GB with 128GB MicroSD, RPi Camera Module 3 (naked), SunFounder Fusion HAT, Audio HAT
+**Platform:** Turret payload on 2-DOF gimbal: Raspberry Pi 5 4GB, 128GB MicroSD, RPi Camera Module 3 (MIPI), USB camera, UART LRF, SunFounder Fusion HAT+, battery, nerf gun effector
 **Total Requirements:** 208 (L1: 33, L2: 82, L3: 93)
 **Total Test Cases:** 170+
 **Traceability Coverage:** 100%
@@ -1701,8 +1706,8 @@ This project is designed to teach:
 
 ---
 
-# Mk VII Fire Control System Technical Specification
-## Target Detection & Engagement Subsystem — Rev. 1.0
+# Mk VII Turret Defense System Technical Specification
+## Target Detection & Engagement Subsystem — Rev. 2.0
 
 ---
 
@@ -1729,25 +1734,29 @@ This is not a "point-and-shoot" tracking system. The Mk VII implements a **state
 | Memory | 4 GB LPDDR4X |
 | OS | Raspberry Pi OS Lite (64-bit) |
 | Real-time Constraints | Soft real-time, 120 Hz sensor input, state machine at ~30 Hz effective |
+| Mounting | On turret payload (rotates with gimbal) |
 
 ### 2.2 Imaging Subsystem
 | Parameter | Specification |
 |-----------|--------------|
-| Sensor | 4K×4K CMOS (cropped to 1536×864 ROI) |
+| Primary Sensor | 4K×4K CMOS (cropped to 1536×864 ROI), MIPI CSI-2 |
+| Secondary Sensor | USB camera (optical gate / wide-angle) |
 | Frame Rate | 120 Hz (free-run, latest-frame-grab) |
-| Interface | MIPI CSI-2 |
 | Lens | Fixed-focus, 3.6mm focal length, IR-cut filter optional |
 | FOV | ~90° horizontal (sufficient for 2m range coverage) |
+| Mounting | Rigidly fixed to turret payload — camera boresight is aligned with gimbal pointing axis (identity transform) |
 
 ### 2.3 Gimbal System
 | Parameter | Specification |
 |-----------|--------------|
 | Axes | 2-DOF (azimuth/yaw, elevation/pitch) |
 | Drive | MG996R digi high-torque servos |
-| Latency | 50 ms (measured, end-to-end command-to-settle) |
-| Settling Time | <100 ms for 90° step |
+| Payload | Full turret assembly (RPi 5, Fusion HAT+, dual cameras, LRF, battery, effector) |
+| Latency | TBD (heavier payload increases settling time vs. camera-only gimbal) |
+| Settling Time | TBD (expected >100 ms for 90° step due to payload mass) |
 | Angular Resolution | 0.1° |
 | Control Interface | PWM via Fusion HAT+ (I2C→GD32 MCU→16-bit PWM) |
+| CoM Consideration | Payload center of mass must be aligned with gimbal rotation axes to minimize servo load |
 
 ### 2.4 Rangefinding
 | Parameter | Specification |
@@ -1757,6 +1766,7 @@ This is not a "point-and-shoot" tracking system. The Mk VII implements a **state
 | Range | 0.1 - 10 m |
 | Accuracy | ±10 mm |
 | Interface | UART (9600 baud, NMEA or binary protocol) |
+| Mounting | Rigidly fixed to turret payload, boresighted with primary camera |
 
 ### 2.5 Absent Environmental Sensors
 | Sensor | Purpose | Interface |
@@ -1799,8 +1809,7 @@ The system does not process every frame. Instead:
 
 ### 3.3 Coordinate Systems
 - **Image Coordinates**: (u,v) in pixels, origin top-left, 1536×864
-- **Camera Coordinates**: (Xc, Yc, Zc) in meters, Z forward, X right, Y down
-- **Gimbal Coordinates**: (Az, El) in degrees, Azimuth 0 = forward, Elevation 0 = horizontal
+- **Camera/Gimbal Coordinates**: Camera boresight is rigidly aligned with gimbal pointing axis (identity transform — no extrinsic rotation between camera and gimbal frames). (Az, El) in degrees, Azimuth 0 = forward, Elevation 0 = horizontal. Camera Z-axis = gimbal pointing direction.
 - **World Coordinates**: (Xw, Yw, Zw) in meters, arbitrary origin at system boot
 
 ---

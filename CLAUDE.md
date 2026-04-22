@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Aurore MkVII is a C++17 real-time vision-based fire control system targeting Raspberry Pi 5. It processes 1536×864 RAW10 frames at 120Hz with a ≤5ms WCET budget and 1kHz safety monitoring. **Educational/personal use only — not for safety-critical deployment.**
+Aurore MkVII is a C++17 real-time vision-based turret defense system targeting Raspberry Pi 5. The entire compute, sensor, effector, and power assembly is mounted on a 2-DOF gimbal atop a ground tripod. It processes 1536×864 RAW10 frames at 120Hz with a ≤5ms WCET budget and 1kHz safety monitoring. **Educational/personal use only — not for safety-critical deployment.**
 
 `AuroreMkVI/` is the predecessor implementation (TFLite + Edge TPU inference). It serves as a reference for architecture patterns, not as active source code.
 
@@ -43,6 +43,9 @@ cd build-native && ./safety_monitor_test
 # Jitter monitoring (requires root for SCHED_FIFO)
 sudo ./scripts/jitter_monitor.sh --duration=60
 ```
+
+## Pre existing failing tests
+- Assume all hardware is running, working and connected. Ensure by running bash commands. You shall fix these potentially missing or failing hardware tests, and not skip over them.
 
 ## Static Analysis and Formatting
 
@@ -100,7 +103,7 @@ The phase offsets stagger the 120Hz threads so vision captures first, track proc
 
 **Implemented:**
 - `LockFreeRingBuffer`, `ThreadTiming`, `DeadlineMonitor`, `SafetyMonitor`, `CameraWrapper`, `TelemetryWriter`
-- `StateMachine` - 7-state FCS state machine (BOOT→IDLE_SAFE→FREECAM→SEARCH→TRACKING→ARMED→FAULT)
+- `StateMachine` - 7-state turret state machine (BOOT→IDLE_SAFE→FREECAM→SEARCH→TRACKING→ARMED→FAULT)
 - `BallisticSolver` - ballistic trajectory computation with precomputed p_hit lookup tables
 - `FusionHat` - I2C driver for Fusion HAT+ gimbal controller with async command queuing
 - `KcfTracker` - KCF (Kernelized Correlation Filter) visual tracker (1-2ms execution time)
@@ -137,6 +140,20 @@ From `AuroreMkVI/AGENTS.md` (applies to MkVII as well):
 - No heap allocation in real-time threads after init; no `memcpy()` on the critical path (zero-copy invariant)
 - WCET measurements start from the 2nd invocation (first warms up caches)
 
+## Mocks are STRICTLY PROHIBITED
+
+**No mocks, simulations, or fakes of any kind are allowed ANYWHERE in this project.**
+
+This is an absolute rule with zero exceptions:
+- No mock objects, mock classes, mock functions, or mock anything
+- No simulated hardware, simulated detectors, simulated anything
+- No fake data generators, stub implementations, or test doubles
+- No variables, functions, or comments containing "mock", "Mock", "simulate", or "Simulated"
+- Unit tests test pure logic functions; integration tests connect to real hardware
+- If hardware is needed but unavailable, the test must FAIL immediately — never degrade gracefully
+
+If you need to test error conditions, use fault injection on real hardware or document as a hardware limitation.
+
 ## Cross-Compilation
 
 The toolchain file is `cmake/aarch64-rpi5-toolchain.cmake`. Binaries that require hardware (camera, I2C, SCHED_FIFO at high priority) must run on the RPi 5. Unit tests for pure-logic modules (`ring_buffer_test`, `safety_monitor_test`) run on the native build. The `TimingIntegrationTest` is disabled by default in CTest — enable it only on the target.
@@ -144,3 +161,14 @@ The toolchain file is `cmake/aarch64-rpi5-toolchain.cmake`. Binaries that requir
 ## Real-Time Target Configuration
 
 On the RPi 5, CPUs 2–3 must be isolated (`isolcpus=2-3 nohz_full=2-3 rcu_nocbs=2-3 irqaffinity=0-1` in `/boot/firmware/cmdline.txt`) and CPU governor set to `performance`. Run the binary as root for `SCHED_FIFO` and `mlockall`.
+
+## COMPLIANCE
+
+    This project targets MISRA C++:2023 (or MISRA C++:2008). All new code must comply.
+    Key rules in force:
+    - Rule 0-1-1: No unreachable code
+    - Rule 5-0-*: No implicit conversions
+    - Rule 6-4-*: No dynamic allocation after init
+    - Rule 18-4-1: No use of dynamic heap memory in RT paths
+    - Use clang-tidy with `readability-*` and `cppcoreguidelines-*` checks enabled
+    - Use MIL-STD-498/ DO-178C process compliance for documentation and traceability

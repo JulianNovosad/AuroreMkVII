@@ -4,9 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Aurore MkVII is a C++17 real-time vision-based fire control system targeting Raspberry Pi 5. It processes 1536×864 RAW10 frames at 120Hz with a ≤5ms WCET budget and 1kHz safety monitoring. **Educational/personal use only — not for safety-critical deployment.**
+Aurore MkVII is a C++17 real-time vision-based turret defense system targeting Raspberry Pi 5. The entire compute, sensor, effector, and power assembly is mounted on a 2-DOF gimbal atop a ground tripod. It processes 1536×864 RAW10 frames at 120Hz with a ≤5ms WCET budget and 1kHz safety monitoring. **Educational/personal use only — not for safety-critical deployment.**
 
 `AuroreMkVI/` is the predecessor implementation (TFLite + Edge TPU inference). It serves as a reference for architecture patterns, not as active source code.
+
+## Target System
+
+```
+Linux raspberry 6.12.75-v8+ #1 SMP PREEMPT_RT Wed Mar 11 11:15:45 CET 2026 aarch64 GNU/Linux
+```
+- Raspberry Pi 5 (aarch64)
+- PREEMPT_RT kernel
+- WCET target: ≤5ms
+
+### Camera
+
+MIPI CSI camera supports 1536×864 @ 120fps natively (verified via `rpicam-vid --list-cameras`).
 
 ## Build Commands
 
@@ -100,7 +113,7 @@ The phase offsets stagger the 120Hz threads so vision captures first, track proc
 
 **Implemented:**
 - `LockFreeRingBuffer`, `ThreadTiming`, `DeadlineMonitor`, `SafetyMonitor`, `CameraWrapper`, `TelemetryWriter`
-- `StateMachine` - 7-state FCS state machine (BOOT→IDLE_SAFE→FREECAM→SEARCH→TRACKING→ARMED→FAULT)
+- `StateMachine` - 7-state turret state machine (BOOT→IDLE_SAFE→FREECAM→SEARCH→TRACKING→ARMED→FAULT)
 - `BallisticSolver` - ballistic trajectory computation with precomputed p_hit lookup tables
 - `FusionHat` - I2C driver for Fusion HAT+ gimbal controller with async command queuing
 - `KcfTracker` - KCF (Kernelized Correlation Filter) visual tracker (1-2ms execution time)
@@ -136,6 +149,18 @@ From `AuroreMkVI/AGENTS.md` (applies to MkVII as well):
 - Atomics: always use explicit memory ordering (`memory_order_acquire` / `memory_order_release`)
 - No heap allocation in real-time threads after init; no `memcpy()` on the critical path (zero-copy invariant)
 - WCET measurements start from the 2nd invocation (first warms up caches)
+
+## Mocks are STRICTLY PROHIBITED
+
+**Mocks, simulations, and fake hardware are 100% banned from this project.**
+
+- All tests MUST run against real hardware only
+- No mock objects, mock classes, or simulated hardware drivers
+- Unit tests should test pure logic functions without dependencies, or skip if hardware is required
+- Integration tests must connect to actual sensors (camera, LRF, IMU, Fusion HAT+)
+- Any test file containing "mock" or "Mock" in class/variable names will be rejected
+
+If you need to test error conditions, use fault injection on real hardware or document as a hardware limitation.
 
 ## Cross-Compilation
 
