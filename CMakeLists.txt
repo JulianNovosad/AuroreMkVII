@@ -929,6 +929,16 @@ if(AURORE_ENABLE_TESTS)
         LABELS "hardware"
     )
 
+    # Ballistics real-time stress bench: 10s at 1kHz, checks WCET ≤5ms
+    add_executable(rt_bench
+        tests/rt_bench.cpp
+        src/actuation/ballistic_solver.cpp
+    )
+    target_include_directories(rt_bench PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(rt_bench PRIVATE Threads::Threads)
+    add_test(NAME BallisticsRTBench COMMAND rt_bench)
+    set_tests_properties(BallisticsRTBench PROPERTIES TIMEOUT 30 LABELS "stress")
+
     # ========================================================================
     # Integration Test Suite - End-to-End Data Flow Tests
     # ========================================================================
