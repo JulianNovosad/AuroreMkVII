@@ -127,12 +127,18 @@ bool UsbCamera::init() {
         }
     }
 
-    // Open with V4L2 backend
+    // Open with V4L2 backend, fallback to any backend
     bool opened = false;
     if (open_index >= 0) {
         opened = impl_->capture.open(open_index, cv::CAP_V4L2);
+        if (!opened) {
+            opened = impl_->capture.open(open_index);
+        }
     } else {
         opened = impl_->capture.open(open_path, cv::CAP_V4L2);
+        if (!opened) {
+            opened = impl_->capture.open(open_path);
+        }
     }
 
     if (!opened) {
