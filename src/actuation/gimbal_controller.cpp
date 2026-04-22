@@ -55,7 +55,9 @@ GimbalCommand GimbalController::command_from_pixel(float centroid_x, float centr
     const float dx = centroid_x - cam_.cx;
     const float dy = centroid_y - cam_.cy;  // positive dy = target below center
 
-    // Convert pixel offset to angle using pinhole camera model
+    // Convert pixel offset to angle using pinhole camera model.
+    // Camera is rigidly mounted on turret payload (identity transform to gimbal frame),
+    // so pixel offset maps directly to gimbal angle delta.
     // delta_theta = atan2(offset_px, focal_length_px) * (180 / PI)
     // Note: Pixel Y increases downward, but elevation increases upward
     // Therefore we negate dy to get correct elevation direction

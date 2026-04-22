@@ -245,7 +245,7 @@ void AuroreLinkServer::command_accept_loop() {
                         static_cast<uint16_t>(LinkMsgId::kEmergencyInhibit)) {
                         // Verification failure -> send NACK and log event
                         if (!security::verify_hmac_sha256_raw(
-                                cfg_.hmac_key, &msg, sizeof(LinkInputHeader) + 32, msg.hmac)) {
+                                cfg_.hmac_key, &msg, sizeof(LinkInputHeader) + 32, msg.hmac.data())) {
                             std::cerr << "AuroreLink: HMAC verification failed for msg 0x" << std::hex
                                       << msg.header.message_id << " seq=" << std::dec
                                       << msg.header.sequence << std::endl;
@@ -355,7 +355,7 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
     switch (id) {
         case LinkMsgId::kModeRequest: {
             LinkPayloadModeRequest payload;
-            std::memcpy(&payload, msg.payload, sizeof(payload));
+            std::memcpy(&payload, msg.payload.data(), sizeof(payload));
             if (on_mode_) {
                 LinkMode m = (payload.target_mode == 3) ? LinkMode::AUTO : LinkMode::FREECAM;
                 on_mode_(m);
@@ -364,12 +364,12 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
         }
         case LinkMsgId::kGimbalCommand: {
             LinkPayloadGimbalCmd payload;
-            std::memcpy(&payload, msg.payload, sizeof(payload));
+            std::memcpy(&payload, msg.payload.data(), sizeof(payload));
             if (on_freecam_) {
-                // Convert milliradians/sec to degrees/sec for callback
+                // Convert milliradians/sec * 100 to degrees/sec
                 float az_dps = (static_cast<float>(payload.azimuth_rate) / 100.0f) * 0.0572958f;
-                (void)az_dps;                     // Used by on_freecam_ callback
-                on_freecam_(0.0f, 0.0f, az_dps);  // Placeholder, assuming rate-based for now
+                float el_dps = (static_cast<float>(payload.elevation_rate) / 100.0f) * 0.0572958f;
+                on_freecam_(az_dps, el_dps, 0.0f);
             }
             break;
         }
@@ -382,8 +382,9 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
             break;
         }
         case LinkMsgId::kHeartbeat: {
-            // Update heartbeat timestamp
+            // Update heartbeat timestamp and clear timeout edge-detect flag
             last_heartbeat_ns_.store(aurore::get_timestamp(), std::memory_order_release);
+            heartbeat_timed_out_.store(false, std::memory_order_release);
             break;
         }
         case LinkMsgId::kEmergencyInhibit: {
@@ -398,7 +399,7 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
         // Spec: ICD-005 - Target selection commands
         case LinkMsgId::kTargetSelect: {
             LinkPayloadTargetSelect payload;
-            std::memcpy(&payload, msg.payload, sizeof(payload));
+            std::memcpy(&payload, msg.payload.data(), sizeof(payload));
             if (on_target_select_) {
                 on_target_select_(payload.cursor_x, payload.cursor_y, payload.confidence);
             }
@@ -406,7 +407,7 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
         }
         case LinkMsgId::kTargetConfirm: {
             LinkPayloadTargetConfirm payload;
-            std::memcpy(&payload, msg.payload, sizeof(payload));
+            std::memcpy(&payload, msg.payload.data(), sizeof(payload));
             if (on_target_confirm_) {
                 on_target_confirm_(payload.target_id);
             }
@@ -414,7 +415,7 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
         }
         case LinkMsgId::kTargetReject: {
             LinkPayloadTargetReject payload;
-            std::memcpy(&payload, msg.payload, sizeof(payload));
+            std::memcpy(&payload, msg.payload.data(), sizeof(payload));
             if (on_target_reject_) {
                 on_target_reject_(payload.target_id, payload.reason);
             }
@@ -431,11 +432,11 @@ void AuroreLinkServer::broadcast_status(const LinkPayloadSystemState& state) {
     msg.header.message_id = static_cast<uint16_t>(LinkMsgId::kSystemState);
     msg.header.timestamp_ns = 0;  // TODO
     msg.status = 0;               // ACK
-    std::memcpy(msg.payload, &state, sizeof(state));
+    std::memcpy(msg.payload.data(), &state, sizeof(state));
 
     if (!cfg_.hmac_key.empty()) {
         security::compute_hmac_sha256_raw(cfg_.hmac_key, &msg, sizeof(LinkOutputHeader) + 2 + 28,
-                                          msg.hmac);
+                                          msg.hmac.data());
     }
 
     std::lock_guard<std::mutex> lk(clients_mutex_);
@@ -474,9 +475,9 @@ void AuroreLinkServer::send_nack(int client_fd, uint32_t sequence, uint16_t mess
     // Spec: AM7-L2-SEC-001 - HMAC-SHA256 with 256-bit keys
     if (!cfg_.hmac_key.empty()) {
         security::compute_hmac_sha256_raw(cfg_.hmac_key, &msg, sizeof(LinkOutputHeader) + 2 + 28,
-                                          msg.hmac);
+                                          msg.hmac.data());
     }
-    
+
     ::send(client_fd, &msg, sizeof(msg), MSG_NOSIGNAL);
 }
 
@@ -511,13 +512,17 @@ void AuroreLinkServer::heartbeat_monitor_loop() {
         const TimestampNs last_hb = last_heartbeat_ns_.load(std::memory_order_acquire);
         const int64_t age_ns = timestamp_diff_ns(now, last_hb);
 
-        // Check if heartbeat timeout exceeded
+        // Check if heartbeat timeout exceeded — fire callback only on the rising edge
         if (static_cast<uint64_t>(age_ns) > kHeartbeatTimeoutNs) {
-            std::cerr << "AuroreLink: HEARTBEAT TIMEOUT - " << (age_ns / 1000000)
-                      << "ms since last heartbeat (threshold: 500ms)\n";
-            if (on_heartbeat_timeout_) {
-                on_heartbeat_timeout_();
+            if (!heartbeat_timed_out_.exchange(true, std::memory_order_acq_rel)) {
+                std::cerr << "AuroreLink: HEARTBEAT TIMEOUT - " << (age_ns / 1000000)
+                          << "ms since last heartbeat (threshold: 500ms)\n";
+                if (on_heartbeat_timeout_) {
+                    on_heartbeat_timeout_();
+                }
             }
+        } else {
+            heartbeat_timed_out_.store(false, std::memory_order_release);
         }
     }
 }

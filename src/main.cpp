@@ -27,6 +27,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <filesystem>
 #include <thread>
 
 // libcap for privilege drop (optional - requires libcap-dev)
@@ -53,6 +54,7 @@
 #include "aurore/dual_camera_manager.hpp"
 #include "aurore/usb_camera.hpp"
 #include "aurore/command_socket.hpp"
+#include "aurore/drivers/laser_rangefinder.hpp"
 #include "aurore/yolo26_detector.hpp"
 #include "aurore/sweep_pattern.hpp"
 
@@ -304,10 +306,6 @@ int main(int argc, char* argv[]) {
 
     aurore::SafetyMonitor safety_monitor(safety_config);
 
-    if (!dry_run) {
-        safety_monitor.init();
-    }
-
     safety_monitor.set_safety_action_callback(
         [](aurore::SafetyFaultCode code, const char* reason, void*) {
             std::cerr << "SAFETY ACTION: " << aurore::fault_code_to_string(code) << " - " << reason
@@ -361,8 +359,22 @@ int main(int argc, char* argv[]) {
     aurore::HudSocketConfig hud_cfg;
     hud_cfg.socket_path =
         config.get_string("network.hud_telemetry.socket_path", "/run/aurore/hud_telemetry.sock");
-    // In dry-run, socket path should be writable; in production, requires root
+    // In dry-run, allow non-root (pi user) to connect
     hud_cfg.require_root_uid = !dry_run;
+    if (dry_run) {
+        hud_cfg.socket_permissions = 0666;  // world-readable so pi user can connect
+    }
+    // Ensure socket directory exists before binding
+    {
+        std::filesystem::path sock_dir =
+            std::filesystem::path(hud_cfg.socket_path).parent_path();
+        std::error_code ec;
+        std::filesystem::create_directories(sock_dir, ec);
+        if (ec) {
+            std::cerr << "Warning: Could not create socket dir " << sock_dir
+                      << ": " << ec.message() << std::endl;
+        }
+    }
     aurore::HudSocket hud_socket(hud_cfg);
     if (hud_socket.start()) {
         std::cout << "HUD socket listening: " << hud_cfg.socket_path << std::endl;
@@ -416,6 +428,18 @@ int main(int argc, char* argv[]) {
     const float muzzle_velocity_mps = config.get_float("ballistics.muzzle_velocity_mps", 900.0f);
     const float test_range_m = config.get_float("ballistics.test_range_m", 5.0f);
 
+    // Laser rangefinder — M01 on UART, continuous mode
+    aurore::LaserRangefinder lrf;
+    {
+        const std::string lrf_device = config.get_string("lrf.uart_device", "/dev/ttyAMA0");
+        if (lrf.init(lrf_device)) {
+            lrf.start_continuous();
+            std::cout << "[LRF] Started continuous mode on " << lrf_device << "\n";
+        } else {
+            std::cerr << "[LRF] Warning: failed to open " << lrf_device << " — range will be unavailable\n";
+        }
+    }
+
     // Frame ring buffer (zero-copy)
     aurore::LockFreeRingBuffer<aurore::ZeroCopyFrame, 4> frame_buffer;
 
@@ -453,7 +477,7 @@ int main(int argc, char* argv[]) {
     usb_config.height = 480;
     usb_config.fps = 30;
     if (dual_camera.init_usb(usb_config)) {
-        std::cout << "DualCamera: USB stream initialized for辅助 detection\n";
+        std::cout << "DualCamera: USB stream initialized for auxiliary detection\n";
     } else {
         std::cerr << "DualCamera: WARN - USB stream failed to initialize\n";
         std::cerr << "      Check: ls /dev/video*\n";
@@ -578,6 +602,12 @@ int main(int argc, char* argv[]) {
         std::cerr << "Warning: YOLO26n model not loaded — SEARCH will use ORB detector only\n";
     }
 
+    // Start watchdog just before threads launch so the 60ms window doesn't
+    // expire during the several-second hardware initialization sequence above.
+    if (!dry_run) {
+        safety_monitor.init();
+    }
+
     // Detect thread: runs YOLO asynchronously, non-RT
     std::atomic<bool> detect_running{false};
     std::thread detect_thread([&]() {
@@ -691,7 +721,8 @@ int main(int argc, char* argv[]) {
         constexpr uint64_t kDetectEveryN = 4;
 
         // Vision watchdog: track last frame timestamp
-        uint64_t last_frame_ns = aurore::get_timestamp();
+        // Initialized to 0 so the watchdog only arms after the first frame arrives.
+        uint64_t last_frame_ns = 0;
         constexpr uint64_t kVisionWatchdogNs = 10000000;  // 10ms timeout
 
         // Request SEARCH mode (IDLE_SAFE -> SEARCH)
@@ -880,14 +911,16 @@ int main(int argc, char* argv[]) {
                               << " ns" << std::endl;
                 }
             } else {
-                // No frame available - check vision watchdog
-                uint64_t elapsed = now_ns - last_frame_ns;
-                if (elapsed > kVisionWatchdogNs && frame_available) {
-                    // Vision timeout detected
-                    state_machine.on_fault(aurore::FaultCode::CAMERA_TIMEOUT);
-                    telemetry.log_event(aurore::TelemetryEventId::CAMERA_TIMEOUT,
-                                        aurore::TelemetrySeverity::kWarning,
-                                        "Vision pipeline timeout (>10ms)");
+                // No frame available - check vision watchdog (only after first frame arrives)
+                if (last_frame_ns != 0) {
+                    uint64_t elapsed = now_ns - last_frame_ns;
+                    if (elapsed > kVisionWatchdogNs) {
+                        // Vision timeout detected
+                        state_machine.on_fault(aurore::FaultCode::CAMERA_TIMEOUT);
+                        telemetry.log_event(aurore::TelemetryEventId::CAMERA_TIMEOUT,
+                                            aurore::TelemetrySeverity::kWarning,
+                                            "Vision pipeline timeout (>10ms)");
+                    }
                 }
 
                 // Output invalid solution
@@ -1024,7 +1057,10 @@ int main(int argc, char* argv[]) {
             hud_frame.velocity_x = latest_solution.velocity_x;
             hud_frame.velocity_y = latest_solution.velocity_y;
             hud_frame.confidence = latest_solution.psr > 0 ? latest_solution.psr : 0.0f;
-            hud_frame.range_m = test_range_m;
+            {
+                const float live = lrf.latest_range_m();
+                hud_frame.range_m = (live > 0.0f) ? live : test_range_m;
+            }
             hud_frame.timestamp_ns = aurore::get_timestamp();
 
             // SYSTEM_STATUS fields (AM7-L2-HUD-004)

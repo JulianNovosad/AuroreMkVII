@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -25,8 +26,8 @@ struct LinkInputHeader {
 
 struct LinkInputMessage {
     LinkInputHeader header;
-    uint8_t payload[32];
-    uint8_t hmac[32];  ///< HMAC-SHA256 (32 bytes)
+    std::array<uint8_t, 32> payload;
+    std::array<uint8_t, 32> hmac;  ///< HMAC-SHA256 (32 bytes)
 };
 
 /**
@@ -43,8 +44,8 @@ struct LinkOutputMessage {
     LinkOutputHeader header;
     uint8_t status;       ///< 0=ACK, 1=NACK, 2=PENDING
     uint8_t error_code;   ///< NACK reason code
-    uint8_t payload[28];  ///< Response-specific data
-    uint8_t hmac[32];     ///< HMAC-SHA256 (32 bytes)
+    std::array<uint8_t, 28> payload;  ///< Response-specific data
+    std::array<uint8_t, 32> hmac;     ///< HMAC-SHA256 (32 bytes)
 };
 
 /**
@@ -76,7 +77,7 @@ enum class LinkMsgId : uint16_t {
  */
 struct LinkPayloadModeRequest {
     uint8_t target_mode;  ///< 0=IDLE/SAFE, 1=FREECAM, 2=SEARCH, 3=TRACKING, 4=ARMED
-    uint8_t reserved[31];
+    std::array<uint8_t, 31> reserved;
 };
 
 /**
@@ -85,7 +86,7 @@ struct LinkPayloadModeRequest {
 struct LinkPayloadGimbalCmd {
     int16_t azimuth_rate;    ///< milliradians/sec * 100
     int16_t elevation_rate;  ///< milliradians/sec * 100
-    uint8_t reserved[28];
+    std::array<uint8_t, 28> reserved;
 };
 
 /**
@@ -96,7 +97,7 @@ struct LinkPayloadSystemState {
     uint8_t interlock;
     uint8_t target_lock;
     uint8_t fault_active;
-    uint8_t reserved[28];
+    std::array<uint8_t, 28> reserved;
 };
 
 /**
@@ -228,6 +229,7 @@ class AuroreLinkServer {
     // Heartbeat monitoring (500ms timeout → IDLE/SAFE)
     static constexpr uint64_t kHeartbeatTimeoutNs = 500000000ULL;  // 500ms
     std::atomic<TimestampNs> last_heartbeat_ns_{0};
+    std::atomic<bool> heartbeat_timed_out_{false};  // edge-detect: fire callback once per event
     std::thread heartbeat_monitor_thread_;
     void heartbeat_monitor_loop();
 };

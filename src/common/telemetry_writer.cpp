@@ -5,7 +5,12 @@
  * SEC-010: Implements backpressure handling to prevent queue overflow DoS
  */
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+
 #include "aurore/telemetry_writer.hpp"
+
+#pragma GCC diagnostic pop
 
 #include <sys/stat.h>
 #include <time.h>

@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <sstream>
 
 #include "aurore/security.hpp"
 #include "aurore/state_machine.hpp"
@@ -33,8 +34,8 @@ bool HudSocket::start() {
     // Clean up any existing socket file
     ::unlink(socket_path_.c_str());
 
-    // ICD-006 specifies SOCK_SEQPACKET for message preservation
-    server_fd_ = ::socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    // SOCK_STREAM for compatibility with Node.js net.createConnection
+    server_fd_ = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (server_fd_ < 0) {
         std::cerr << "HudSocket: socket() failed: " << strerror(errno) << "\n";
         return false;
@@ -276,6 +277,31 @@ bool HudSocket::is_message_fresh(uint64_t timestamp_ns) const {
     return true;  // Message is fresh
 }
 
+std::string HudSocket::frame_to_json(const HudFrame& f) const {
+    char buf[512];
+    std::snprintf(buf, sizeof(buf),
+        "{\"state\":%u,\"az\":%.2f,\"el\":%.2f,"
+        "\"cx\":%.1f,\"cy\":%.1f,\"w\":%.1f,\"h\":%.1f,"
+        "\"conf\":%.3f,\"range\":%.1f,\"vx\":%.3f,\"vy\":%.3f,"
+        "\"az_lead_mrad\":%.3f,\"el_lead_mrad\":%.3f,\"p_hit\":%.3f,"
+        "\"deadline_misses\":%u,\"cpu_temp\":%.1f,"
+        "\"interlock\":%u,\"target_lock\":%u,\"fault\":%u}\n",
+        static_cast<unsigned>(f.state),
+        static_cast<double>(f.az_deg), static_cast<double>(f.el_deg),
+        static_cast<double>(f.target_cx), static_cast<double>(f.target_cy),
+        static_cast<double>(f.target_w), static_cast<double>(f.target_h),
+        static_cast<double>(f.confidence), static_cast<double>(f.range_m),
+        static_cast<double>(f.velocity_x), static_cast<double>(f.velocity_y),
+        static_cast<double>(f.az_lead_mrad), static_cast<double>(f.el_lead_mrad),
+        static_cast<double>(f.p_hit),
+        f.deadline_misses,
+        static_cast<double>(f.cpu_temp_c) / 10.0,
+        static_cast<unsigned>(f.interlock),
+        static_cast<unsigned>(f.target_lock),
+        static_cast<unsigned>(f.fault_active));
+    return std::string(buf);
+}
+
 void HudSocket::broadcast(const HudFrame& frame) {
     if (!running_.load(std::memory_order_acquire)) {
         return;
@@ -284,77 +310,17 @@ void HudSocket::broadcast(const HudFrame& frame) {
     // PERF-008: Validate message timestamp (discard stale messages)
     if (!is_message_fresh(frame.timestamp_ns)) {
         timeout_discarded_count_.fetch_add(1, std::memory_order_relaxed);
-        std::cerr << "HudSocket: discarding stale message (age > " << config_.message_timeout_ms
-                  << "ms)\n";
         return;
     }
 
     // PERF-008: Apply rate limiting (token bucket)
     if (!try_acquire_token()) {
         rate_limited_count_.fetch_add(1, std::memory_order_relaxed);
-        std::cerr << "HudSocket: rate limit exceeded (>" << config_.rate_limit_msgs_per_sec
-                  << " msg/sec)\n";
         return;
     }
 
-    static uint32_t sequence = 0;
-    sequence++;
-
-    // Prepare binary messages per ICD-006
-    auto prepare_msg = [&](HudMsgId id, const void* payload) {
-        HudBinaryMessage msg{};
-        msg.header.sync_word = 0xA7070007;  // AURORE07 mnemonic -> 0xA7070007
-        msg.header.message_id = static_cast<uint16_t>(id);
-        msg.header.sequence = sequence;
-        msg.header.timestamp_ns = frame.timestamp_ns;
-        std::memcpy(msg.payload, payload, 32);
-
-        // Compute HMAC over header + payload
-        if (!config_.hmac_key.empty()) {
-            security::compute_hmac_sha256_raw(config_.hmac_key, &msg, sizeof(HudBinaryHeader) + 32,
-                                              msg.hmac);
-        }
-        return msg;
-    };
-
-    // 1. RETICLE_DATA
-    HudPayloadReticle reticle{};
-    reticle.reticle_x = static_cast<int16_t>(frame.az_deg * 100);  // Placeholder mapping
-    reticle.reticle_y = static_cast<int16_t>(frame.el_deg * 100);
-    reticle.lead_offset_x = static_cast<int16_t>(frame.az_lead_mrad * 100);
-    reticle.lead_offset_y = static_cast<int16_t>(frame.el_lead_mrad * 100);
-    HudBinaryMessage msg_reticle = prepare_msg(HudMsgId::kReticleData, &reticle);
-    send_to_clients(&msg_reticle, sizeof(msg_reticle));
-
-    // 2. TARGET_BOX
-    HudPayloadTargetBox box{};
-    box.box_x = static_cast<uint16_t>(frame.target_cx - frame.target_w / 2);
-    box.box_y = static_cast<uint16_t>(frame.target_cy - frame.target_h / 2);
-    box.box_width = static_cast<uint16_t>(frame.target_w);
-    box.box_height = static_cast<uint16_t>(frame.target_h);
-    box.confidence = static_cast<uint8_t>(frame.confidence * 100);
-    HudBinaryMessage msg_box = prepare_msg(HudMsgId::kTargetBox, &box);
-    send_to_clients(&msg_box, sizeof(msg_box));
-
-    // 3. BALLISTIC_SOLUTION
-    HudPayloadBallistics ball{};
-    ball.elevation_adj = static_cast<int16_t>(frame.el_lead_mrad * 100);
-    ball.azimuth_adj = static_cast<int16_t>(frame.az_lead_mrad * 100);
-    ball.range_m = static_cast<uint16_t>(frame.range_m);
-    ball.ammo_id = frame.ammo_id;
-    HudBinaryMessage msg_ball = prepare_msg(HudMsgId::kBallisticSolution, &ball);
-    send_to_clients(&msg_ball, sizeof(msg_ball));
-
-    // 4. SYSTEM_STATUS
-    HudPayloadStatus status{};
-    status.fcs_state = frame.state;
-    status.interlock = frame.interlock;
-    status.target_lock = frame.target_lock;
-    status.fault_active = frame.fault_active;
-    status.cpu_temp_c = frame.cpu_temp_c;
-    status.deadline_misses = static_cast<uint16_t>(frame.deadline_misses);
-    HudBinaryMessage msg_status = prepare_msg(HudMsgId::kSystemStatus, &status);
-    send_to_clients(&msg_status, sizeof(msg_status));
+    std::string json = frame_to_json(frame);
+    send_to_clients(json.c_str(), json.size());
 }
 
 }  // namespace aurore
