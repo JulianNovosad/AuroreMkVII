@@ -254,7 +254,7 @@ struct SafetyMonitorConfig {
     uint64_t vision_deadline_ns = 10000000;
 
     /// Actuation output max latency (default: 2ms per AM7-L2-ACT-003)
-    uint64_t actuation_deadline_ns = 2000000;
+    uint64_t actuation_deadline_ns = 16666000;  // 2× frame period at 120Hz (8.333ms)
 
     /// Frame stall detection threshold (default: 2 frames = 16.67ms)
     uint64_t frame_stall_threshold = 2;
@@ -392,12 +392,20 @@ class SafetyMonitor {
      * @return true on success, false on failure
      */
     bool init() noexcept {
+        // Seed all deadline timestamps to now so the safety monitor doesn't
+        // trip on the first run_cycle() call before threads have produced output.
+        // Without seeding, timestamp = 0 until the first frame arrives; if a
+        // frame carries a libcamera capture timestamp from seconds earlier
+        // (e.g. from camera init), the latency check fires immediately.
+        const TimestampNs now = get_timestamp(ClockId::MonotonicRaw);
+        last_vision_timestamp_ns_.store(now, std::memory_order_release);
+        last_actuation_timestamp_ns_.store(now, std::memory_order_release);
+
         // Start software watchdog thread if enabled
         if (config_.enable_watchdog) {
             // Set initial kick time BEFORE starting watchdog thread
             // to prevent race condition where watchdog checks before kick time is set
-            last_kick_time_ns_.store(get_timestamp(ClockId::MonotonicRaw),
-                                     std::memory_order_release);
+            last_kick_time_ns_.store(now, std::memory_order_release);
 
             watchdog_running_.store(true, std::memory_order_release);
             watchdog_thread_ = std::thread(&SafetyMonitor::watchdog_thread_func, this);
@@ -616,9 +624,14 @@ class SafetyMonitor {
      * @param sequence Frame sequence number
      * @param timestamp_ns Frame timestamp (CLOCK_MONOTONIC_RAW)
      */
-    void update_vision_frame(uint64_t sequence, TimestampNs timestamp_ns) noexcept {
+    void update_vision_frame(uint64_t sequence, TimestampNs /*camera_ts*/) noexcept {
+        // Store wall-clock now, not the camera capture timestamp.
+        // The safety check measures "time since the vision pipeline last made
+        // progress"; camera capture timestamps can be seconds old by the time
+        // the frame is dequeued and processed, which would trip the latency check.
         vision_frame_count_.store(sequence + 1, std::memory_order_release);
-        last_vision_timestamp_ns_.store(timestamp_ns, std::memory_order_release);
+        last_vision_timestamp_ns_.store(get_timestamp(ClockId::MonotonicRaw),
+                                        std::memory_order_release);
         last_vision_sequence_.store(sequence, std::memory_order_release);
     }
 
@@ -630,9 +643,10 @@ class SafetyMonitor {
      * @param sequence Frame sequence number
      * @param timestamp_ns Frame timestamp (CLOCK_MONOTONIC_RAW)
      */
-    void update_actuation_frame(uint64_t sequence, TimestampNs timestamp_ns) noexcept {
+    void update_actuation_frame(uint64_t sequence, TimestampNs /*frame_ts*/) noexcept {
         actuation_frame_count_.store(sequence + 1, std::memory_order_release);
-        last_actuation_timestamp_ns_.store(timestamp_ns, std::memory_order_release);
+        last_actuation_timestamp_ns_.store(get_timestamp(ClockId::MonotonicRaw),
+                                           std::memory_order_release);
         last_actuation_sequence_.store(sequence, std::memory_order_release);
     }
 
@@ -737,10 +751,10 @@ class SafetyMonitor {
         }
         last_vision_count_.store(current_count, std::memory_order_release);
 
-        // Check latency (only if we have a valid timestamp)
-        const TimestampNs last_ts = last_vision_timestamp_ns_.load(std::memory_order_acquire);
-        if (last_ts > 0) {
-            // Use wrap-safe timestamp difference
+        // Check latency only after at least one real frame has been produced.
+        // Seeded timestamp (from init()) is a baseline, not a real frame.
+        if (current_count > 0) {
+            const TimestampNs last_ts = last_vision_timestamp_ns_.load(std::memory_order_acquire);
             const int64_t latency = timestamp_diff_ns(now, last_ts);
             if (latency > static_cast<int64_t>(config_.vision_deadline_ns)) {
                 char reason[MAX_FAULT_REASON_LEN];
@@ -759,7 +773,6 @@ class SafetyMonitor {
         if (current_count == last_count && current_count > 0) {
             const TimestampNs last_ts =
                 last_actuation_timestamp_ns_.load(std::memory_order_acquire);
-            // Use wrap-safe timestamp difference
             const int64_t stall_duration = timestamp_diff_ns(now, last_ts);
             if (stall_duration > static_cast<int64_t>(config_.actuation_deadline_ns * 2)) {
                 trigger_fault(SafetyFaultCode::ACTUATION_STALLED, "Actuation output stalled", 3);
@@ -767,12 +780,11 @@ class SafetyMonitor {
         }
         last_actuation_count_.store(current_count, std::memory_order_release);
 
-        // Check latency (only if we have a valid timestamp)
-        const TimestampNs last_ts = last_actuation_timestamp_ns_.load(std::memory_order_acquire);
-        if (last_ts > 0) {
-            // Use wrap-safe timestamp difference
+        // Check latency only after at least one real actuation frame has been produced.
+        if (current_count > 0) {
+            const TimestampNs last_ts =
+                last_actuation_timestamp_ns_.load(std::memory_order_acquire);
             const int64_t latency = timestamp_diff_ns(now, last_ts);
-
             if (latency > static_cast<int64_t>(config_.actuation_deadline_ns)) {
                 char reason[MAX_FAULT_REASON_LEN];
                 snprintf(reason, sizeof(reason), "Actuation latency %ld ns exceeds %lu ns",

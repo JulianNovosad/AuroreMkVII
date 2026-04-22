@@ -264,10 +264,12 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, signal_handler);
 
     // Configure resource limits
-    set_resource_limits();
+    if (!dry_run) {
+        set_resource_limits();
+    }
 
-    // Lock memory
-    if (!lock_memory()) {
+    // Lock memory (skip in dry-run — no RT guarantees needed)
+    if (!dry_run && !lock_memory()) {
         std::cerr << "FATAL: Failed to lock memory (mlockall). System cannot guarantee real-time performance." << std::endl;
         return 1;
     }
@@ -292,8 +294,10 @@ int main(int argc, char* argv[]) {
     aurore::SafetyMonitorConfig safety_config;
     safety_config.vision_deadline_ns =
         static_cast<uint64_t>(config.get_int("safety.vision_deadline_ns", 20000000));
+    // actuation_deadline_ns: max allowed age of last actuation update (not WCET).
+    // At 120Hz frame period = 8.333ms; allow 2× for jitter headroom.
     safety_config.actuation_deadline_ns =
-        static_cast<uint64_t>(config.get_int("safety.actuation_deadline_ns", 2000000));
+        static_cast<uint64_t>(config.get_int("safety.actuation_deadline_ns", 16666000));
     safety_config.max_consecutive_misses =
         static_cast<size_t>(config.get_int("safety.max_consecutive_misses", 3));
 

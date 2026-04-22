@@ -102,7 +102,9 @@ function pipeAsMjpeg(res, child) {
 // ===========================================================================
 
 function findUsbCamera() {
-  for (let i = 0; i < 10; i++) {
+  // Scan all 64 possible video nodes — RPi5 reserves video2-9 for MIPI/ISP
+  // so a USB UVC camera typically lands at video0, video1, or video10+.
+  for (let i = 0; i < 64; i++) {
     try {
       const driverPath = `/sys/class/video4linux/video${i}/device/driver`;
       const link = fs.readlinkSync(driverPath);
@@ -690,22 +692,18 @@ let mipiLatestFrame = null;
 const mipiClients = new Set();
 
 function startMipiCamera() {
-  const child = spawn('sudo', ['rpicam-vid',
-    '--codec', 'mjpeg',
-    '--width', '1536',
-    '--height', '864',
-    '--framerate', '30',
-    '--nopreview',
-    '--timeout', '0',
-    '--buffer-count', '2',
-    '-o', '-',
+  // The aurore C++ binary owns the MIPI camera exclusively via libcamera.
+  // For the web preview we use the USB camera via ffmpeg so there is no conflict.
+  // TODO: pipe annotated frames directly from aurore binary when the IPC is ready.
+  const usbDev = findUsbCamera() || '/dev/video0';
+  const child = spawn('ffmpeg', [
+    '-f', 'v4l2', '-input_format', 'mjpeg', '-video_size', '1280x720',
+    '-framerate', '30', '-i', usbDev,
+    '-c:v', 'copy', '-f', 'mjpeg', '-',
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
   child.on('error', (err) => console.error('[MIPI] Spawn error:', err.message));
-  child.stderr.on('data', (data) => {
-    const str = data.toString().trim();
-    if (str.includes('ERROR') || str.includes('Failed')) console.error('[MIPI]', str);
-  });
+  child.stderr.on('data', () => {});  // suppress ffmpeg noise
   child.on('exit', (code) => {
     console.log(`[MIPI] Camera exited (${code}), restarting in 2s...`);
     mipiLatestFrame = null;
@@ -767,7 +765,7 @@ const server = http.createServer((req, res) => {
     const usbDev = findUsbCamera();
     if (!usbDev) {
       res.writeHead(503, { 'Content-Type': 'text/plain' });
-      res.end('FAIL: USB UVC camera not found on /dev/video0-9');
+      res.end('FAIL: USB UVC camera not found on /dev/video0-63');
       return;
     }
 

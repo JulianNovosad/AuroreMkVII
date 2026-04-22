@@ -8,19 +8,6 @@ Aurore MkVII is a C++17 real-time vision-based turret defense system targeting R
 
 `AuroreMkVI/` is the predecessor implementation (TFLite + Edge TPU inference). It serves as a reference for architecture patterns, not as active source code.
 
-## Target System
-
-```
-Linux raspberry 6.12.75-v8+ #1 SMP PREEMPT_RT Wed Mar 11 11:15:45 CET 2026 aarch64 GNU/Linux
-```
-- Raspberry Pi 5 (aarch64)
-- PREEMPT_RT kernel
-- WCET target: ≤5ms
-
-### Camera
-
-MIPI CSI camera supports 1536×864 @ 120fps natively (verified via `rpicam-vid --list-cameras`).
-
 ## Build Commands
 
 ```bash
@@ -56,6 +43,9 @@ cd build-native && ./safety_monitor_test
 # Jitter monitoring (requires root for SCHED_FIFO)
 sudo ./scripts/jitter_monitor.sh --duration=60
 ```
+
+## Pre existing failing tests
+- Assume all hardware is running, working and connected. Ensure by running bash commands. You shall fix these potentially missing or failing hardware tests, and not skip over them.
 
 ## Static Analysis and Formatting
 
@@ -152,13 +142,15 @@ From `AuroreMkVI/AGENTS.md` (applies to MkVII as well):
 
 ## Mocks are STRICTLY PROHIBITED
 
-**Mocks, simulations, and fake hardware are 100% banned from this project.**
+**No mocks, simulations, or fakes of any kind are allowed ANYWHERE in this project.**
 
-- All tests MUST run against real hardware only
-- No mock objects, mock classes, or simulated hardware drivers
-- Unit tests should test pure logic functions without dependencies, or skip if hardware is required
-- Integration tests must connect to actual sensors (camera, LRF, IMU, Fusion HAT+)
-- Any test file containing "mock" or "Mock" in class/variable names will be rejected
+This is an absolute rule with zero exceptions:
+- No mock objects, mock classes, mock functions, or mock anything
+- No simulated hardware, simulated detectors, simulated anything
+- No fake data generators, stub implementations, or test doubles
+- No variables, functions, or comments containing "mock", "Mock", "simulate", or "Simulated"
+- Unit tests test pure logic functions; integration tests connect to real hardware
+- If hardware is needed but unavailable, the test must FAIL immediately — never degrade gracefully
 
 If you need to test error conditions, use fault injection on real hardware or document as a hardware limitation.
 
@@ -169,3 +161,14 @@ The toolchain file is `cmake/aarch64-rpi5-toolchain.cmake`. Binaries that requir
 ## Real-Time Target Configuration
 
 On the RPi 5, CPUs 2–3 must be isolated (`isolcpus=2-3 nohz_full=2-3 rcu_nocbs=2-3 irqaffinity=0-1` in `/boot/firmware/cmdline.txt`) and CPU governor set to `performance`. Run the binary as root for `SCHED_FIFO` and `mlockall`.
+
+## COMPLIANCE
+
+    This project targets MISRA C++:2023 (or MISRA C++:2008). All new code must comply.
+    Key rules in force:
+    - Rule 0-1-1: No unreachable code
+    - Rule 5-0-*: No implicit conversions
+    - Rule 6-4-*: No dynamic allocation after init
+    - Rule 18-4-1: No use of dynamic heap memory in RT paths
+    - Use clang-tidy with `readability-*` and `cppcoreguidelines-*` checks enabled
+    - Use MIL-STD-498/ DO-178C process compliance for documentation and traceability

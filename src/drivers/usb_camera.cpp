@@ -38,8 +38,9 @@ struct UsbCamera::Impl {
 // ============================================================================
 
 bool UsbCamera::detect() noexcept {
-    // Probe /dev/video0 through /dev/video9 for UVC webcams
-    for (int i = 0; i < 10; ++i) {
+    // Probe /dev/video0 through /dev/video63 for UVC webcams.
+    // RPi5 reserves video2-9 for MIPI/ISP; USB cameras land at 0,1, or 10+.
+    for (int i = 0; i < 64; ++i) {
         std::string path = "/dev/video" + std::to_string(i);
         int fd = ::open(path.c_str(), O_RDONLY | O_NONBLOCK);
         if (fd < 0) continue;
@@ -96,8 +97,8 @@ bool UsbCamera::init() {
         open_index = config_.device_index;
         open_path = "/dev/video" + std::to_string(open_index);
     } else {
-        // Auto-detect: find first UVC device
-        for (int i = 0; i < 10; ++i) {
+        // Auto-detect: find first UVC device (scan all 64 possible video nodes)
+        for (int i = 0; i < 64; ++i) {
             std::string path = "/dev/video" + std::to_string(i);
             int fd = ::open(path.c_str(), O_RDONLY | O_NONBLOCK);
             if (fd < 0) continue;

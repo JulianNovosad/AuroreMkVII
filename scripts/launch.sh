@@ -10,13 +10,16 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 # Determine non-root user for Node.js
 NODE_USER="${SUDO_USER:-pi}"
 
-# Path to build output (prefer Release, fall back to any build dir)
-BINARY="${REPO_DIR}/build-rpi/aurore"
+# Path to build output (prefer build-native, then build-rpi, then build)
+BINARY="${REPO_DIR}/build-native/aurore"
+if [[ ! -x "$BINARY" ]]; then
+    BINARY="${REPO_DIR}/build-rpi/aurore"
+fi
 if [[ ! -x "$BINARY" ]]; then
     BINARY="${REPO_DIR}/build/aurore"
 fi
 if [[ ! -x "$BINARY" ]]; then
-    echo "ERROR: aurore binary not found. Build first with scripts/build-rpi.sh" >&2
+    echo "ERROR: aurore binary not found. Build first with: cmake --build build-native --target aurore" >&2
     exit 1
 fi
 

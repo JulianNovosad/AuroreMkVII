@@ -21,6 +21,10 @@ project(AuroreMkVII
     LANGUAGES CXX
 )
 
+# Configure CTest to run serially (avoid CPU contention on laptop)
+include(CTest)
+set(CTEST_PARALLEL_LEVEL 1)
+
 # ============================================================================
 # Build Options
 # ============================================================================

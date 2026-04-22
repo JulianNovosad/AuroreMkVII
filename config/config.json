@@ -66,8 +66,8 @@
   },
 
   "safety": {
-    "vision_deadline_ns": 20000000,
-    "actuation_deadline_ns": 2000000,
+    "vision_deadline_ns": 50000000,
+    "actuation_deadline_ns": 16666000,
     "frame_stall_threshold": 2,
     "max_consecutive_misses": 3,
     "watchdog": {

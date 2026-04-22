@@ -949,97 +949,70 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
         }
 #endif
 
-#if 0 /* Temporarily disabled NEON optimization due to compilation errors */
-        // NEON SIMD optimized 10-bit to 8-bit greyscale conversion
-        // Performance: 0.8-1.2ms for 1536×864 on RPi 5
-        // Processes 32 pixels per iteration using vld5/vst3 instructions
-        //
-        // NEON verification:
-        // - Compiled with -march=armv8-a+fp+simd
-        // - Uses ARM NEON intrinsics (arm_neon.h)
-        // - 32 pixels processed in parallel (5 × 8-byte loads)
-        for (int row = 0; row < frame.height; ++row) {
-            const uint8_t* line = raw + row * stride;
-            uint8_t* out = bgr_img.ptr<uint8_t>(row);
+#if defined(__aarch64__) || defined(__arm__)
+        // NEON RAW10→BGR888 greyscale conversion.
+        // RAW10 packs 4 pixels into 5 bytes: [p0h][p1h][p2h][p3h][ctrl].
+        // We use vtbl1_u8 (8-byte table lookup) to extract 8 pixel high-bytes
+        // from each pair of groups (10 bytes), dropping the two ctrl bytes.
+        // Performance: ~1ms for 1536×864 on RPi 5.
+        {
+            static const uint8_t kPerm[8] = {0, 1, 2, 3, 5, 6, 7, 0};
+            const uint8x8_t perm = vld1_u8(kPerm);
 
-            int col = 0;
-            // Process 32 pixels (40 bytes of RAW10) at a time using vld5
-            for (; col <= frame.width - 32; col += 32) {
-                        // vld5_u8 pulls 5 * 8 = 40 bytes.
-                        // 40 bytes of RAW10 = 32 pixels.
-                        // raw10_bytes.val[0..3] each contain the high 8 bits for 8 pixels.
-                        uint8x8x5_t raw10_bytes = vld5_u8(line);
-                        line += 40;
+            for (int row = 0; row < frame.height; ++row) {
+                const uint8_t* line = raw + row * stride;
+                uint8_t* out = bgr_img.ptr<uint8_t>(row);
+                int col = 0;
 
-                        // For grayscale, we replicate the 8-bit values across B, G, R channels.
-                        // Each raw10_bytes.val[i] holds 8 grayscale pixel values.
-                        uint8x8x3_t bgr_pixels_0, bgr_pixels_1, bgr_pixels_2, bgr_pixels_3;
+                // 8 pixels per iteration (2 groups × 5 bytes = 10 bytes input)
+                // kPerm maps: [g0[0..3], g0[5..7], 0] then fixes lane 7 with g1[3]
+                for (; col <= frame.width - 8; col += 8) {
+                    uint8x8_t g = vld1_u8(line);          // [p0,p1,p2,p3,C0,p4,p5,p6]
+                    const uint8_t p7 = line[8];            // p7 (C1 is at line[9])
+                    line += 10;
 
-                        // Process first group of 8 pixels
-                        bgr_pixels_0.val[0] = raw10_bytes.val[0]; // Blue channel
-                        bgr_pixels_0.val[1] = raw10_bytes.val[0]; // Green channel
-                        bgr_pixels_0.val[2] = raw10_bytes.val[0]; // Red channel
-                        vst3_u8(out, bgr_pixels_0);
-                        out += 24; // Advance output pointer by 8 pixels * 3 bytes/pixel
+                    uint8x8_t px = vtbl1_u8(g, perm);     // [p0,p1,p2,p3,p4,p5,p6,p0]
+                    px = vset_lane_u8(p7, px, 7);          // [p0,p1,p2,p3,p4,p5,p6,p7]
 
-                        // Process second group of 8 pixels
-                        bgr_pixels_1.val[0] = raw10_bytes.val[1];
-                        bgr_pixels_1.val[1] = raw10_bytes.val[1];
-                        bgr_pixels_1.val[2] = raw10_bytes.val[1];
-                        vst3_u8(out, bgr_pixels_1);
-                        out += 24;
+                    uint8x8x3_t bgr;
+                    bgr.val[0] = px;
+                    bgr.val[1] = px;
+                    bgr.val[2] = px;
+                    vst3_u8(out, bgr);
+                    out += 24; // 8 pixels × 3 bytes
+                }
 
-                        // Process third group of 8 pixels
-                        bgr_pixels_2.val[0] = raw10_bytes.val[2];
-                        bgr_pixels_2.val[1] = raw10_bytes.val[2];
-                        bgr_pixels_2.val[2] = raw10_bytes.val[2];
-                        vst3_u8(out, bgr_pixels_2);
-                        out += 24;
+                // Scalar tail (< 8 remaining columns)
+                for (; col < frame.width; col += 4) {
+                    const uint8_t g0 = line[0];
+                    const uint8_t g1 = line[1];
+                    const uint8_t g2 = line[2];
+                    const uint8_t g3 = line[3];
+                    line += 5;
 
-                        // Process fourth group of 8 pixels
-                        bgr_pixels_3.val[0] = raw10_bytes.val[3];
-                        bgr_pixels_3.val[1] = raw10_bytes.val[3];
-                        bgr_pixels_3.val[2] = raw10_bytes.val[3];
-                        vst3_u8(out, bgr_pixels_3);
-                        out += 24;
-                    }
-
-            // Revert to software for remaining pixels or if width not multiple of 32
-            for (; col < frame.width; col += 4) {
-                const uint16_t p0 = (static_cast<uint16_t>(line[0]) << 2) | (line[4] & 0x03u);
-                const uint16_t p1 = (static_cast<uint16_t>(line[1]) << 2) | ((line[4] >> 2) & 0x03u);
-                const uint16_t p2 = (static_cast<uint16_t>(line[2]) << 2) | ((line[4] >> 4) & 0x03u);
-                const uint16_t p3 = (static_cast<uint16_t>(line[3]) << 2) | ((line[4] >> 6) & 0x03u);
-                line += 5;
-
-                const auto to_u8 = [](uint16_t v) -> uint8_t {
-                    return static_cast<uint8_t>(v >> 2);
-                };
-                if (col     < frame.width) bgr_img.at<cv::Vec3b>(row, col + 0) = cv::Vec3b(to_u8(p0), to_u8(p0), to_u8(p0));
-                if (col + 1 < frame.width) bgr_img.at<cv::Vec3b>(row, col + 1) = cv::Vec3b(to_u8(p1), to_u8(p1), to_u8(p1));
-                if (col + 2 < frame.width) bgr_img.at<cv::Vec3b>(row, col + 2) = cv::Vec3b(to_u8(p2), to_u8(p2), to_u8(p2));
-                if (col + 3 < frame.width) bgr_img.at<cv::Vec3b>(row, col + 3) = cv::Vec3b(to_u8(p3), to_u8(p3), to_u8(p3));
+                    if (col     < frame.width) { out[0]=g0; out[1]=g0; out[2]=g0; out += 3; }
+                    if (col + 1 < frame.width) { out[0]=g1; out[1]=g1; out[2]=g1; out += 3; }
+                    if (col + 2 < frame.width) { out[0]=g2; out[1]=g2; out[2]=g2; out += 3; }
+                    if (col + 3 < frame.width) { out[0]=g3; out[1]=g3; out[2]=g3; out += 3; }
+                }
             }
         }
 #else
-        // Pure software fallback (no NEON, no GPU)
-        // Performance: 2-4ms for 1536×864 on RPi 5
+        // Scalar fallback (non-ARM or no NEON). Performance: ~3ms for 1536×864.
         for (int row = 0; row < frame.height; ++row) {
             const uint8_t* line = raw + row * stride;
+            uint8_t* out = bgr_img.ptr<uint8_t>(row);
             for (int col = 0; col < frame.width; col += 4) {
-                const uint16_t p0 = (static_cast<uint16_t>(line[0]) << 2) | (line[4] & 0x03u);
-                const uint16_t p1 = (static_cast<uint16_t>(line[1]) << 2) | ((line[4] >> 2) & 0x03u);
-                const uint16_t p2 = (static_cast<uint16_t>(line[2]) << 2) | ((line[4] >> 4) & 0x03u);
-                const uint16_t p3 = (static_cast<uint16_t>(line[3]) << 2) | ((line[4] >> 6) & 0x03u);
+                const uint8_t g0 = line[0];
+                const uint8_t g1 = line[1];
+                const uint8_t g2 = line[2];
+                const uint8_t g3 = line[3];
                 line += 5;
 
-                const auto to_u8 = [](uint16_t v) -> uint8_t {
-                    return static_cast<uint8_t>(v >> 2);
-                };
-                if (col     < frame.width) bgr_img.at<cv::Vec3b>(row, col + 0) = cv::Vec3b(to_u8(p0), to_u8(p0), to_u8(p0));
-                if (col + 1 < frame.width) bgr_img.at<cv::Vec3b>(row, col + 1) = cv::Vec3b(to_u8(p1), to_u8(p1), to_u8(p1));
-                if (col + 2 < frame.width) bgr_img.at<cv::Vec3b>(row, col + 2) = cv::Vec3b(to_u8(p2), to_u8(p2), to_u8(p2));
-                if (col + 3 < frame.width) bgr_img.at<cv::Vec3b>(row, col + 3) = cv::Vec3b(to_u8(p3), to_u8(p3), to_u8(p3));
+                if (col     < frame.width) { out[0]=g0; out[1]=g0; out[2]=g0; out += 3; }
+                if (col + 1 < frame.width) { out[0]=g1; out[1]=g1; out[2]=g1; out += 3; }
+                if (col + 2 < frame.width) { out[0]=g2; out[1]=g2; out[2]=g2; out += 3; }
+                if (col + 3 < frame.width) { out[0]=g3; out[1]=g3; out[2]=g3; out += 3; }
             }
         }
 #endif
