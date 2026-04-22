@@ -89,7 +89,7 @@ void test_continuous_mode_and_readings(const std::string& device) {
 
     // M01 needs 3+ seconds to recover from the previous test's stop() command
     // (destructor fires stop() when test_uart_initialization's lrf goes out of scope)
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    std::this_thread::sleep_for(std::chrono::seconds(5));
 
     LaserRangefinder lrf;
 
@@ -203,8 +203,8 @@ void test_continuous_mode_and_readings(const std::string& device) {
 void test_protocol_parsing(const std::string& device) {
     std::cout << "\n=== Test: M01 Protocol Parsing ===\n";
 
-    // M01 needs 3+ seconds to recover after stop() command
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    // M01 needs 5+ seconds to recover after stop() command
+    std::this_thread::sleep_for(std::chrono::seconds(5));
 
     LaserRangefinder lrf;
 
@@ -283,8 +283,8 @@ void test_protocol_parsing(const std::string& device) {
 void test_thread_safety(const std::string& device) {
     std::cout << "\n=== Test: Thread Safety ===\n";
 
-    // M01 needs 3+ seconds to recover after stop() command
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    // M01 needs 5+ seconds to recover after stop() command
+    std::this_thread::sleep_for(std::chrono::seconds(5));
 
     LaserRangefinder lrf;
 
