@@ -35,9 +35,17 @@ namespace {
 
 // M01 protocol frames (checksum = sum(bytes[1..N-1]) & 0xFF)
 // Per official M01 FAQ: must send Laser ON before continuous mode will return distance data
+// Binary commands (work with some M01 variants)
 constexpr uint8_t kLaserOnCmd[] = {0xAA, 0x00, 0x01, 0xBE, 0x00, 0x01, 0x00, 0x01, 0xC1};
 constexpr uint8_t kContinuousCmd[] = {0xAA, 0x00, 0x00, 0x21, 0x00, 0x01, 0x00, 0x00, 0x22};
 constexpr uint8_t kSingleShotCmd[] = {0xAA, 0x00, 0x00, 0x20, 0x00, 0x01, 0x00, 0x00, 0x21};
+
+// ASCII commands per M01 spec (required for most modules)
+// Sequence: CR → "L\r" → "D\r" → continuous data frames
+constexpr char kLaserOnAscii[] = "L\r";
+constexpr char kContinuousAscii[] = "D\r";
+constexpr char kSingleShotAscii[] = "Q\r";
+constexpr char kWakeupAscii[] = "\r";
 
 // Modbus RTU: Read 1 Holding Register at address 0x0000 from slave 0x01
 // Frame: [addr=01] [func=03] [start_hi=00] [start_lo=00] [count_hi=00] [count_lo=01] [CRC_lo] [CRC_hi]
@@ -298,22 +306,23 @@ bool LaserRangefinder::start_continuous() {
         reader_thread_ = std::thread(&LaserRangefinder::reader_loop_modbus, this);
         std::cout << "[LaserRangefinder] Modbus RTU polling started\n";
     } else {
-        // M01: send Laser ON then Continuous mode, then start reader thread immediately.
-        // The reader loop handles re-stimulation if the module goes quiet.
+        // M01: use ASCII commands per M01 specification
+        // Required sequence: wake up → L → D → continuous data
         ::tcflush(fd_, TCIOFLUSH);
 
-        // Enable laser emitter
+        // Wake up the module with CR
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-result"
-        ::write(fd_, kLaserOnCmd, sizeof(kLaserOnCmd));
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        ::write(fd_, kLaserOnCmd, sizeof(kLaserOnCmd));
+        ::write(fd_, kWakeupAscii, sizeof(kWakeupAscii) - 1);
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        // Start continuous measurement mode
-        ::write(fd_, kContinuousCmd, sizeof(kContinuousCmd));
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        ::write(fd_, kContinuousCmd, sizeof(kContinuousCmd));
+        // Enable laser emitter
+        ::write(fd_, kLaserOnAscii, sizeof(kLaserOnAscii) - 1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+        // Start continuous measurement mode (MUST send after L)
+        ::write(fd_, kContinuousAscii, sizeof(kContinuousAscii) - 1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
 #pragma GCC diagnostic pop
 
         running_.store(true, std::memory_order_release);
@@ -534,26 +543,32 @@ int LaserRangefinder::diagnose_wiring() {
     // Flush stale UART buffers
     ::tcflush(fd_, TCIOFLUSH);
 
-    // For M01 protocol, send Laser ON first then continuous command
+    // For M01 protocol, use ASCII commands per spec
     if (protocol_ == LrfProtocol::M01) {
-        for (int i = 0; i < 3; ++i) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-result"
-            ::write(fd_, kLaserOnCmd, sizeof(kLaserOnCmd));
+        // Wake up with CR first
+        ::write(fd_, kWakeupAscii, sizeof(kWakeupAscii) - 1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        // Then L to enable laser
+        ::write(fd_, kLaserOnAscii, sizeof(kLaserOnAscii) - 1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+        // D for continuous mode
+        ::write(fd_, kContinuousAscii, sizeof(kContinuousAscii) - 1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
 #pragma GCC diagnostic pop
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 
-    const uint8_t* cmd;
+    const char* cmd;
     size_t cmd_len;
     if (protocol_ == LrfProtocol::MODBUS_RTU) {
-        cmd = kModbusPollCmd;
+        cmd = reinterpret_cast<const char*>(kModbusPollCmd);
         cmd_len = sizeof(kModbusPollCmd);
     } else {
-        cmd = kContinuousCmd;
-        cmd_len = sizeof(kContinuousCmd);
+        cmd = kContinuousAscii;
+        cmd_len = sizeof(kContinuousAscii) - 1;
     }
 
     // Write command and check for response
