@@ -41,11 +41,15 @@ void test_search_detection_transitions_to_tracking() {
     StateMachine sm;
     sm.force_state_for_test(FcsState::SEARCH);
     Detection d;
-    d.confidence = 0.8f;
+    d.confidence = 0.95f;  // Must meet kConfidenceMin threshold
     d.bbox = {100, 100, 50, 50};
-    sm.on_detection(d);
+    // AM7-L2-TGT-003: State machine requires 3 consecutive stable frames
+    // (position delta <= 2px) before transitioning SEARCH -> TRACKING
+    for (int i = 0; i < 3; ++i) {
+        sm.on_detection(d);
+    }
     assert(sm.state() == FcsState::TRACKING);
-    std::cout << "PASS: SEARCH -> TRACKING on valid detection\n";
+    std::cout << "PASS: SEARCH -> TRACKING on 3 stable detections\n";
 }
 
 void test_tracking_lost_returns_to_search() {
@@ -64,7 +68,7 @@ void test_tracking_to_armed_with_conditions() {
     sm.set_operator_authorization(true);
     
     // Set up valid lock condition
-    sm.on_redetection_score(0.90f);  // >= kRedetectionScoreMin (0.85)
+    sm.on_redetection_score(0.96f);  // >= kRedetectionScoreMin (0.95)
     
     FireControlSolution sol;
     sol.p_hit = 0.96f;  // >= kPHitMin (0.95)
@@ -513,12 +517,14 @@ void test_transition_table_completeness() {
     sm.request_cancel();
     assert(sm.state() == FcsState::IDLE_SAFE);
 
-    // SEARCH -> TRACKING (via on_detection)
+    // SEARCH -> TRACKING (via on_detection - requires 3 stable frames)
     sm.force_state_for_test(FcsState::SEARCH);
     Detection d;
     d.confidence = 0.96f;
     d.bbox = {100, 100, 50, 50};
-    sm.on_detection(d);
+    for (int i = 0; i < 3; ++i) {
+        sm.on_detection(d);
+    }
     assert(sm.state() == FcsState::TRACKING);
 
     // SEARCH -> FAULT (via on_fault)
@@ -540,6 +546,7 @@ void test_transition_table_completeness() {
 
     // TRACKING -> ARMED (via on_ballistics_solution with conditions)
     sm.force_state_for_test(FcsState::TRACKING);
+    sm.clear_fault_latch_for_test();  // Clear any latched fault from earlier tests
     sm.set_operator_authorization(true);
     sm.on_redetection_score(0.96f);
     FireControlSolution fsol;

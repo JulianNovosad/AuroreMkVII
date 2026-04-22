@@ -125,16 +125,16 @@ TEST(test_interlock_coupling) {
     il_config.inhibit_channel = 2;
     
     InterlockController interlock(&hat, il_config);
+    // init() may fail if GPIO is unavailable; servo must still reach INHIBIT (fail-safe)
     interlock.init();
-    
-    // Initial state should be inhibit (1000µs)
+
+    // Initial state must always be inhibit (1000µs) regardless of GPIO availability
     ASSERT_EQ(1000, hat.get_pulse_width(2));
-    
-    // Set to enable (2000µs)
+
+    // set_inhibit uses the servo channel directly; works even without GPIO
     interlock.set_inhibit(false);
     ASSERT_EQ(2000, hat.get_pulse_width(2));
-    
-    // Set back to inhibit (1000µs)
+
     interlock.set_inhibit(true);
     ASSERT_EQ(1000, hat.get_pulse_width(2));
 }

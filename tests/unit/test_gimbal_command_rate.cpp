@@ -36,6 +36,7 @@
 #include <thread>
 #include <vector>
 #include <stdexcept>
+#include <sched.h> // For sched_setscheduler
 
 namespace {
 
@@ -43,11 +44,10 @@ namespace {
 constexpr double kTargetRateHz = 120.0;                // Target command rate
 constexpr double kTargetPeriodMs = 8.333333;           // 120Hz = 8.333...ms
 constexpr double kRateTolerancePercent = 0.01;         // ±1% rate tolerance
-#ifdef AURORE_LAPTOP_BUILD
-constexpr double kMaxJitterUs = 5000.0;                // Relaxed for laptop
-#else
 constexpr double kMaxJitterUs = 50.0;                  // AM7-L2-ACT-001 jitter budget
-#endif
+// Phase variation budget: 0.1ms (100us)
+constexpr double kMaxPhaseVariationMs = 0.1;
+
 constexpr int kNumFrames = 360;                        // 3 seconds at 120Hz
 constexpr int kWarmupFrames = 10;                      // Warm-up frames
 
@@ -305,12 +305,8 @@ void test_phase_offset_stability() {
     std::cout << "  Maximum period variation: " << diff_max << " ms" << std::endl;
     std::cout << std::endl;
 
-    // Phase variation should be small (< 0.1ms on RT, relaxed on laptop)
-#ifdef AURORE_LAPTOP_BUILD
-    const bool phase_pass = (diff_max < 5.0); // 5ms variation allowed on laptop
-#else
-    const bool phase_pass = (diff_max < 0.1);
-#endif
+    // Phase variation should be small (< 0.1ms on RT)
+    const bool phase_pass = (diff_max < kMaxPhaseVariationMs);
 
     std::cout << "Verification:" << std::endl;
     std::cout << "  Phase stability: " << (phase_pass ? "PASS" : "FAIL") << std::endl;
@@ -323,6 +319,17 @@ void test_phase_offset_stability() {
 }  // anonymous namespace
 
 int main() {
+    // Attempt to set real-time scheduling for the test thread
+    struct sched_param param;
+    param.sched_priority = 98; // High priority, just below safety monitor (99)
+    if (sched_setscheduler(0, SCHED_FIFO, &param) == -1) {
+        std::cerr << "WARNING: Failed to set SCHED_FIFO priority for test thread: "
+                  << strerror(errno) << ". Test results may be less stable.\n"
+                  << "         Run with sudo or ensure CAP_SYS_NICE is set for accurate real-time testing.\n";
+    } else {
+        std::cout << "INFO: Test thread running with SCHED_FIFO priority " << param.sched_priority << "\n";
+    }
+
     std::cout << "========================================" << std::endl;
     std::cout << "Gimbal Command Rate Test Suite" << std::endl;
     std::cout << "AM7-L2-ACT-001 Verification" << std::endl;

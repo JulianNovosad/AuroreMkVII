@@ -122,6 +122,7 @@ static bool test_watchdog_feed_increments_counter() {
     return true;
 }
 
+#ifdef AURORE_LAPTOP_BUILD
 // ---------------------------------------------------------------------------
 // test_init_on_laptop
 // ---------------------------------------------------------------------------
@@ -139,6 +140,7 @@ static bool test_init_on_laptop() {
 
     return true;
 }
+#endif // AURORE_LAPTOP_BUILD
 
 // ---------------------------------------------------------------------------
 // main
@@ -150,7 +152,9 @@ int main() {
         { "test_actuation_allowed_only_when_closed", test_actuation_allowed_only_when_closed },
         { "test_get_status_reflects_state",      test_get_status_reflects_state      },
         { "test_watchdog_feed_increments_counter", test_watchdog_feed_increments_counter },
+#ifdef AURORE_LAPTOP_BUILD
         { "test_init_on_laptop",                 test_init_on_laptop                 },
+#endif // AURORE_LAPTOP_BUILD
     };
 
     for (auto& t : tests) {

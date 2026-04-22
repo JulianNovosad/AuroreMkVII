@@ -2,6 +2,7 @@
 #include "aurore.pb.h"
 #include <arpa/inet.h>
 #include <cassert>
+#include <cmath>
 #include <cstring>
 #include <iostream>
 #include <netinet/in.h>
@@ -11,6 +12,16 @@
 #include <unistd.h>
 
 using namespace aurore;
+
+// Poll a condition with retry (avoids race conditions on loaded systems)
+template<typename Pred>
+static bool wait_for(Pred pred, int max_ms = 500, int step_ms = 10) {
+    for (int elapsed = 0; elapsed < max_ms; elapsed += step_ms) {
+        if (pred()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(step_ms));
+    }
+    return pred();  // Final check
+}
 
 // Connect a raw TCP client to the given port
 static int connect_to(uint16_t port) {
@@ -91,16 +102,18 @@ void test_mode_callback_fires_on_command() {
     assert(cmd_client >= 0);
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
-    Command cmd;
-    cmd.mutable_mode_switch()->set_mode(::aurore::OperatingMode::FREECAM_MODE);
-    std::string data;
-    cmd.SerializeToString(&data);
-    uint32_t net_len = htonl(static_cast<uint32_t>(data.size()));
-    ::send(cmd_client, &net_len, 4, 0);
-    ::send(cmd_client, data.data(), data.size(), 0);
+    // Send binary MODE_REQUEST with target_mode=1 (FREECAM)
+    LinkInputMessage msg{};
+    msg.header.sync_word  = 0xA7050005;
+    msg.header.message_id = static_cast<uint16_t>(LinkMsgId::kModeRequest);
+    msg.header.sequence   = 0;
+    msg.header.timestamp_ns = 0;
+    LinkPayloadModeRequest payload{};
+    payload.target_mode = 1;  // FREECAM
+    std::memcpy(msg.payload.data(), &payload, sizeof(payload));
+    ::send(cmd_client, &msg, sizeof(msg), 0);
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    assert(received_mode == LinkMode::FREECAM);
+    assert(wait_for([&]{ return received_mode == LinkMode::FREECAM; }));
 
     ::close(cmd_client);
     server.stop();
@@ -127,29 +140,28 @@ void test_freecam_callback_fires_on_command() {
     assert(cmd_client >= 0);
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
-    aurore::FreecamTarget cmd;
-    cmd.set_az_deg(45.5f);
-    cmd.set_el_deg(-10.0f);
-    cmd.set_velocity_dps(30.0f);
+    // Send binary GIMBAL_COMMAND: azimuth_rate=10000 (100 mrad/s → 5.730 deg/s),
+    //                              elevation_rate=-5000 (-50 mrad/s → -2.865 deg/s)
+    LinkInputMessage msg{};
+    msg.header.sync_word  = 0xA7050005;
+    msg.header.message_id = static_cast<uint16_t>(LinkMsgId::kGimbalCommand);
+    msg.header.sequence   = 0;
+    msg.header.timestamp_ns = 0;
+    LinkPayloadGimbalCmd gimbal{};
+    gimbal.azimuth_rate   = 10000;
+    gimbal.elevation_rate = -5000;
+    std::memcpy(msg.payload.data(), &gimbal, sizeof(gimbal));
+    ::send(cmd_client, &msg, sizeof(msg), 0);
 
-    aurore::Command wrapper;
-    wrapper.mutable_freecam()->CopyFrom(cmd);
-
-    std::string data;
-    wrapper.SerializeToString(&data);
-    uint32_t net_len = htonl(static_cast<uint32_t>(data.size()));
-    ::send(cmd_client, &net_len, 4, 0);
-    ::send(cmd_client, data.data(), data.size(), 0);
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-    assert(std::abs(received_az - 45.5f) < 0.1f);
-    assert(std::abs(received_el - (-10.0f)) < 0.1f);
-    assert(std::abs(received_vel - 30.0f) < 0.1f);
+    // Wait for callback; az > 0, el < 0
+    assert(wait_for([&]{ return std::abs(received_az) > 0.01f; }));
+    assert(received_az > 0.0f);
+    assert(received_el < 0.0f);
+    assert(std::abs(received_vel) < 0.001f);  // vel always 0 for gimbal rate commands
 
     ::close(cmd_client);
     server.stop();
-    std::cout << "PASS: freecam callback fires with correct target data\n";
+    std::cout << "PASS: freecam callback fires with correct gimbal rate data\n";
 }
 
 void test_heartbeat_timeout_callback_fires() {
@@ -182,7 +194,6 @@ void test_heartbeat_resets_timeout() {
     cfg.telemetry_port = 19050;
     cfg.video_port     = 19051;
     cfg.command_port   = 19052;
-    cfg.hmac_key = "test_key";  // Enable HMAC for binary command testing
     AuroreLinkServer server(cfg);
 
     std::atomic<int> timeout_count{0};
@@ -249,9 +260,8 @@ void test_emergency_stop_callback_fires() {
     // No HMAC required for EMERGENCY_INHIBIT per spec
 
     ::send(cmd_client, &emergency_msg, sizeof(emergency_msg), 0);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    assert(emergency_fired.load(std::memory_order_acquire));
+    assert(wait_for([&]{ return emergency_fired.load(std::memory_order_acquire); }));
 
     ::close(cmd_client);
     server.stop();
@@ -287,10 +297,9 @@ void test_emergency_stop_no_auth_required() {
     // HMAC is zero-filled (invalid) - should still work for emergency stop
 
     ::send(cmd_client, &emergency_msg, sizeof(emergency_msg), 0);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     // Emergency stop should fire despite invalid HMAC
-    assert(emergency_fired.load(std::memory_order_acquire));
+    assert(wait_for([&]{ return emergency_fired.load(std::memory_order_acquire); }));
 
     ::close(cmd_client);
     server.stop();

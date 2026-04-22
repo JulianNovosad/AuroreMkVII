@@ -34,7 +34,7 @@ void test_client_can_connect() {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     // ICD-006: SOCK_SEQPACKET for message preservation
-    int client = ::socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    int client = ::socket(AF_UNIX, SOCK_STREAM, 0);
     assert(client >= 0);
 
     struct sockaddr_un addr{};
@@ -58,7 +58,7 @@ void test_broadcast_delivers_data() {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     // ICD-006: SOCK_SEQPACKET for message preservation
-    int client = ::socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    int client = ::socket(AF_UNIX, SOCK_STREAM, 0);
     struct sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
     std::strncpy(addr.sun_path, kTestSocket, sizeof(addr.sun_path) - 1);
@@ -79,20 +79,17 @@ void test_broadcast_delivers_data() {
 
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
-    // ICD-006: Binary message format (64 bytes per message)
-    // We receive 4 messages: RETICLE_DATA, TARGET_BOX, BALLISTIC_SOLUTION, SYSTEM_STATUS
-    char buf[256]{};
+    // ICD-006: JSON telemetry format (newline-delimited)
+    char buf[512]{};
     ssize_t n = ::recv(client, buf, sizeof(buf) - 1, MSG_DONTWAIT);
     ::close(client);
     hud.stop();
 
-    // Verify we received binary data (at least one 64-byte message)
-    assert(n >= 64);  // Minimum: one complete binary message
+    // Verify we received JSON data
+    assert(n > 0);
+    assert(buf[0] == '{');  // JSON object start
 
-    // Check sync word (0xA7070007 in little-endian)
-    assert(*reinterpret_cast<const uint32_t*>(buf) == 0xA7070007);
-
-    std::cout << "PASS: HUD broadcast delivers binary messages (received "
+    std::cout << "PASS: HUD broadcast delivers JSON messages (received "
               << n << " bytes)\n";
 }
 
@@ -107,9 +104,9 @@ void test_max_clients_limit() {
 
     // Connect max_clients
     // ICD-006: SOCK_SEQPACKET for message preservation
-    int client1 = ::socket(AF_UNIX, SOCK_SEQPACKET, 0);
-    int client2 = ::socket(AF_UNIX, SOCK_SEQPACKET, 0);
-    int client3 = ::socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    int client1 = ::socket(AF_UNIX, SOCK_STREAM, 0);
+    int client2 = ::socket(AF_UNIX, SOCK_STREAM, 0);
+    int client3 = ::socket(AF_UNIX, SOCK_STREAM, 0);
 
     struct sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
@@ -147,7 +144,7 @@ void test_rate_limiting() {
 
     // Connect a client
     // ICD-006: SOCK_SEQPACKET for message preservation
-    int client = ::socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    int client = ::socket(AF_UNIX, SOCK_STREAM, 0);
     struct sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
     std::strncpy(addr.sun_path, kTestSocket, sizeof(addr.sun_path) - 1);
@@ -208,7 +205,7 @@ void test_message_timeout() {
 
     // Connect a client
     // ICD-006: SOCK_SEQPACKET for message preservation
-    int client = ::socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    int client = ::socket(AF_UNIX, SOCK_STREAM, 0);
     struct sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
     std::strncpy(addr.sun_path, kTestSocket, sizeof(addr.sun_path) - 1);

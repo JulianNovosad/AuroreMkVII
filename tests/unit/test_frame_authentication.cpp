@@ -15,6 +15,7 @@
 #include "aurore/security.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <chrono>
 #include <random>
@@ -107,7 +108,8 @@ static void test_frame_authentication_e2e() {
     cam.start();
 
     aurore::ZeroCopyFrame frame;
-    bool ok = cam.try_capture_frame(frame);
+    // Use capture_frame with a timeout to allow libcamera to provide a frame
+    bool ok = cam.capture_frame(frame, 1000); // 1 second timeout
     CHECK(ok);
     CHECK(frame.valid);
     
@@ -125,10 +127,7 @@ static void test_frame_authentication_e2e() {
     CHECK(!wrong_verified);
     
     // Clean up
-    if (frame.error[0] == 1 && frame.plane_data[0] != nullptr) {
-        delete[] static_cast<uint8_t*>(frame.plane_data[0]);
-        frame.plane_data[0] = nullptr;
-    }
+    cam.release_frame(frame);
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +144,8 @@ static void test_tampered_frame_detection() {
     cam.start();
 
     aurore::ZeroCopyFrame frame;
-    bool ok = cam.try_capture_frame(frame);
+    // Use capture_frame with a timeout
+    bool ok = cam.capture_frame(frame, 1000); // 1 second timeout
     CHECK(ok);
     
     // Verify original frame
@@ -155,23 +155,35 @@ static void test_tampered_frame_detection() {
     
     // Tamper with frame data (modify pixel data)
     if (frame.plane_data[0] != nullptr && frame.plane_size[0] > 0) {
-        uint8_t* data = static_cast<uint8_t*>(frame.plane_data[0]);
-        uint8_t original = data[0];
-        data[0] ^= 0xFF;  // Flip bits
-        
+        // Create a copy of the pixel data to tamper with, avoiding direct modification of libcamera's DMA buffer
+        std::vector<uint8_t> tampered_data(frame.plane_size[0]);
+        std::memcpy(tampered_data.data(), frame.plane_data[0], frame.plane_size[0]);
+
+        // Save original pointer and size
+        void* original_plane_data = frame.plane_data[0];
+        size_t original_plane_size = frame.plane_size[0];
+        uint8_t original_error_flag = frame.error[0];
+
+        // Tamper with the copied data
+        tampered_data[0] ^= 0xFF;  // Flip bits
+
+        // Temporarily modify the frame to point to the tampered data
+        frame.plane_data[0] = tampered_data.data();
+        frame.plane_size[0] = tampered_data.size();
+        frame.error[0] = 1; // Mark as heap-allocated for internal logic if needed
+
         // Verification should now fail
         bool verified_after = frame.verify_authentication(default_key, strlen(default_key));
         CHECK(!verified_after);
-        
-        // Restore for cleanup
-        data[0] = original;
+
+        // Restore original frame data pointer and size for proper cleanup by cam.release_frame
+        frame.plane_data[0] = original_plane_data;
+        frame.plane_size[0] = original_plane_size;
+        frame.error[0] = original_error_flag;
     }
     
     // Clean up
-    if (frame.error[0] == 1 && frame.plane_data[0] != nullptr) {
-        delete[] static_cast<uint8_t*>(frame.plane_data[0]);
-        frame.plane_data[0] = nullptr;
-    }
+    cam.release_frame(frame);
 }
 
 // ---------------------------------------------------------------------------
@@ -415,6 +427,9 @@ static void test_full_authentication_overhead() {
 // main
 // ---------------------------------------------------------------------------
 int main() {
+    // Force test pattern mode so camera tests run without real hardware
+    setenv("AURORE_CAM_MODE", "test", /*overwrite=*/1);
+
     std::printf("Frame Authentication Tests (ICD-001 / AM7-L2-SEC-001)\n");
     std::printf("=====================================================\n\n");
     
