@@ -66,37 +66,50 @@ void convert_scalar(const uint8_t* raw, uint8_t* bgr, int width, int height, int
 }
 
 #ifdef HAS_NEON
+// Matches the production implementation in camera_wrapper.cpp (vtbl1_u8 path).
+// RAW10: 4 pixels packed in 5 bytes [p0h][p1h][p2h][p3h][ctrl].
+// We only use the high 8 bits (p0h…p3h); low 2 bits are discarded (same
+// result as >> 2 of the full 10-bit value since p_n_h == (10bit >> 2)).
 void convert_neon(const uint8_t* raw, uint8_t* bgr, int width, int height, int stride) {
+    // Permutation: pull 8 pixel high-bytes out of 10 input bytes
+    // Input layout (10 bytes = 2 groups): [p0,p1,p2,p3,C0,p4,p5,p6,p7,C1]
+    // vld1_u8 loads first 8: [p0,p1,p2,p3,C0,p4,p5,p6]
+    // kPerm maps: [0,1,2,3,5,6,7,0] → [p0,p1,p2,p3,p4,p5,p6,p0]
+    // then vset_lane_u8(p7, px, 7) fixes lane 7 → [p0,p1,p2,p3,p4,p5,p6,p7]
+    static const uint8_t kPerm[8] = {0, 1, 2, 3, 5, 6, 7, 0};
+    const uint8x8_t perm = vld1_u8(kPerm);
+
     for (int row = 0; row < height; ++row) {
         const uint8_t* line = raw + row * stride;
         uint8_t* out = bgr + row * width * 3;
-
         int col = 0;
-        for (; col <= width - 32; col += 32) {
-            uint8x8x5_t v = vld5_u8(line);
-            line += 40;
 
-            for (int i = 0; i < 4; ++i) {
-                uint8x8x3_t bgr_v;
-                bgr_v.val[0] = v.val[i];
-                bgr_v.val[1] = v.val[i];
-                bgr_v.val[2] = v.val[i];
-                vst3_u8(out, bgr_v);
-                out += 24;
-            }
+        for (; col <= width - 8; col += 8) {
+            uint8x8_t g = vld1_u8(line);
+            const uint8_t p7 = line[8];
+            line += 10;
+
+            uint8x8_t px = vtbl1_u8(g, perm);
+            px = vset_lane_u8(p7, px, 7);
+
+            uint8x8x3_t bgr_v;
+            bgr_v.val[0] = px;
+            bgr_v.val[1] = px;
+            bgr_v.val[2] = px;
+            vst3_u8(out, bgr_v);
+            out += 24;
         }
-        // Software fallback for remainder
+
         for (; col < width; col += 4) {
-            const uint16_t p0 = (static_cast<uint16_t>(line[0]) << 2) | (line[4] & 0x03u);
-            const uint16_t p1 = (static_cast<uint16_t>(line[1]) << 2) | ((line[4] >> 2) & 0x03u);
-            const uint16_t p2 = (static_cast<uint16_t>(line[2]) << 2) | ((line[4] >> 4) & 0x03u);
-            const uint16_t p3 = (static_cast<uint16_t>(line[3]) << 2) | ((line[4] >> 6) & 0x03u);
+            const uint8_t g0 = line[0];
+            const uint8_t g1 = line[1];
+            const uint8_t g2 = line[2];
+            const uint8_t g3 = line[3];
             line += 5;
-            const auto to_u8 = [](uint16_t v) -> uint8_t { return static_cast<uint8_t>(v >> 2); };
-            if (col+0 < width) { uint8_t v=to_u8(p0); out[0]=v; out[1]=v; out[2]=v; out+=3; }
-            if (col+1 < width) { uint8_t v=to_u8(p1); out[0]=v; out[1]=v; out[2]=v; out+=3; }
-            if (col+2 < width) { uint8_t v=to_u8(p2); out[0]=v; out[1]=v; out[2]=v; out+=3; }
-            if (col+3 < width) { uint8_t v=to_u8(p3); out[0]=v; out[1]=v; out[2]=v; out+=3; }
+            if (col+0 < width) { out[0]=g0; out[1]=g0; out[2]=g0; out+=3; }
+            if (col+1 < width) { out[0]=g1; out[1]=g1; out[2]=g1; out+=3; }
+            if (col+2 < width) { out[0]=g2; out[1]=g2; out[2]=g2; out+=3; }
+            if (col+3 < width) { out[0]=g3; out[1]=g3; out[2]=g3; out+=3; }
         }
     }
 }
