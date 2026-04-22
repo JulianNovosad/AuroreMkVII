@@ -365,12 +365,25 @@ void test_real_laser_integration(const std::string& device) {
     int rejected_readings = 0;
     uint64_t last_ts = 0;
 
-    for (int i = 0; i < 20; ++i) {
+    // Run for 3 seconds (60 × 50ms) — long enough for the reader thread's
+    // 1.5s idle-poll re-stimulation to fire and deliver a second burst.
+    for (int i = 0; i < 60; ++i) {
         float range_m = lrf.latest_range_m();
         uint64_t ts = lrf.last_reading_ns();
 
         if (range_m > 0.0f && ts > 0 && ts != last_ts) {
             last_ts = ts;
+
+            // Skip readings that are already stale before we can feed them to
+            // the SM.  This can happen when the wait loop above exits and the
+            // last burst reading is borderline-old.  The SM's own staleness
+            // check (test_stale_range_rejected) covers that path separately.
+            const int64_t age_ms = static_cast<int64_t>(
+                get_timestamp(ClockId::MonotonicRaw) - ts) / 1000000LL;
+            if (age_ms > 80) {
+                std::cout << "  INFO: Skipping reading aged " << age_ms << "ms\n";
+                continue;
+            }
 
             RangeData range;
             range.range_m = range_m;
