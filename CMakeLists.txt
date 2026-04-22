@@ -317,10 +317,7 @@ set(AURORE_SOURCES
     src/vision/apriltag_detector.cpp
     src/vision/orb_detector.cpp
     src/vision/dual_camera_manager.cpp
-    src/vision/yolo26_detector.cpp
-    src/vision/sweep_pattern.cpp
-
-    # Tracking
+    src/vision/sweep_pattern.cpp    # Tracking
     src/tracking/kcf_tracker.cpp
 
     # Actuation
@@ -348,6 +345,11 @@ set(AURORE_SOURCES
     ${PROTO_SRCS}
 )
 
+if(ONNXRUNTIME_FOUND)
+    list(APPEND AURORE_SOURCES src/vision/yolo26_detector.cpp)
+endif()
+
+
 # Header files (for IDE integration)
 set(AURORE_HEADERS
     include/aurore/ring_buffer.hpp
@@ -360,6 +362,10 @@ set(AURORE_HEADERS
     include/aurore/fusion_hat.hpp
     include/aurore/aurore_link_server.hpp
 )
+
+if(ONNXRUNTIME_FOUND)
+    list(APPEND AURORE_HEADERS include/aurore/yolo26_detector.hpp)
+endif()
 
 # Create executable
 add_executable(aurore ${AURORE_SOURCES} ${AURORE_HEADERS})

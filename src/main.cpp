@@ -139,9 +139,20 @@ bool set_resource_limits() {
         std::cerr << "Warning: Failed to set memlock limit: " << strerror(errno) << std::endl;
         return false;
     }
-
     std::cout << "Memory lock limit set to " << (MAX_MEMLOCK_BYTES / (1024 * 1024)) << " MB"
               << std::endl;
+
+    // Set stack size limit for new threads (e.g., 8MB)
+    // Required for some real-time threads to avoid stack overflow
+    rl.rlim_cur = 8 * 1024 * 1024; // 8MB
+    rl.rlim_max = 8 * 1024 * 1024; // 8MB
+
+    if (setrlimit(RLIMIT_STACK, &rl) != 0) {
+        std::cerr << "Warning: Failed to set stack limit: " << strerror(errno) << std::endl;
+        return false;
+    }
+
+    std::cout << "Stack size limit set to " << (rl.rlim_cur / (1024 * 1024)) << " MB" << std::endl;
 
     return true;
 }
@@ -438,40 +449,41 @@ int main(int argc, char* argv[]) {
     aurore::LaserRangefinder lrf;
     {
         const std::string lrf_device = config.get_string("lrf.uart_device", "/dev/ttyAMA0");
+        std::cout << "[LRF] Attempting to initialize LRF on " << lrf_device << std::endl;
         if (lrf.init(lrf_device)) {
+            std::cout << "[LRF] LRF initialized successfully." << std::endl;
             lrf.start_continuous();
             std::cout << "[LRF] Started continuous mode on " << lrf_device << "\n";
         } else {
-            std::cerr << "[LRF] Warning: failed to open " << lrf_device << " — range will be unavailable\n";
+            std::cerr << "[LRF] Warning: failed to open " << lrf_device
+                      << " — range will be unavailable\n";
         }
     }
-
     // Frame ring buffer (zero-copy)
     aurore::LockFreeRingBuffer<aurore::ZeroCopyFrame, 4> frame_buffer;
 
-    // INT-003 Fix: Track solution ring buffer (track_compute -> actuation_output)
+    // Track solution ring buffer (track_compute -> actuation_output)
     aurore::LockFreeRingBuffer<aurore::TrackSolution, 4> track_buffer;
 
-    // Instantiate ORB detector for target detection
+    // OrbDetector for target detection
     aurore::OrbDetector detector;
-    const std::string descriptor_path =
-        config.get_string("detector.descriptor_path", "target_signatures/helicopter.yml");
-    if (!detector.load_descriptor_file(descriptor_path)) {
-        // Descriptor file failed to load
-        if (dry_run) {
-            // In dry-run mode, synthesize a test template so detector is ready
-            cv::Mat test_template = cv::Mat::zeros(80, 80, CV_8UC3);
-            cv::rectangle(test_template, {10, 10, 60, 60}, {0, 200, 100}, -1);
-            cv::putText(test_template, "T", {25, 50}, cv::FONT_HERSHEY_SIMPLEX, 2.0, {255, 255, 0},
-                        3);
-            detector.add_template(test_template);
-            std::cout << "Detector: Using synthesized test template (dry-run mode)" << std::endl;
+    {
+        const std::string descriptor_path =
+            config.get_string("detector.descriptor_path", "target_signatures/helicopter.yml");
+        if (detector.load_descriptor_file(descriptor_path)) {
+            std::cout << "Detector: Loaded descriptors from " << descriptor_path << std::endl;
         } else {
-            std::cerr << "Warning: Failed to load descriptor file: " << descriptor_path
-                      << std::endl;
+            if (dry_run) {
+                cv::Mat test_template = cv::Mat::zeros(80, 80, CV_8UC3);
+                cv::rectangle(test_template, {10, 10, 60, 60}, {0, 200, 100}, -1);
+                detector.add_template(test_template);
+                std::cout << "Detector: Using synthesized test template (dry-run mode)"
+                          << std::endl;
+            } else {
+                std::cerr << "Warning: Failed to load descriptor file: " << descriptor_path
+                          << std::endl;
+            }
         }
-    } else {
-        std::cout << "Detector: Loaded descriptors from " << descriptor_path << std::endl;
     }
 
     // Dual-stream camera manager (MIPI + USB)
@@ -598,15 +610,21 @@ int main(int argc, char* argv[]) {
     DetectShared detect_shared;
 
     // Load YOLO26n detector
+    std::unique_ptr<aurore::Yolo26Detector> yolo_detector;
+    bool yolo_loaded = false;
+#ifdef AURORE_HAS_ONNXRUNTIME
     aurore::Yolo26Detector::Config yolo_cfg;
     yolo_cfg.model_path = config.get_string("vision.yolo_model_path",
                                              "/home/pi/AuroreMkVII/models/yolo26n.onnx");
     yolo_cfg.num_threads = 3;
-    aurore::Yolo26Detector yolo_detector(yolo_cfg);
-    const bool yolo_loaded = yolo_detector.load();
+    yolo_detector = std::make_unique<aurore::Yolo26Detector>(yolo_cfg);
+    yolo_loaded = yolo_detector->load();
     if (!yolo_loaded) {
         std::cerr << "Warning: YOLO26n model not loaded — SEARCH will use ORB detector only\n";
     }
+#else
+    std::cerr << "Warning: ONNX Runtime not available — SEARCH will use ORB detector only\n";
+#endif
 
     // Start watchdog just before threads launch so the 60ms window doesn't
     // expire during the several-second hardware initialization sequence above.
@@ -634,7 +652,10 @@ int main(int argc, char* argv[]) {
 
             if (local_frame.empty()) continue;
 
-            auto det = yolo_detector.detect(local_frame);
+            std::optional<aurore::Detection> det;
+            if (yolo_loaded && yolo_detector) {
+                det = yolo_detector->detect(local_frame);
+            }
             if (det.has_value()) {
                 std::lock_guard<std::mutex> lk(detect_shared.result_mtx);
                 detect_shared.latest     = *det;
@@ -680,9 +701,7 @@ int main(int argc, char* argv[]) {
                     frame.sequence = frame_sequence.fetch_add(1, std::memory_order_relaxed);
 
                     // Push to ring buffer (drop if full)
-                    if (!frame_buffer.push(frame)) {
-                        // Buffer full - frame dropped
-                    }
+                    frame_buffer.push(frame);
 
                     // Update safety monitor
                     safety_monitor.update_vision_frame(frame.sequence, frame.timestamp_ns);
@@ -729,7 +748,9 @@ int main(int argc, char* argv[]) {
         // Vision watchdog: track last frame timestamp
         // Initialized to 0 so the watchdog only arms after the first frame arrives.
         uint64_t last_frame_ns = 0;
-        constexpr uint64_t kVisionWatchdogNs = 10000000;  // 10ms timeout
+        // 25ms = 3 frame periods at 120Hz: tolerates up to 2 consecutive dropped frames.
+        // Dry-run uses 250ms because non-RT scheduling causes irregular frame delivery.
+        const uint64_t kVisionWatchdogNs = dry_run ? 250000000ULL : 25000000ULL;
 
         // Request SEARCH mode (IDLE_SAFE -> SEARCH)
         state_machine.request_search();
@@ -789,7 +810,7 @@ int main(int argc, char* argv[]) {
                         }
 
                         // Fall back to ORB detector if YOLO not loaded
-                        if (!yolo_loaded) {
+                        if (!yolo_loaded && detector.is_ready()) {
                             detection = detector.detect(bgr_frame);
                         }
 
@@ -824,16 +845,15 @@ int main(int argc, char* argv[]) {
                             if (dual_camera.is_usb_connected()) {
                                 auto roi = dual_camera.get_latest_roi();
                                 if (roi.has_value()) {
-                                    // Calculate alignment: ROI center vs tracking centroid
                                     float roi_cx = roi->x + roi->w * 0.5f;
                                     float roi_cy = roi->y + roi->h * 0.5f;
                                     float dx = std::abs(current_solution.centroid_x - roi_cx);
                                     float dy = std::abs(current_solution.centroid_y - roi_cy);
-                                    
-                                    bool aligned = (dx < 50.0f && dy < 50.0f);  // 50px variance
+
+                                    bool aligned = (dx < 50.0f && dy < 50.0f);
                                     dual_camera.set_usb_aligned(aligned);
                                     dual_camera.set_optical_gate_passed(aligned);
-                                    
+
                                     if (!aligned) {
                                         std::cerr << "[OpticalGate] WARN: USB/MIPI misalignment - "
                                                   << "dx=" << dx << "px, dy=" << dy << "px\n";
@@ -844,7 +864,7 @@ int main(int argc, char* argv[]) {
                                     }
                                 }
                             }
-                            
+
                             // Validate solution bounds
                             if (current_solution.centroid_x < 0 ||
                                 current_solution.centroid_x > static_cast<float>(frame.width) ||
@@ -853,8 +873,6 @@ int main(int argc, char* argv[]) {
                                 current_solution.valid = false;
                                 tracker.reset();
                             } else {
-                                // Valid tracking solution - use fixed confidence 0.75f to avoid KCF
-                                // PSR issues
                                 current_solution.psr = 0.75f;
                                 state_machine.on_tracker_update(current_solution);
                             }
@@ -884,7 +902,6 @@ int main(int argc, char* argv[]) {
                     current_solution.valid = false;
                 }
 
-                // Push solution to actuation buffer
                 if (!track_buffer.push(current_solution)) {
                     // Buffer full - solution dropped
                 }
@@ -893,23 +910,13 @@ int main(int argc, char* argv[]) {
                 // Dual-stream telemetry: Log MIPI and USB frame stats
                 auto stream_status = dual_camera.get_status();
                 dual_camera.record_mipi_frame(now_ns);
-                
-                // Log dual-stream metrics every 100 frames to avoid overwhelming telemetry
+
+                // Log dual-stream metrics every 100 frames
                 if (frame.sequence % 100 == 0) {
-                    aurore::CsvLogEntry entry;
-                    entry.mipi_frame_id = stream_status.mipi_frame_id;
-                    entry.usb_frame_id = stream_status.usb_frame_id;
-                    entry.mipi_latency_us = stream_status.mipi_latency_us;
-                    entry.usb_latency_us = stream_status.usb_latency_us;
-                    entry.optical_gate_passed = stream_status.optical_gate_passed;
-                    entry.set_module("vision");
-                    entry.set_event("dual_stream");
-                    
-                    // Check for latency warnings on critical path
                     if (stream_status.mipi_latency_us > 5000) {
                         telemetry.log_event(aurore::TelemetryEventId::DUAL_STREAM_LATENCY_WARNING,
-                                          aurore::TelemetrySeverity::kWarning,
-                                          "MIPI latency exceeded 5ms");
+                                            aurore::TelemetrySeverity::kWarning,
+                                            "MIPI latency exceeded 5ms");
                     }
                 }
 
@@ -926,7 +933,6 @@ int main(int argc, char* argv[]) {
                 if (last_frame_ns != 0) {
                     uint64_t elapsed = now_ns - last_frame_ns;
                     if (elapsed > kVisionWatchdogNs) {
-                        // Vision timeout detected
                         state_machine.on_fault(aurore::FaultCode::CAMERA_TIMEOUT);
                         telemetry.log_event(aurore::TelemetryEventId::CAMERA_TIMEOUT,
                                             aurore::TelemetrySeverity::kWarning,
@@ -934,7 +940,6 @@ int main(int argc, char* argv[]) {
                     }
                 }
 
-                // Output invalid solution
                 current_solution.valid = false;
                 if (!track_buffer.push(current_solution)) {
                     // Buffer full

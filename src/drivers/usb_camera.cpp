@@ -14,9 +14,13 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
 #include <iostream>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <opencv2/core.hpp>
@@ -31,6 +35,52 @@ namespace aurore {
 struct UsbCamera::Impl {
     cv::VideoCapture capture;
     cv::Mat current_frame;  // Internal buffer for last captured frame
+
+    // Async grab with software timeout —————————————————————————————————————
+    // grab_with_timeout() launches a thread that calls capture.grab() and
+    // signals completion via grab_cv. On timeout, the thread is left joinable
+    // so stop() can join it after releasing the capture device.
+    //
+    // Callers must not hold grab_mtx when calling grab_with_timeout().
+    std::mutex grab_mtx;
+    std::condition_variable grab_cv;
+    std::thread grab_thr;
+    bool grab_done{false};
+    bool grab_ok{false};
+
+    // Runs capture.grab() in a background thread and waits up to timeout_ms.
+    // Returns true if grab completed within the deadline and succeeded.
+    // On timeout, grab_thr is left joinable; call capture.release() to
+    // interrupt the blocked grab(), then join grab_thr.
+    bool grab_with_timeout(int timeout_ms) {
+        // Reset state
+        {
+            std::lock_guard<std::mutex> lk(grab_mtx);
+            grab_done = false;
+            grab_ok   = false;
+        }
+
+        grab_thr = std::thread([this]() {
+            const bool ok = capture.grab();
+            std::lock_guard<std::mutex> lk(grab_mtx);
+            grab_ok   = ok;
+            grab_done = true;
+            grab_cv.notify_one();
+        });
+
+        std::unique_lock<std::mutex> lk(grab_mtx);
+        const bool done = grab_cv.wait_for(
+            lk, std::chrono::milliseconds(timeout_ms),
+            [this]() { return grab_done; });
+
+        if (done) {
+            lk.unlock();
+            grab_thr.join();
+            return grab_ok;
+        }
+        // Timeout: grab_thr still running, left joinable for stop()
+        return false;
+    }
 };
 
 // ============================================================================
@@ -179,9 +229,20 @@ bool UsbCamera::start() {
         return false;
     }
 
-    // Grab a test frame to verify the pipeline works
-    if (!impl_->capture.grab()) {
-        std::cerr << "[UsbCamera] Failed to grab initial frame from " << actual_device_path_ << "\n";
+    // Grab a test frame with a 2-second budget to verify the pipeline.
+    // 2 s is generous for camera init; failure here means the V4L2 pipeline
+    // is stalled or the camera is not delivering frames.
+    constexpr int kStartGrabTimeoutMs = 2000;
+    if (!impl_->grab_with_timeout(kStartGrabTimeoutMs)) {
+        std::cerr << "[UsbCamera] Failed to grab initial frame from "
+                  << actual_device_path_ << " (timeout or V4L2 error)\n"
+                  << "      Check: dmesg | tail -20\n"
+                  << "      Fix: Reconnect webcam and check USB bandwidth\n";
+        // Calling release() unblocks grab() inside grab_thr, then we join it.
+        impl_->capture.release();
+        if (impl_->grab_thr.joinable()) {
+            impl_->grab_thr.join();
+        }
         return false;
     }
 
@@ -195,9 +256,16 @@ bool UsbCamera::start() {
 void UsbCamera::stop() {
     running_.store(false, std::memory_order_release);
 
+    // Release the capture device before joining grab_thr.
+    // Closing the V4L2 fd causes any in-flight select() inside grab() to
+    // return immediately with EBADF, which lets grab_thr exit promptly.
     if (impl_ && impl_->capture.isOpened()) {
         impl_->capture.release();
         std::cout << "[UsbCamera] Stopped\n";
+    }
+
+    if (impl_->grab_thr.joinable()) {
+        impl_->grab_thr.join();
     }
 }
 
@@ -208,11 +276,15 @@ void UsbCamera::stop() {
 bool UsbCamera::capture_frame(ZeroCopyFrame& frame, int timeout_ms) {
     if (!running_.load(std::memory_order_acquire)) return false;
 
-    (void)timeout_ms;  // V4L2 grab is blocking with internal timeout
+    // Join a timed-out grab thread from the previous call before starting a
+    // new one. (Normally not joinable here because a success path joins inline.)
+    if (impl_->grab_thr.joinable()) {
+        impl_->grab_thr.join();
+    }
 
-    if (!impl_->capture.grab()) return false;
+    if (!impl_->grab_with_timeout(timeout_ms)) return false;
+
     if (!impl_->capture.retrieve(impl_->current_frame)) return false;
-
     if (impl_->current_frame.empty()) return false;
 
     // Populate ZeroCopyFrame descriptor

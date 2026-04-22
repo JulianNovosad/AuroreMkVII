@@ -1,6 +1,7 @@
 #include "aurore/detector.hpp"
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
+#include <sys/stat.h>
 
 namespace aurore {
 
@@ -30,7 +31,17 @@ void OrbDetector::add_template(const cv::Mat& bgr) {
 }
 
 bool OrbDetector::load_descriptor_file(const std::string& path) {
-    cv::FileStorage fs(path, cv::FileStorage::READ);
+    // OpenCV 4.10 asserts on empty files rather than returning isOpened()=false.
+    // Check file size first to avoid the abort.
+    struct stat st{};
+    if (::stat(path.c_str(), &st) != 0 || st.st_size == 0) return false;
+
+    cv::FileStorage fs;
+    try {
+        fs.open(path, cv::FileStorage::READ);
+    } catch (const cv::Exception&) {
+        return false;
+    }
     if (!fs.isOpened()) return false;
 
     Template t;

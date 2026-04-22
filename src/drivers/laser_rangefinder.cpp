@@ -308,6 +308,7 @@ bool LaserRangefinder::start_continuous() {
     } else {
         // M01: use ASCII commands per M01 specification
         // Required sequence: wake up → L → D → continuous data
+        // Flush any stale data before sending commands
         ::tcflush(fd_, TCIOFLUSH);
 
         // Wake up the module with CR
@@ -316,7 +317,7 @@ bool LaserRangefinder::start_continuous() {
         ::write(fd_, kWakeupAscii, sizeof(kWakeupAscii) - 1);
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-        // Enable laser emitter
+        // Enable laser emitter (M01 spec: allow 2s for laser warm-up)
         ::write(fd_, kLaserOnAscii, sizeof(kLaserOnAscii) - 1);
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
