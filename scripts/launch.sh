@@ -32,6 +32,10 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+# Create runtime socket directory (required for HUD telemetry socket)
+mkdir -p /run/aurore
+chmod 755 /run/aurore
+
 echo "Starting aurore-link as user '$NODE_USER'..."
 sudo -u "$NODE_USER" node "${REPO_DIR}/aurore-link/server.js" &
 NODE_PID=$!

@@ -16,8 +16,8 @@
          VIDEO AREA
     ===================================================== -->
     <div id="video-area">
-      <!-- Real MIPI camera stream -->
-      <img id="video" src="/stream/mipi" alt="MIPI Camera Feed">
+      <!-- Real MIPI camera stream (toggle via CAM button) -->
+      <img id="video" src="/stream/mipi" alt="Camera Feed">
 
       <!-- Scanline overlay (video layer only) -->
       <div class="video-overlay-noise"></div>
@@ -114,6 +114,12 @@
         <!-- Bottom-Center: Gimbal Coordinates -->
         <div class="hud-quadrant hud-bottom-center">
           <span id="gimbal-coords">AZ ---.-° EL ---.-°</span>
+        </div>
+
+        <!-- HUD action buttons: camera toggle + calibration nav -->
+        <div class="hud-action-btns">
+          <button id="cam-toggle-btn" class="hud-btn">CAM: MIPI</button>
+          <a href="/calibrate" class="hud-btn">CALIB</a>
         </div>
 
         <!-- Bottom-Right: Sensor Params -->

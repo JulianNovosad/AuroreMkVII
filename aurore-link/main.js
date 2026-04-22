@@ -681,7 +681,8 @@ let currentZoom = 1.0;
 function adjustZoom(delta) {
   currentZoom = Math.max(0.5, Math.min(3.0, currentZoom + delta));
   showNotification(`ZOOM: ${(currentZoom * 100).toFixed(0)}%`);
-  // TODO: Apply zoom to canvas/video when zoom feature is implemented
+  videoEl.style.transform = currentZoom === 1.0 ? '' : `scale(${currentZoom})`;
+  videoEl.style.transformOrigin = 'center center';
 }
 
 // Target assignment
@@ -699,20 +700,21 @@ function assignTargetAtPosition(screenX, screenY) {
   const yaw = (offsetX / (rect.width / 2)) * 33;   // ±33° (half of 66°)
   const pitch = -(offsetY / (rect.height / 2)) * 20.5;  // ±20.5° (half of 41°), negative because Y is inverted
   
-  // Clamp to gimbal limits
-  const clampedYaw = Math.max(GIMBAL_YAW_MIN, Math.min(GIMBAL_YAW_MAX, yaw));
-  const clampedPitch = Math.max(GIMBAL_PITCH_MIN, Math.min(GIMBAL_PITCH_MAX, pitch));
-  
+  // Click offset is relative to where the gimbal is currently pointing.
+  // Add to current accumulated position to get the absolute target angle.
+  const absoluteYaw   = Math.max(GIMBAL_YAW_MIN,   Math.min(GIMBAL_YAW_MAX,   accumulatedYaw   + yaw));
+  const absolutePitch = Math.max(GIMBAL_PITCH_MIN,  Math.min(GIMBAL_PITCH_MAX, accumulatedPitch + pitch));
+
   console.log('[CLICK] Screen:', { x: screenX, y: screenY }, 'Offset:', { x: offsetX.toFixed(0), y: offsetY.toFixed(0) });
-  console.log('[CLICK] Angles:', { yaw: yaw.toFixed(1), pitch: pitch.toFixed(1), clampedYaw: clampedYaw.toFixed(1), clampedPitch: clampedPitch.toFixed(1) });
+  console.log('[CLICK] Angles:', { yawDelta: yaw.toFixed(1), pitchDelta: pitch.toFixed(1), absoluteYaw: absoluteYaw.toFixed(1), absolutePitch: absolutePitch.toFixed(1) });
 
   // Update accumulated position and target for smoothing
-  accumulatedYaw = clampedYaw;
-  accumulatedPitch = clampedPitch;
-  targetYaw = clampedYaw;
-  targetPitch = clampedPitch;
+  accumulatedYaw = absoluteYaw;
+  accumulatedPitch = absolutePitch;
+  targetYaw = absoluteYaw;
+  targetPitch = absolutePitch;
 
-  showNotification(`TARGET: AZ ${clampedYaw.toFixed(1)}° EL ${clampedPitch.toFixed(1)}°`);
+  showNotification(`TARGET: AZ ${absoluteYaw.toFixed(1)}° EL ${absolutePitch.toFixed(1)}°`);
 }
 
 function clearTarget() {
@@ -816,6 +818,27 @@ videoEl.addEventListener('contextmenu', (e) => {
 
 let previousMode = 'AUTO';
 let bracketsVisible = false; // Track if brackets are currently shown (locked)
+
+// ---------------------------------------------------------------------------
+// Camera stream toggle (MIPI ↔ USB)
+// ---------------------------------------------------------------------------
+let currentCam = 'mipi';
+const camToggleBtn = document.getElementById('cam-toggle-btn');
+if (camToggleBtn) {
+  camToggleBtn.addEventListener('click', () => {
+    if (currentCam === 'mipi') {
+      currentCam = 'usb';
+      videoEl.src = '/stream/usb';
+      camToggleBtn.textContent = 'CAM: USB';
+      camToggleBtn.classList.add('usb-active');
+    } else {
+      currentCam = 'mipi';
+      videoEl.src = '/stream/mipi';
+      camToggleBtn.textContent = 'CAM: MIPI';
+      camToggleBtn.classList.remove('usb-active');
+    }
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Boot

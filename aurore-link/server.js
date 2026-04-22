@@ -17,7 +17,7 @@ const { WebSocketServer } = require('ws');
 const PORT = 8080;
 const TELEMETRY_INTERVAL_MS = 150;
 const STATIC_ROOT = __dirname;
-const HUD_SOCKET_PATH = '/tmp/aurore_hud.sock';
+const HUD_SOCKET_PATH = '/run/aurore/hud_telemetry.sock';
 const HUD_RECONNECT_MS = 2000;
 const CMD_SOCKET_PATH = '/tmp/aurore_cmd.sock';
 const CMD_RECONNECT_MS = 2000;
@@ -42,6 +42,11 @@ function findMarker(buf, b1, b2, start = 0) {
 /**
  * Pipe a child process stdout (JPEG frames concatenated) to an HTTP response
  * as multipart/x-mixed-replace MJPEG.
+ *
+ * Latency design: when multiple complete frames arrive in a burst (e.g. after
+ * a pipeline stall), only the LAST complete frame is sent and the rest are
+ * discarded. This keeps the stream at the live edge rather than draining a
+ * stale backlog.
  */
 function pipeAsMjpeg(res, child) {
   res.writeHead(200, {
@@ -56,25 +61,32 @@ function pipeAsMjpeg(res, child) {
   child.stdout.on('data', (chunk) => {
     buf = Buffer.concat([buf, chunk]);
 
+    // Find ALL complete frames, keep only the last one to avoid sending stale backlog
+    let lastFrameStart = -1;
+    let lastFrameEnd = -1;
     let searchFrom = 0;
     while (true) {
       const soiIdx = findMarker(buf, 0xFF, 0xD8, searchFrom);
       if (soiIdx === -1) break;
       const eoiIdx = findMarker(buf, 0xFF, 0xD9, soiIdx + 2);
       if (eoiIdx === -1) break;
+      lastFrameStart = soiIdx;
+      lastFrameEnd = eoiIdx + 2;
+      searchFrom = lastFrameEnd;
+    }
 
-      const frame = buf.slice(soiIdx, eoiIdx + 2);
+    if (lastFrameStart !== -1) {
+      const frame = buf.slice(lastFrameStart, lastFrameEnd);
       res.write(
         `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`
       );
       res.write(frame);
       res.write('\r\n');
-      searchFrom = eoiIdx + 2;
+      buf = buf.slice(lastFrameEnd);
     }
 
-    // Keep only unprocessed tail; cap at 4 MB to avoid unbounded growth
-    buf = buf.slice(searchFrom);
-    if (buf.length > 4 * 1024 * 1024) buf = buf.slice(-512 * 1024);
+    // Cap buffer to avoid unbounded growth if no complete frame arrives
+    if (buf.length > 1024 * 1024) buf = buf.slice(-256 * 1024);
   });
 
   child.on('error', (err) => {
@@ -141,33 +153,71 @@ function writeServoAngle(channel, deg) {
 // ===========================================================================
 
 const UART_DEVICE       = '/dev/ttyAMA0';
+const LASER_ON_CMD      = Buffer.from([0xAA, 0x00, 0x01, 0xBE, 0x00, 0x01, 0x00, 0x01, 0xC1]);
 const CONTINUOUS_CMD    = Buffer.from([0xAA, 0x00, 0x00, 0x21, 0x00, 0x01, 0x00, 0x00, 0x22]);
 const LRF_RESTIM_MS     = 1500;   // re-send continuous command after this many ms idle
 
 /**
- * Parse M01 13-byte data frames from a buffer.
+ * Parse M01 frames from a buffer. Handles three formats matching C++ driver:
+ *   0xEE  9-byte: BCD centimetres at bytes [5:6], × 10 = mm (warm-up/status frames)
+ *   0xAA 13-byte: BCD mm at bytes [8:9] (full data frames, bytes[4]=0x00 bytes[5]=0x04)
+ *   0xAA  9-byte: BCD mm at bytes [5:6] (compact data frames)
+ *   0xAA  9-byte echo: bytes[4]=0x00 bytes[5]=0x01 — skip silently
+ * Checksum = sum(bytes[1..N-2]) & 0xFF == bytes[N-1]
  * Returns { mm, consumed } for the first valid frame found, or null if none.
- *
- * Frame: [0xAA][...][4]=0x00 [5]=0x04 [...][8:9]=BCD mm [10:11]=aux [12]=checksum
- * Checksum = sum(bytes[1..11]) & 0xFF
  */
+function m01Checksum(buf, offset, len) {
+  let ck = 0;
+  for (let j = 1; j < len - 1; j++) ck = (ck + buf[offset + j]) & 0xFF;
+  return ck;
+}
+
 function parseM01Frame(buf) {
-  for (let i = 0; i <= buf.length - 13; i++) {
-    if (buf[i] !== 0xAA) continue;
-    if (buf[i + 4] !== 0x00 || buf[i + 5] !== 0x04) continue;
+  for (let i = 0; i < buf.length; i++) {
+    const sync = buf[i];
+    if (sync !== 0xAA && sync !== 0xEE) continue;
 
-    let ck = 0;
-    for (let j = 1; j <= 11; j++) ck = (ck + buf[i + j]) & 0xFF;
-    if (ck !== buf[i + 12]) continue;
+    const remaining = buf.length - i;
+    if (remaining < 9) break;  // need at least 9 bytes
 
-    const dh = buf[i + 8];
-    const dl = buf[i + 9];
-    const mm = ((dh >> 4) & 0xF) * 1000 +
-               (dh & 0xF)         * 100  +
-               ((dl >> 4) & 0xF)  * 10   +
-               (dl & 0xF);
+    // 0xEE frames — always 9 bytes, BCD centimetres at [5:6]
+    if (sync === 0xEE) {
+      if (m01Checksum(buf, i, 9) === buf[i + 8]) {
+        const dh = buf[i + 5], dl = buf[i + 6];
+        const cm = ((dh >> 4) & 0xF) * 1000 + (dh & 0xF) * 100 +
+                   ((dl >> 4) & 0xF) * 10   + (dl & 0xF);
+        return { mm: cm * 10, consumed: i + 9 };
+      }
+      return { mm: null, consumed: i + 1 };  // invalid — skip sync byte
+    }
 
-    return { mm, consumed: i + 13 };
+    // 0xAA — try 13-byte first if enough data
+    if (remaining >= 13) {
+      if (m01Checksum(buf, i, 13) === buf[i + 12] &&
+          buf[i + 4] === 0x00 && buf[i + 5] === 0x04) {
+        const dh = buf[i + 8], dl = buf[i + 9];
+        const mm = ((dh >> 4) & 0xF) * 1000 + (dh & 0xF) * 100 +
+                   ((dl >> 4) & 0xF) * 10   + (dl & 0xF);
+        return { mm, consumed: i + 13 };
+      }
+    }
+
+    // 0xAA 9-byte echo — skip silently
+    if (buf[i + 4] === 0x00 && buf[i + 5] === 0x01) {
+      return { mm: null, consumed: i + 9 };
+    }
+
+    // 0xAA 9-byte data frame
+    if (m01Checksum(buf, i, 9) === buf[i + 8] &&
+        buf[i + 4] === 0x00 && buf[i + 5] !== 0x00) {
+      const dh = buf[i + 5], dl = buf[i + 6];
+      const mm = ((dh >> 4) & 0xF) * 1000 + (dh & 0xF) * 100 +
+                 ((dl >> 4) & 0xF) * 10   + (dl & 0xF);
+      return { mm, consumed: i + 9 };
+    }
+
+    // Invalid 0xAA frame — skip sync byte
+    return { mm: null, consumed: i + 1 };
   }
   return null;
 }
@@ -181,9 +231,13 @@ const lrfSession = {
 };
 
 function lrfSendCmd() {
-  if (lrfSession.socket && !lrfSession.socket.destroyed) {
-    lrfSession.socket.write(CONTINUOUS_CMD);
-    lrfSession.lastFrameAt = Date.now();
+  if (lrfSession.fd !== null) {
+    try {
+      fs.writeSync(lrfSession.fd, CONTINUOUS_CMD);
+      lrfSession.lastFrameAt = Date.now();
+    } catch (e) {
+      console.error('LRF write error:', e.message);
+    }
   }
 }
 
@@ -191,15 +245,18 @@ function lrfOpen() {
   if (lrfSession.fd !== null) return;  // already open
   try {
     execSync(`stty -F ${UART_DEVICE} 9600 cs8 -cstopb -parenb raw -echo -echoe -echok`);
-    const fd = fs.openSync(UART_DEVICE, fs.constants.O_RDWR | fs.constants.O_NOCTTY);
+
+    // Open write-only fd for sending commands to LRF
+    const fd = fs.openSync(UART_DEVICE, fs.constants.O_WRONLY | fs.constants.O_NOCTTY);
     lrfSession.fd = fd;
 
-    const sock = new net.Socket({ fd, readable: true, writable: true, allowHalfOpen: true });
-    lrfSession.socket = sock;
+    // Spawn cat for reading — avoids TTY fd type restrictions in net.Socket/createReadStream
+    const catProc = spawn('cat', [UART_DEVICE]);
+    lrfSession.socket = catProc;  // stored for lrfClose()
 
     let rxBuf = Buffer.alloc(0);
 
-    sock.on('data', (chunk) => {
+    catProc.stdout.on('data', (chunk) => {
       lrfSession.lastFrameAt = Date.now();
       rxBuf = Buffer.concat([rxBuf, chunk]);
       if (rxBuf.length > 256) rxBuf = rxBuf.slice(-128);  // cap
@@ -207,6 +264,14 @@ function lrfOpen() {
       let result;
       while ((result = parseM01Frame(rxBuf)) !== null) {
         rxBuf = rxBuf.slice(result.consumed);
+        if (result.mm === null) continue;  // echo / invalid — silently consumed
+        // Update shared state so main HUD shows live range
+        state.lrf_range_m = +(result.mm / 1000).toFixed(2);
+        state.lrf_last_ts = Date.now();
+        if (!state._lrf_logged) {
+          console.log(`[LRF] First reading: ${state.lrf_range_m}m`);
+          state._lrf_logged = true;
+        }
         // Broadcast to all /ws/calib clients
         calibWss.clients.forEach((ws) => {
           if (ws.readyState === ws.OPEN) {
@@ -221,18 +286,29 @@ function lrfOpen() {
       }
     });
 
-    sock.on('error', (err) => {
-      console.error('LRF UART error:', err.message);
+    catProc.on('error', (err) => {
+      console.error('LRF cat error:', err.message);
       lrfClose();
     });
 
-    // Send initial continuous command and start re-stimulation timer
-    lrfSendCmd();
+    catProc.on('exit', () => {
+      lrfClose();
+    });
+
+    // Send laser-on then continuous command (per M01 FAQ: laser must be enabled first)
+    try { fs.writeSync(lrfSession.fd, LASER_ON_CMD); } catch (e) { /* best-effort */ }
+    setTimeout(() => {
+      try { fs.writeSync(lrfSession.fd, LASER_ON_CMD); } catch (e) { /* best-effort */ }
+    }, 50);
+    setTimeout(() => { lrfSendCmd(); }, 150);
+    // Start re-stimulation timer
     lrfSession.restimTimer = setInterval(() => {
       if (Date.now() - lrfSession.lastFrameAt >= LRF_RESTIM_MS) {
         lrfSendCmd();
       }
     }, 500);
+
+    console.log(`[LRF] Opened ${UART_DEVICE}`);
 
   } catch (err) {
     console.error('LRF open failed:', err.message);
@@ -252,7 +328,7 @@ function lrfClose() {
     lrfSession.restimTimer = null;
   }
   if (lrfSession.socket) {
-    try { lrfSession.socket.destroy(); } catch {}
+    try { lrfSession.socket.kill ? lrfSession.socket.kill() : (lrfSession.socket.destroy ? lrfSession.socket.destroy() : lrfSession.socket.close()); } catch {}
     lrfSession.socket = null;
   }
   if (lrfSession.fd !== null) {
@@ -367,6 +443,9 @@ const state = {
   // HUD socket state
   hud_socket_connected: false,
   use_hud_socket: true,   // Always enabled — launched together with C++ binary
+  // LRF — live range from UART (null = no reading yet)
+  lrf_range_m: null,
+  lrf_last_ts: 0,
 };
 
 function buildTelemetry() {
@@ -410,7 +489,7 @@ function buildTelemetry() {
       w: 120,
       h: 80,
       confidence: +(0.87 + Math.sin(state.phit_t * 1.3) * 0.08).toFixed(3),
-      range_m: +(245.3 + Math.sin(state.track_t * 0.2) * 15).toFixed(1),
+      range_m: state.lrf_range_m !== null ? state.lrf_range_m : +(245.3 + Math.sin(state.track_t * 0.2) * 15).toFixed(1),
       vx: +vx.toFixed(3),
       vy: +vy.toFixed(3),
     },
@@ -529,7 +608,7 @@ function mapHudFrameToTelemetry(hudData) {
       w: +(hudData.w || 0).toFixed(1),
       h: +(hudData.h || 0).toFixed(1),
       confidence: +(hudData.conf || 0).toFixed(3),
-      range_m: +(hudData.range || 0).toFixed(1),
+      range_m: state.lrf_range_m !== null ? state.lrf_range_m : +(hudData.range || 0).toFixed(1),
       vx: +(hudData.vx || 0).toFixed(3),
       vy: +(hudData.vy || 0).toFixed(3),
     },
@@ -548,6 +627,16 @@ function mapHudFrameToTelemetry(hudData) {
 
 // Start HUD socket connection on startup
 connectHudSocket();
+
+// Auto-start LRF on boot (stale reading cleared after 5s of silence)
+setTimeout(() => {
+  lrfOpen();
+  setInterval(() => {
+    if (state.lrf_last_ts > 0 && Date.now() - state.lrf_last_ts > 5000) {
+      state.lrf_range_m = null;  // clear stale reading
+    }
+  }, 2000);
+}, 500);
 
 // ===========================================================================
 // Command Socket Client (Node.js → C++ binary)
@@ -594,6 +683,61 @@ function scheduleCmdSocketReconnect() {
 setTimeout(connectCmdSocket, 1000);
 
 // ===========================================================================
+// Persistent MIPI camera — started once, shared across all /stream/mipi clients
+// ===========================================================================
+
+let mipiLatestFrame = null;
+const mipiClients = new Set();
+
+function startMipiCamera() {
+  const child = spawn('sudo', ['rpicam-vid',
+    '--codec', 'mjpeg',
+    '--width', '1536',
+    '--height', '864',
+    '--framerate', '30',
+    '--nopreview',
+    '--timeout', '0',
+    '--buffer-count', '2',
+    '-o', '-',
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  child.on('error', (err) => console.error('[MIPI] Spawn error:', err.message));
+  child.stderr.on('data', (data) => {
+    const str = data.toString().trim();
+    if (str.includes('ERROR') || str.includes('Failed')) console.error('[MIPI]', str);
+  });
+  child.on('exit', (code) => {
+    console.log(`[MIPI] Camera exited (${code}), restarting in 2s...`);
+    mipiLatestFrame = null;
+    setTimeout(startMipiCamera, 2000);
+  });
+
+  let buf = Buffer.alloc(0);
+  child.stdout.on('data', (chunk) => {
+    buf = Buffer.concat([buf, chunk]);
+    let lastStart = -1, lastEnd = -1, from = 0;
+    while (true) {
+      const soi = findMarker(buf, 0xFF, 0xD8, from);
+      if (soi === -1) break;
+      const eoi = findMarker(buf, 0xFF, 0xD9, soi + 2);
+      if (eoi === -1) break;
+      lastStart = soi; lastEnd = eoi + 2; from = lastEnd;
+    }
+    if (lastStart !== -1) {
+      mipiLatestFrame = buf.slice(lastStart, lastEnd);
+      buf = buf.slice(lastEnd);
+      const header = `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${mipiLatestFrame.length}\r\n\r\n`;
+      for (const r of mipiClients) {
+        if (!r.writableEnded) { r.write(header); r.write(mipiLatestFrame); r.write('\r\n'); }
+      }
+    }
+    if (buf.length > 512 * 1024) buf = buf.slice(-128 * 1024);
+  });
+}
+
+startMipiCamera();
+
+// ===========================================================================
 // WebSocket Servers (split by URL)
 // ===========================================================================
 
@@ -603,33 +747,19 @@ const calibWss = new WebSocketServer({ noServer: true });
 const server = http.createServer((req, res) => {
   // MJPEG stream endpoints
   if (req.url === '/stream/mipi') {
-    // rpicam-vid needs sudo for camera access
-    const child = spawn('sudo', ['rpicam-vid',
-      '--codec', 'mjpeg',
-      '--width', '1536',
-      '--height', '864',
-      '--framerate', '60',
-      '--nopreview',
-      '--timeout', '0',
-      '-o', '-',
-    ], { stdio: ['ignore', 'pipe', 'pipe'] });
-
-    child.on('error', (err) => {
-      console.error('[MIPI] Spawn error:', err.message);
-      if (!res.headersSent) {
-        res.writeHead(503, { 'Content-Type': 'text/plain' });
-        res.end('FAIL: rpicam-vid not available');
-      }
+    res.writeHead(200, {
+      'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+      'Cache-Control': 'no-cache, no-store',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
     });
-    
-    child.stderr.on('data', (data) => {
-      const str = data.toString().trim();
-      if (str.includes('ERROR') || str.includes('Failed')) {
-        console.error('[MIPI] rpicam-vid:', str);
-      }
-    });
-
-    pipeAsMjpeg(res, child);
+    mipiClients.add(res);
+    if (mipiLatestFrame) {
+      res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${mipiLatestFrame.length}\r\n\r\n`);
+      res.write(mipiLatestFrame);
+      res.write('\r\n');
+    }
+    req.on('close', () => mipiClients.delete(res));
     return;
   }
 
