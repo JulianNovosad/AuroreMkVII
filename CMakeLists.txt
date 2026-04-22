@@ -307,6 +307,7 @@ set(AURORE_SOURCES
     ${CAMERA_AUTH_SRC}
     ${FUSION_HAT_SRC}
     src/drivers/usb_camera.cpp
+    src/drivers/laser_rangefinder.cpp
 
     # Vision pipeline
     src/vision/apriltag_detector.cpp
@@ -1053,7 +1054,8 @@ if(CLANG_TIDY_EXE)
     add_custom_target(tidy
         COMMAND ${CLANG_TIDY_EXE}
             -p ${CMAKE_BINARY_DIR}
-            ${AURORE_SOURCES}
+            -extra-arg=-Wno-unknown-warning-option
+            src/main.cpp
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Running clang-tidy static analysis"
     )

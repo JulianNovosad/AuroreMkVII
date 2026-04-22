@@ -36,7 +36,6 @@
 // ARM NEON headers for SIMD optimization
 #if defined(__aarch64__) || defined(__arm__)
 #include <arm_neon.h>
-#define AURORE_HAS_NEON
 #endif
 
 // VideoCore VII GPU acceleration headers (Raspberry Pi 5 only)
@@ -68,6 +67,7 @@ struct CameraWrapper::Impl {
     int width  = 0;
     int height = 0;
     int fps    = 0;
+    int lc_stride = 0;  // actual stride from libcamera (may differ from computed)
     uint64_t frame_counter = 0;
 
     // --- Capture mode flags (set by configure_stream) ---
@@ -514,6 +514,7 @@ struct CameraWrapper::Impl {
         }
 
         lc_stream = scfg.stream();
+        lc_stride = static_cast<int>(scfg.stride);  // actual stride after negotiation
 
         lc_allocator = std::make_unique<libcamera::FrameBufferAllocator>(lc_camera);
         if (lc_allocator->allocate(lc_stream) < 0) {
@@ -630,8 +631,8 @@ struct CameraWrapper::Impl {
         frame.format        = PixelFormat::RAW10;
         frame.plane_data[0] = mit->second.data;
         frame.plane_size[0] = mit->second.size;
-        // SGRBG10_CSI2P: packed RAW10 stride = ceil(width * 10 / 8)
-        frame.stride[0]     = static_cast<int>((static_cast<unsigned int>(width) * 10u + 7u) / 8u);
+        // Use actual stride from libcamera (format may differ from SGRBG10_CSI2P, e.g. PISP_COMP1)
+        frame.stride[0]     = lc_stride;
 
         frame.request_ptr   = req;
         frame.valid         = true;
@@ -948,7 +949,7 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
         }
 #endif
 
-#ifdef AURORE_HAS_NEON
+#if 0 /* Temporarily disabled NEON optimization due to compilation errors */
         // NEON SIMD optimized 10-bit to 8-bit greyscale conversion
         // Performance: 0.8-1.2ms for 1536×864 on RPi 5
         // Processes 32 pixels per iteration using vld5/vst3 instructions
@@ -964,21 +965,44 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
             int col = 0;
             // Process 32 pixels (40 bytes of RAW10) at a time using vld5
             for (; col <= frame.width - 32; col += 32) {
-                // vld5_u8 pulls 5 * 8 = 40 bytes.
-                // 40 bytes of RAW10 = 32 pixels.
-                // v.val[0..3] each contain 8 pixels (high 8 bits).
-                uint8x8x5_t v = vld5_u8(line);
-                line += 40;
+                        // vld5_u8 pulls 5 * 8 = 40 bytes.
+                        // 40 bytes of RAW10 = 32 pixels.
+                        // raw10_bytes.val[0..3] each contain the high 8 bits for 8 pixels.
+                        uint8x8x5_t raw10_bytes = vld5_u8(line);
+                        line += 40;
 
-                for (int i = 0; i < 4; ++i) {
-                    uint8x8x3_t bgr;
-                    bgr.val[0] = v.val[i]; // B
-                    bgr.val[1] = v.val[i]; // G
-                    bgr.val[2] = v.val[i]; // R
-                    vst3_u8(out, bgr);
-                    out += 24; // 8 pixels * 3 bytes
-                }
-            }
+                        // For grayscale, we replicate the 8-bit values across B, G, R channels.
+                        // Each raw10_bytes.val[i] holds 8 grayscale pixel values.
+                        uint8x8x3_t bgr_pixels_0, bgr_pixels_1, bgr_pixels_2, bgr_pixels_3;
+
+                        // Process first group of 8 pixels
+                        bgr_pixels_0.val[0] = raw10_bytes.val[0]; // Blue channel
+                        bgr_pixels_0.val[1] = raw10_bytes.val[0]; // Green channel
+                        bgr_pixels_0.val[2] = raw10_bytes.val[0]; // Red channel
+                        vst3_u8(out, bgr_pixels_0);
+                        out += 24; // Advance output pointer by 8 pixels * 3 bytes/pixel
+
+                        // Process second group of 8 pixels
+                        bgr_pixels_1.val[0] = raw10_bytes.val[1];
+                        bgr_pixels_1.val[1] = raw10_bytes.val[1];
+                        bgr_pixels_1.val[2] = raw10_bytes.val[1];
+                        vst3_u8(out, bgr_pixels_1);
+                        out += 24;
+
+                        // Process third group of 8 pixels
+                        bgr_pixels_2.val[0] = raw10_bytes.val[2];
+                        bgr_pixels_2.val[1] = raw10_bytes.val[2];
+                        bgr_pixels_2.val[2] = raw10_bytes.val[2];
+                        vst3_u8(out, bgr_pixels_2);
+                        out += 24;
+
+                        // Process fourth group of 8 pixels
+                        bgr_pixels_3.val[0] = raw10_bytes.val[3];
+                        bgr_pixels_3.val[1] = raw10_bytes.val[3];
+                        bgr_pixels_3.val[2] = raw10_bytes.val[3];
+                        vst3_u8(out, bgr_pixels_3);
+                        out += 24;
+                    }
 
             // Revert to software for remaining pixels or if width not multiple of 32
             for (; col < frame.width; col += 4) {

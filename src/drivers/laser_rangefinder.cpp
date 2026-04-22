@@ -2,6 +2,16 @@
  * @file laser_rangefinder.cpp
  * @brief Laser rangefinder UART driver — M01 and Modbus RTU protocols
  *
+ * M01 Protocol (Liancheng Electronics 50m module):
+ *   - Continuous mode response: 0xAA header, distance at bytes 7-8 (big-endian, mm)
+ *   - Checksum: sum(bytes[1..N-1]) & 0xFF (last byte)
+ *   - Reference: github.com/Andres-ros/laser-m01-esp32
+ *
+ * Modbus RTU:
+ *   - Poll: 01 03 00 00 00 01 84 0A (Read Holding Register 0x0000)
+ *   - Response: [addr][func][byte_count][data_hi][data_lo][crc_lo][crc_hi]
+ *   - Distance in bytes 3-4, big-endian, millimeters
+ *
  * @copyright Aurore MkVII Project - Educational/Personal Use Only
  */
 
@@ -23,13 +33,18 @@ namespace aurore {
 
 namespace {
 
-// M01 protocol frames (little-endian checksum = sum(bytes[1..7]) & 0xFF)
+// M01 protocol frames (checksum = sum(bytes[1..N-1]) & 0xFF)
+// Per official M01 FAQ: must send Laser ON before continuous mode will return distance data
+constexpr uint8_t kLaserOnCmd[] = {0xAA, 0x00, 0x01, 0xBE, 0x00, 0x01, 0x00, 0x01, 0xC1};
 constexpr uint8_t kContinuousCmd[] = {0xAA, 0x00, 0x00, 0x21, 0x00, 0x01, 0x00, 0x00, 0x22};
 constexpr uint8_t kSingleShotCmd[] = {0xAA, 0x00, 0x00, 0x20, 0x00, 0x01, 0x00, 0x00, 0x21};
 
 // Modbus RTU: Read 1 Holding Register at address 0x0000 from slave 0x01
 // Frame: [addr=01] [func=03] [start_hi=00] [start_lo=00] [count_hi=00] [count_lo=01] [CRC_lo] [CRC_hi]
 constexpr uint8_t kModbusPollCmd[] = {0x01, 0x03, 0x00, 0x00, 0x00, 0x01, 0x84, 0x0A};
+
+// M01 frame reassembly ring buffer size (holds ~4 frames worth of data)
+constexpr size_t kM01RingBufSize = 64;
 
 speed_t baud_to_speed(int baud) noexcept {
     switch (baud) {
@@ -63,22 +78,165 @@ uint16_t LaserRangefinder::modbus_crc16(const uint8_t* data, size_t len) noexcep
 }
 
 // ============================================================================
+// M01 checksum: sum(bytes[1..N-1]) & 0xFF
+// ============================================================================
+
+uint8_t LaserRangefinder::m01_checksum(const uint8_t* data, size_t len) noexcept {
+    uint8_t sum = 0;
+    for (size_t i = 1; i < len - 1; ++i) {
+        sum += data[i];
+    }
+    return sum;
+}
+
+// ============================================================================
+// M01 BCD distance decoder: 4 bytes = 8 decimal digits, result in millimeters
+// Example: 0x00 0x00 0x12 0x34 -> "00001234" -> 12340 mm (12.34m)
+// ============================================================================
+
+uint32_t LaserRangefinder::m01_bcd_to_mm(const uint8_t* bcd) noexcept {
+    uint32_t value = 0;
+    for (int i = 0; i < 4; ++i) {
+        value = value * 100 + ((bcd[i] >> 4) & 0x0F) * 10 + (bcd[i] & 0x0F);
+    }
+    // BCD value is in centimeters (2 decimal places), convert to millimeters
+    return value * 10;
+}
+
+// ============================================================================
+// M01 frame parser — find and validate a complete frame in the buffer
+// ============================================================================
+
+size_t LaserRangefinder::parse_m01_frame(const uint8_t* buf, size_t len, uint32_t& out_mm) {
+    out_mm = 0;
+    
+    // Scan for sync byte
+    for (size_t i = 0; i < len; ++i) {
+        const uint8_t sync = buf[i];
+        
+        // Show every sync byte found
+        if (sync != 0xAA && sync != 0xEE) {
+            continue;
+        }
+
+        // Found 0xAA sync — check if we have enough bytes for minimum frame (9 bytes)
+        const size_t remaining = len - i;
+        if (remaining < static_cast<size_t>(kM01MinFrameLen)) {
+            return i;  // Partial frame; consume everything before the sync byte
+        }
+
+        const uint8_t* frame = buf + i;
+
+        // Handle 0xEE frames - some M01 variants use this as data frame sync
+        if (sync == 0xEE) {
+            // Validate checksum
+            const uint8_t expected_ck = m01_checksum(frame, kM01MinFrameLen);
+            const uint8_t actual_ck = frame[kM01MinFrameLen - 1];
+
+            if (expected_ck == actual_ck) {
+                // Bytes 5-6 are 4-nibble BCD in centimetres.
+                // Example: 0x01 0x00 → nibbles 0,1,0,0 → 100 cm → 1000 mm (1.0 m)
+                // Bug was: only 3 nibbles were read (missing d_lo & 0x0F),
+                //          turning 100 cm into 10 cm (off by 10×).
+                const uint8_t d_hi = frame[5];
+                const uint8_t d_lo = frame[6];
+                const uint32_t dist_cm =
+                    (static_cast<uint32_t>((d_hi >> 4) & 0x0F) * 1000u) +
+                    (static_cast<uint32_t>( d_hi        & 0x0F) * 100u)  +
+                    (static_cast<uint32_t>((d_lo >> 4) & 0x0F) * 10u)   +
+                    (static_cast<uint32_t>( d_lo        & 0x0F));
+                out_mm = dist_cm * 10u;  // cm → mm
+
+                frames_received_.fetch_add(1, std::memory_order_relaxed);
+                return i + kM01MinFrameLen;
+            }
+            // Invalid 0xEE frame - skip
+            return i + 1;
+        }
+
+        // For 0xAA frames, try 13-byte format FIRST (contains actual distance data)
+        if (remaining >= static_cast<size_t>(kM01MaxFrameLen)) {
+            const uint8_t expected_ck_13 = m01_checksum(frame, kM01MaxFrameLen);
+            const uint8_t actual_ck_13 = frame[kM01MaxFrameLen - 1];
+
+            if (expected_ck_13 == actual_ck_13 && frame[4] == 0x00 && frame[5] == 0x04) {
+                // Valid 13-byte frame - extract distance from BCD bytes 8-9
+                const uint8_t dist_bcd_hi = frame[8];
+                const uint8_t dist_bcd_lo = frame[9];
+
+                uint32_t dist_mm_raw = 0;
+                dist_mm_raw = (static_cast<uint32_t>((dist_bcd_hi >> 4) & 0x0F) * 1000u) +
+                              (static_cast<uint32_t>(dist_bcd_hi & 0x0F) * 100u) +
+                              (static_cast<uint32_t>((dist_bcd_lo >> 4) & 0x0F) * 10u) +
+                              (static_cast<uint32_t>(dist_bcd_lo & 0x0F));
+                out_mm = dist_mm_raw;
+
+                frames_received_.fetch_add(1, std::memory_order_relaxed);
+                return i + kM01MaxFrameLen;
+            }
+        }
+
+        // Skip 9-byte command echoes (bytes 4-5 = 0x00 0x01)
+        if (frame[4] == 0x00 && frame[5] == 0x01) {
+            return i + kM01MinFrameLen;
+        }
+
+        // Try 9-byte format for non-echo frames
+        const uint8_t expected_ck_9 = m01_checksum(frame, kM01MinFrameLen);
+        const uint8_t actual_ck_9 = frame[kM01MinFrameLen - 1];
+
+        if (expected_ck_9 == actual_ck_9 && frame[4] == 0x00 && frame[5] != 0x00) {
+            // Valid 9-byte frame - extract distance from BCD bytes 5-6
+            const uint8_t dist_bcd_hi = frame[5];
+            const uint8_t dist_bcd_lo = frame[6];
+
+            uint32_t dist_mm_raw = 0;
+            dist_mm_raw = (static_cast<uint32_t>((dist_bcd_hi >> 4) & 0x0F) * 1000u) +
+                          (static_cast<uint32_t>(dist_bcd_hi & 0x0F) * 100u) +
+                          (static_cast<uint32_t>((dist_bcd_lo >> 4) & 0x0F) * 10u) +
+                          (static_cast<uint32_t>(dist_bcd_lo & 0x0F));
+            out_mm = dist_mm_raw;  // Already in millimeters
+
+            frames_received_.fetch_add(1, std::memory_order_relaxed);
+            return i + kM01MinFrameLen;
+        }
+
+        // Invalid frame - skip this sync byte
+        frame_errors_.fetch_add(1, std::memory_order_relaxed);
+        return i + 1;
+    }
+
+    // No valid sync byte found — discard entire buffer
+    return len;
+}
+
+// ============================================================================
 // Init
 // ============================================================================
 
 bool LaserRangefinder::init(const std::string& uart_device, int baud, LrfProtocol protocol) {
     protocol_ = protocol;
 
-    fd_ = ::open(uart_device.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
+    fd_ = ::open(uart_device.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (fd_ < 0) {
-        std::cerr << "[LaserRangefinder] open(" << uart_device << ") failed: "
-                  << std::strerror(errno) << "\n";
+        std::cerr << "FAIL: LRF UART open(" << uart_device << ") failed: "
+                  << std::strerror(errno) << "\n"
+                  << " Check: UART device path and permissions.\n"
+                  << " Fix: Verify /dev/ttyAMA* exists and user is in dialout group.\n";
         return false;
+    }
+
+    // Clear O_NONBLOCK after open (we use poll() for timeout control)
+    int flags = ::fcntl(fd_, F_GETFL, 0);
+    if (flags >= 0) {
+        ::fcntl(fd_, F_SETFL, flags & ~O_NONBLOCK);
     }
 
     struct termios tty{};
     if (::tcgetattr(fd_, &tty) != 0) {
-        std::cerr << "[LaserRangefinder] tcgetattr failed: " << std::strerror(errno) << "\n";
+        std::cerr << "FAIL: LRF tcgetattr failed: " << std::strerror(errno) << "\n"
+                  << " Check: UART device is a valid serial port.\n"
+                  << " Fix: Verify Fusion Hat+ UART jumpers and power stability.\n";
         ::close(fd_);
         fd_ = -1;
         return false;
@@ -92,28 +250,27 @@ bool LaserRangefinder::init(const std::string& uart_device, int baud, LrfProtoco
     tty.c_cflag = (tty.c_cflag & ~static_cast<tcflag_t>(CSIZE)) | CS8;
     tty.c_cflag |= CLOCAL | CREAD;
     tty.c_cflag &= ~(PARENB | CSTOPB | CRTSCTS);
+
+    // Fully raw mode — no signal processing, no echo, no canonical
     tty.c_lflag = 0;
     tty.c_iflag = 0;
     tty.c_oflag = 0;
 
-    if (protocol_ == LrfProtocol::MODBUS_RTU) {
-        // Modbus RTU: non-blocking reads with poll()-based timeout
-        tty.c_cc[VMIN]  = 0;
-        tty.c_cc[VTIME] = 5;   // 500ms inter-character timeout
-    } else {
-        // M01: return as soon as data is available (handle partial frames)
-        tty.c_cc[VMIN]  = 1;
-        tty.c_cc[VTIME] = 10;  // 1 second max wait for first byte
-    }
+    // Non-blocking reads: VMIN=0, VTIME=1 (100ms timeout)
+    // Actual timeout control is via poll() in the reader loops
+    tty.c_cc[VMIN]  = 0;
+    tty.c_cc[VTIME] = 1;
 
     if (::tcsetattr(fd_, TCSANOW, &tty) != 0) {
-        std::cerr << "[LaserRangefinder] tcsetattr failed: " << std::strerror(errno) << "\n";
+        std::cerr << "FAIL: LRF tcsetattr failed: " << std::strerror(errno) << "\n"
+                  << " Check: UART TX/RX integrity and " << baud << " baud lock.\n"
+                  << " Fix: Verify Fusion Hat+ UART jumpers and power stability.\n";
         ::close(fd_);
         fd_ = -1;
         return false;
     }
 
-    // Flush any stale data in the UART buffer
+    // Flush any stale data in both TX and RX buffers
     ::tcflush(fd_, TCIOFLUSH);
 
     const char* proto_name = (protocol_ == LrfProtocol::MODBUS_RTU) ? "Modbus RTU" : "M01";
@@ -129,22 +286,38 @@ bool LaserRangefinder::init(const std::string& uart_device, int baud, LrfProtoco
 bool LaserRangefinder::start_continuous() {
     if (fd_ < 0) return false;
 
+    // Reset diagnostic counters
+    frames_received_.store(0, std::memory_order_relaxed);
+    status_frames_.store(0, std::memory_order_relaxed);
+    crc_errors_.store(0, std::memory_order_relaxed);
+    frame_errors_.store(0, std::memory_order_relaxed);
+
     if (protocol_ == LrfProtocol::MODBUS_RTU) {
         // Modbus RTU: no init command needed; polling starts in the thread
         running_.store(true, std::memory_order_release);
         reader_thread_ = std::thread(&LaserRangefinder::reader_loop_modbus, this);
         std::cout << "[LaserRangefinder] Modbus RTU polling started\n";
     } else {
-        // M01: send continuous-mode command
-        if (::write(fd_, kContinuousCmd, sizeof(kContinuousCmd)) !=
-            static_cast<ssize_t>(sizeof(kContinuousCmd))) {
-            std::cerr << "[LaserRangefinder] failed to send continuous command: "
-                      << std::strerror(errno) << "\n";
-            return false;
-        }
+        // M01: send Laser ON then Continuous mode, then start reader thread immediately.
+        // The reader loop handles re-stimulation if the module goes quiet.
+        ::tcflush(fd_, TCIOFLUSH);
+
+        // Enable laser emitter
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
+        ::write(fd_, kLaserOnCmd, sizeof(kLaserOnCmd));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        ::write(fd_, kLaserOnCmd, sizeof(kLaserOnCmd));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        // Start continuous measurement mode
+        ::write(fd_, kContinuousCmd, sizeof(kContinuousCmd));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        ::write(fd_, kContinuousCmd, sizeof(kContinuousCmd));
+#pragma GCC diagnostic pop
+
         running_.store(true, std::memory_order_release);
         reader_thread_ = std::thread(&LaserRangefinder::reader_loop_m01, this);
-        std::cout << "[LaserRangefinder] M01 continuous mode started\n";
     }
 
     return true;
@@ -177,48 +350,85 @@ float LaserRangefinder::latest_range_m() const noexcept {
 }
 
 // ============================================================================
-// M01 reader loop (passive continuous mode)
+// M01 reader loop (passive continuous mode with frame reassembly)
 // ============================================================================
 
 void LaserRangefinder::reader_loop_m01() {
-    uint8_t buf[64];  // Buffer large enough for max frame
+    // Ring buffer for frame reassembly across partial reads
+    uint8_t ring[kM01RingBufSize];
+    size_t ring_len = 0;
+
+    // Consecutive poll timeouts before re-sending the continuous command.
+    // The M01 only streams for a short burst after each command; re-stimulate
+    // when the module goes quiet so data keeps flowing.
+    static constexpr int kMaxIdlePolls = 3;  // 3 × 500ms = 1.5s idle → re-send
+    int idle_polls = 0;
 
     while (running_.load(std::memory_order_acquire)) {
-        // Read available data (VMIN=1 means return as soon as at least 1 byte)
-        ssize_t n = ::read(fd_, buf, sizeof(buf));
-        if (n <= 0) continue;
+        // Wait for data with poll() — 500ms timeout prevents thread hang
+        struct pollfd pfd{};
+        pfd.fd = fd_;
+        pfd.events = POLLIN;
 
-        // Check frame type
-        if (buf[0] == 0xEE) {
-            // Status/warm-up frame (8 bytes) - ignore but don't block
+        const int ready = ::poll(&pfd, 1, 500);
+        if (ready <= 0) {
+            // Re-send Continuous command after prolonged silence so the module
+            // keeps streaming rather than falling silent between bursts.
+            if (++idle_polls >= kMaxIdlePolls) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
+                ::write(fd_, kContinuousCmd, sizeof(kContinuousCmd));
+#pragma GCC diagnostic pop
+                idle_polls = 0;
+            }
+            continue;
+        }
+        idle_polls = 0;  // Data arrived — reset idle counter
+        if (!(pfd.revents & POLLIN)) continue;
+
+        // Read into the ring buffer at the current tail position
+        const size_t space = kM01RingBufSize - ring_len;
+        if (space == 0) {
+            // Buffer full with no valid frame found — discard and resync
+            frame_errors_.fetch_add(1, std::memory_order_relaxed);
+            ring_len = 0;
+            ::tcflush(fd_, TCIFLUSH);
             continue;
         }
 
-        if (buf[0] != 0xAA) continue;  // Unknown frame type - skip
-
-        // Need at least 10 bytes for distance data (bytes 8-9)
-        if (n < 10) continue;
-
-        // M01 13-byte frame layout (verified against real hardware):
-        //   [0]    = 0xAA sync
-        //   [1-3]  = command echo (0x00 0x00 0x21 for continuous)
-        //   [4-5]  = data length (0x00 0x04 = 4 bytes)
-        //   [6-7]  = status/flags
-        //   [8-9]  = distance in mm, big-endian
-        //   [10-11]= signal quality
-        //   [12]   = checksum
-        const uint32_t raw_mm = (static_cast<uint32_t>(buf[kM01DistOffset]) << 8) |
-                                buf[kM01DistOffset + 1];
-        static constexpr float kM01CalibrationFactor = 0.87f;
-        const uint32_t mm = static_cast<uint32_t>(static_cast<float>(raw_mm) * kM01CalibrationFactor / 2.0f);
-        // Sanity: 50 mm (5 cm) to 50 000 mm (50 m)
-        if (mm >= 50u && mm <= 50000u) {
-            range_mm_.store(mm, std::memory_order_release);
-            last_ts_ns_.store(get_timestamp(ClockId::MonotonicRaw), std::memory_order_release);
+        const ssize_t n = ::read(fd_, ring + ring_len, space);
+        if (n <= 0) {
+            if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                std::cerr << "LRF M01 read error: " << std::strerror(errno) << std::endl;
+            }
+            continue;
         }
-    }
-}
 
+        ring_len += static_cast<size_t>(n);
+
+        // Parse all complete frames in the buffer
+        while (ring_len >= static_cast<size_t>(kM01MinFrameLen)) {
+            uint32_t mm = 0;
+
+            const size_t consumed = parse_m01_frame(ring, ring_len, mm);
+
+            if (consumed == 0) break;  // Need more data
+
+            // If a valid distance was extracted, update the atomic
+            if (mm >= 50u && mm <= 50000u) {
+                range_mm_.store(mm, std::memory_order_release);
+                last_ts_ns_.store(get_timestamp(ClockId::MonotonicRaw),
+                                  std::memory_order_release);
+            }
+
+            // Shift unconsumed data to the front of the ring buffer
+            if (consumed < ring_len) {
+                std::memmove(ring, ring + consumed, ring_len - consumed);
+            }
+            ring_len -= consumed;
+        }
+        }
+        }
 // ============================================================================
 // Modbus RTU reader loop (active poll/response)
 // ============================================================================
@@ -227,22 +437,23 @@ void LaserRangefinder::reader_loop_modbus() {
     uint8_t resp[kModbusResponseLen];
 
     while (running_.load(std::memory_order_acquire)) {
-        // Send poll command
-        ::tcflush(fd_, TCIFLUSH);  // Discard stale RX data before polling
+        // Flush stale RX data before sending poll command
+        ::tcflush(fd_, TCIFLUSH);
+
         const ssize_t written = ::write(fd_, kModbusPollCmd, sizeof(kModbusPollCmd));
         if (written != static_cast<ssize_t>(sizeof(kModbusPollCmd))) {
+            frame_errors_.fetch_add(1, std::memory_order_relaxed);
             std::this_thread::sleep_for(std::chrono::milliseconds(kModbusPollIntervalMs));
             continue;
         }
 
-        // Wait for response with poll() — strict 500ms timeout
+        // Wait for response with poll() — 500ms timeout
         struct pollfd pfd{};
         pfd.fd = fd_;
         pfd.events = POLLIN;
 
-        int ready = ::poll(&pfd, 1, 500);
+        const int ready = ::poll(&pfd, 1, 500);
         if (ready <= 0) {
-            // Timeout or error — no response from LRF
             std::this_thread::sleep_for(std::chrono::milliseconds(kModbusPollIntervalMs));
             continue;
         }
@@ -250,32 +461,58 @@ void LaserRangefinder::reader_loop_modbus() {
         // Read response: expect exactly 7 bytes
         // [addr=01] [func=03] [byte_count=02] [data_hi] [data_lo] [crc_lo] [crc_hi]
         size_t total_read = 0;
+        auto read_start = std::chrono::steady_clock::now();
         while (total_read < kModbusResponseLen) {
+            // Guard against hanging if bytes trickle in forever
+            auto elapsed = std::chrono::steady_clock::now() - read_start;
+            if (elapsed > std::chrono::milliseconds(200)) break;
+
             const ssize_t n = ::read(fd_, resp + total_read,
                                      static_cast<size_t>(kModbusResponseLen) - total_read);
-            if (n <= 0) break;
+            if (n <= 0) {
+                // Brief yield before retrying partial read
+                struct pollfd rpfd{};
+                rpfd.fd = fd_;
+                rpfd.events = POLLIN;
+                if (::poll(&rpfd, 1, 50) <= 0) break;
+                continue;
+            }
             total_read += static_cast<size_t>(n);
         }
 
         if (total_read != kModbusResponseLen) {
+            frame_errors_.fetch_add(1, std::memory_order_relaxed);
             std::this_thread::sleep_for(std::chrono::milliseconds(kModbusPollIntervalMs));
             continue;
         }
 
         // Validate address and function code
-        if (resp[0] != kModbusAddr || resp[1] != kModbusFunc) continue;
+        if (resp[0] != kModbusAddr || resp[1] != kModbusFunc) {
+            frame_errors_.fetch_add(1, std::memory_order_relaxed);
+            continue;
+        }
 
         // Validate byte count (should be 2 for one register)
-        if (resp[2] != 0x02) continue;
+        if (resp[2] != 0x02) {
+            frame_errors_.fetch_add(1, std::memory_order_relaxed);
+            continue;
+        }
 
         // Validate CRC-16 over first 5 bytes (addr + func + byte_count + 2 data bytes)
         const uint16_t calc_crc = modbus_crc16(resp, 5);
         const uint16_t recv_crc = static_cast<uint16_t>(resp[5]) |
                                   (static_cast<uint16_t>(resp[6]) << 8);
-        if (calc_crc != recv_crc) continue;
+        if (calc_crc != recv_crc) {
+            crc_errors_.fetch_add(1, std::memory_order_relaxed);
+            std::cerr << "FAIL: LRF CRC mismatch.\n"
+                      << " Check: UART TX/RX integrity and 9600 baud lock.\n"
+                      << " Fix: Verify Fusion Hat+ UART jumpers and power stability.\n";
+            continue;
+        }
 
         // Extract distance: bytes 3-4, big-endian, in millimetres
         const uint32_t mm = (static_cast<uint32_t>(resp[3]) << 8) | resp[4];
+        frames_received_.fetch_add(1, std::memory_order_relaxed);
 
         // Sanity: 50 mm (5 cm) to 40 000 mm (40 m) for Modbus LRF
         if (mm >= 50u && mm <= 40000u) {
@@ -297,16 +534,24 @@ int LaserRangefinder::diagnose_wiring() {
     // Flush stale UART buffers
     ::tcflush(fd_, TCIOFLUSH);
 
-    // Send a probe command to trigger a response
-    // For M01: send continuous mode command which keeps LRF active
-    // For Modbus: send poll command
+    // For M01 protocol, send Laser ON first then continuous command
+    if (protocol_ == LrfProtocol::M01) {
+        for (int i = 0; i < 3; ++i) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
+            ::write(fd_, kLaserOnCmd, sizeof(kLaserOnCmd));
+#pragma GCC diagnostic pop
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
     const uint8_t* cmd;
     size_t cmd_len;
     if (protocol_ == LrfProtocol::MODBUS_RTU) {
         cmd = kModbusPollCmd;
         cmd_len = sizeof(kModbusPollCmd);
     } else {
-        // M01: send continuous mode command to keep LRF streaming
         cmd = kContinuousCmd;
         cmd_len = sizeof(kContinuousCmd);
     }
@@ -325,7 +570,7 @@ int LaserRangefinder::diagnose_wiring() {
     }
 
     // Give LRF time to process command and start responding
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     // Wait up to 2000ms for response (M01 needs time to start streaming)
     int ready = ::poll(&pfd, 1, 2000);
@@ -346,8 +591,7 @@ int LaserRangefinder::diagnose_wiring() {
         if (buf[0] != kModbusAddr || buf[1] != kModbusFunc) return 3;  // Wrong protocol
         return 0;  // Looks valid
     } else {
-        // 0xAA = data frame (13 bytes), 0xEE = status/warm-up frame (8 bytes)
-        // Both are valid M01 responses
+        // 0xAA = data frame, 0xEE = status/warm-up frame — both are valid M01 responses
         if (n < 8) return 2;     // Too short — baud mismatch
         if (buf[0] != 0xAA && buf[0] != 0xEE) return 3;  // Wrong sync — wrong protocol
         return 0;  // Looks valid

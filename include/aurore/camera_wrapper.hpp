@@ -79,9 +79,10 @@ constexpr int DEFAULT_FPS = 120;
 /**
  * @brief Number of buffers in camera ring buffer
  *
- * 4 frames per ICD-001.
+ * 8 frames to prevent ISP Request Queue stalls at 120Hz.
+ * Per AM7-L2-VIS-003: Vision pipeline shall process at 120Hz without frame drops.
  */
-constexpr int CAMERA_BUFFER_COUNT = 4;
+constexpr int CAMERA_BUFFER_COUNT = 8;
 
 /**
  * @brief Pixel format enumeration
@@ -233,8 +234,8 @@ struct alignas(64) ZeroCopyFrame {
         size_t expected_size = 0;
         switch (format) {
             case PixelFormat::RAW10:
-                // 2 bytes per pixel (10-bit packed in 16-bit words)
-                expected_size = static_cast<size_t>(width) * 2 * static_cast<size_t>(height);
+                // Packed 10-bit: ceil(width * 10 / 8) bytes per row
+                expected_size = static_cast<size_t>(stride[0]) * static_cast<size_t>(height);
                 break;
             case PixelFormat::BGR888:
             case PixelFormat::RGB888:
