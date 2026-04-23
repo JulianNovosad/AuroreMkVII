@@ -34,7 +34,7 @@ cd build-native && ctest --output-on-failure
 
 # Run a single test binary directly
 cd build-native && ./ring_buffer_test
-cd build-native && ./timing_test
+cd build-native ./timing_test
 cd build-native && ./safety_monitor_test
 
 # WCET measurement (must run on RPi 5 target)
@@ -43,6 +43,11 @@ cd build-native && ./safety_monitor_test
 # Jitter monitoring (requires root for SCHED_FIFO)
 sudo ./scripts/jitter_monitor.sh --duration=60
 ```
+
+## Important Commands
+
+- **libcamera-vid**: The command is `rpicam-vid` on RPi 5, NOT `libcamera-vid`
+- **Camera device paths**: `/dev/video0` and `/dev/video1` are USB UVC cameras, `/dev/video2-9` are MIPI/CSI
 
 ## Pre existing failing tests
 - Assume all hardware is running, working and connected. Ensure by running bash commands. You shall fix these potentially missing or failing hardware tests, and not skip over them.

@@ -685,16 +685,14 @@ function scheduleCmdSocketReconnect() {
 setTimeout(connectCmdSocket, 1000);
 
 // ===========================================================================
-// Persistent MIPI camera — started once, shared across all /stream/mipi clients
+// Persistent MIPI camera via rpicam-vid (libcamera)
 // ===========================================================================
 
 let mipiLatestFrame = null;
 const mipiClients = new Set();
 
 function startMipiCamera() {
-  // The aurore C++ binary owns the MIPI camera exclusively via libcamera.
-  // For the web preview we use the USB camera via ffmpeg so there is no conflict.
-  // TODO: pipe annotated frames directly from aurore binary when the IPC is ready.
+  // Use USB camera via ffmpeg since aurore owns the MIPI camera
   const usbDev = findUsbCamera() || '/dev/video0';
   const child = spawn('ffmpeg', [
     '-f', 'v4l2', '-input_format', 'mjpeg', '-video_size', '1280x720',
