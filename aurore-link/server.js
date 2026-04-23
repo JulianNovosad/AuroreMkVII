@@ -685,53 +685,153 @@ function scheduleCmdSocketReconnect() {
 setTimeout(connectCmdSocket, 1000);
 
 // ===========================================================================
-// Persistent MIPI camera via rpicam-vid (libcamera)
+// MIPI preview from aurore binary via UNIX socket
+// Protocol: [4-byte BE uint32 length][JPEG bytes] repeated
 // ===========================================================================
+
+const MIPI_SOCKET_PATH = '/run/aurore/mjpeg_stream.sock';
+const USB_SOCKET_PATH  = '/run/aurore/mjpeg_usb_stream.sock';
+const MIPI_RECONNECT_MS = 2000;
 
 let mipiLatestFrame = null;
 const mipiClients = new Set();
+let mipiFrameWatchdog = null;
 
-function startMipiCamera() {
-  // Use USB camera via ffmpeg since aurore owns the MIPI camera
-  const usbDev = findUsbCamera() || '/dev/video0';
-  const child = spawn('ffmpeg', [
-    '-f', 'v4l2', '-input_format', 'mjpeg', '-video_size', '1280x720',
-    '-framerate', '30', '-i', usbDev,
-    '-c:v', 'copy', '-f', 'mjpeg', '-',
-  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+let usbLatestFrame = null;
+const usbClients = new Set();
 
-  child.on('error', (err) => console.error('[MIPI] Spawn error:', err.message));
-  child.stderr.on('data', () => {});  // suppress ffmpeg noise
-  child.on('exit', (code) => {
-    console.log(`[MIPI] Camera exited (${code}), restarting in 2s...`);
-    mipiLatestFrame = null;
-    setTimeout(startMipiCamera, 2000);
+function dropMipiClients(reason) {
+  if (mipiClients.size > 0) {
+    console.log(`[MIPI] ${reason} — closing ${mipiClients.size} browser client(s)`);
+    for (const r of mipiClients) { try { r.end(); } catch (_) {} }
+    mipiClients.clear();
+  }
+}
+
+function resetMipiWatchdog() {
+  if (mipiFrameWatchdog) clearTimeout(mipiFrameWatchdog);
+  mipiFrameWatchdog = setTimeout(() => {
+    mipiFrameWatchdog = null;
+    console.warn('[MIPI] No frame for 3s — dropping browser clients');
+    dropMipiClients('frame timeout');
+  }, 3000);
+}
+
+function dropUsbClients(reason) {
+  if (usbClients.size > 0) {
+    console.log(`[USB] ${reason} — closing ${usbClients.size} browser client(s)`);
+    for (const r of usbClients) { try { r.end(); } catch (_) {} }
+    usbClients.clear();
+  }
+}
+
+let mipiSocket = null;
+let mipiReconnectTimer = null;
+
+function broadcastMipiFrame(jpeg) {
+  mipiLatestFrame = jpeg;
+  const header = `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n`;
+  for (const r of mipiClients) {
+    if (!r.writableEnded) { r.write(header); r.write(jpeg); r.write('\r\n'); }
+  }
+  resetMipiWatchdog();
+}
+
+function connectMipiSocket() {
+  if (mipiSocket) return;
+
+  mipiSocket = net.createConnection({ path: MIPI_SOCKET_PATH }, () => {
+    console.log('[MIPI] Connected to aurore MJPEG stream socket');
   });
 
-  let buf = Buffer.alloc(0);
-  child.stdout.on('data', (chunk) => {
-    buf = Buffer.concat([buf, chunk]);
-    let lastStart = -1, lastEnd = -1, from = 0;
-    while (true) {
-      const soi = findMarker(buf, 0xFF, 0xD8, from);
-      if (soi === -1) break;
-      const eoi = findMarker(buf, 0xFF, 0xD9, soi + 2);
-      if (eoi === -1) break;
-      lastStart = soi; lastEnd = eoi + 2; from = lastEnd;
+  let rxBuf = Buffer.alloc(0);
+
+  mipiSocket.on('data', (chunk) => {
+    rxBuf = Buffer.concat([rxBuf, chunk]);
+
+    // Parse length-prefixed JPEG frames
+    while (rxBuf.length >= 4) {
+      const frameLen = (rxBuf[0] << 24) | (rxBuf[1] << 16) | (rxBuf[2] << 8) | rxBuf[3];
+      if (rxBuf.length < 4 + frameLen) break;  // incomplete frame
+      const jpeg = rxBuf.slice(4, 4 + frameLen);
+      rxBuf = rxBuf.slice(4 + frameLen);
+      broadcastMipiFrame(jpeg);
     }
-    if (lastStart !== -1) {
-      mipiLatestFrame = buf.slice(lastStart, lastEnd);
-      buf = buf.slice(lastEnd);
-      const header = `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${mipiLatestFrame.length}\r\n\r\n`;
-      for (const r of mipiClients) {
-        if (!r.writableEnded) { r.write(header); r.write(mipiLatestFrame); r.write('\r\n'); }
-      }
-    }
-    if (buf.length > 512 * 1024) buf = buf.slice(-128 * 1024);
+
+    // Guard against corrupt stream inflating the buffer
+    if (rxBuf.length > 2 * 1024 * 1024) rxBuf = rxBuf.slice(-256 * 1024);
+  });
+
+  mipiSocket.on('error', (err) => {
+    console.warn('[MIPI] Socket error:', err.message);
+    mipiSocket = null;
+    dropMipiClients('socket error');
+    scheduleMipiReconnect();
+  });
+
+  mipiSocket.on('close', () => {
+    console.log('[MIPI] Socket closed — reconnecting in', MIPI_RECONNECT_MS, 'ms');
+    mipiSocket = null;
+    dropMipiClients('socket closed');
+    scheduleMipiReconnect();
   });
 }
 
-startMipiCamera();
+function scheduleMipiReconnect() {
+  if (mipiReconnectTimer) return;
+  mipiReconnectTimer = setTimeout(() => {
+    mipiReconnectTimer = null;
+    connectMipiSocket();
+  }, MIPI_RECONNECT_MS);
+}
+
+// Start connection with a short delay (aurore binary may not have the socket up yet)
+setTimeout(connectMipiSocket, 1500);
+
+// ---- USB camera socket (same length-prefix protocol) ----
+let usbSocket = null;
+let usbReconnectTimer = null;
+
+function connectUsbSocket() {
+  if (usbSocket) return;
+
+  usbSocket = net.createConnection({ path: USB_SOCKET_PATH }, () => {
+    console.log('[USB] Connected to aurore USB stream socket');
+  });
+
+  let rxBuf = Buffer.alloc(0);
+
+  usbSocket.on('data', (chunk) => {
+    rxBuf = Buffer.concat([rxBuf, chunk]);
+    while (rxBuf.length >= 4) {
+      const frameLen = (rxBuf[0] << 24) | (rxBuf[1] << 16) | (rxBuf[2] << 8) | rxBuf[3];
+      if (rxBuf.length < 4 + frameLen) break;
+      const jpeg = rxBuf.slice(4, 4 + frameLen);
+      rxBuf = rxBuf.slice(4 + frameLen);
+      usbLatestFrame = jpeg;
+      const header = `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n`;
+      for (const r of usbClients) {
+        if (!r.writableEnded) { r.write(header); r.write(jpeg); r.write('\r\n'); }
+      }
+    }
+    if (rxBuf.length > 2 * 1024 * 1024) rxBuf = rxBuf.slice(-256 * 1024);
+  });
+
+  usbSocket.on('error', (err) => {
+    console.warn('[USB] Socket error:', err.message);
+    usbSocket = null;
+    dropUsbClients('socket error');
+    if (!usbReconnectTimer) usbReconnectTimer = setTimeout(() => { usbReconnectTimer = null; connectUsbSocket(); }, MIPI_RECONNECT_MS);
+  });
+
+  usbSocket.on('close', () => {
+    usbSocket = null;
+    dropUsbClients('socket closed');
+    if (!usbReconnectTimer) usbReconnectTimer = setTimeout(() => { usbReconnectTimer = null; connectUsbSocket(); }, MIPI_RECONNECT_MS);
+  });
+}
+
+setTimeout(connectUsbSocket, 1500);
 
 // ===========================================================================
 // WebSocket Servers (split by URL)
@@ -760,43 +860,19 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.url === '/stream/usb') {
-    const usbDev = findUsbCamera();
-    if (!usbDev) {
-      res.writeHead(503, { 'Content-Type': 'text/plain' });
-      res.end('FAIL: USB UVC camera not found on /dev/video0-63');
-      return;
+    res.writeHead(200, {
+      'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+      'Cache-Control': 'no-cache, no-store',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
+    usbClients.add(res);
+    if (usbLatestFrame) {
+      res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${usbLatestFrame.length}\r\n\r\n`);
+      res.write(usbLatestFrame);
+      res.write('\r\n');
     }
-
-    // USB camera may not support MJPEG, use YUYV and let ffmpeg convert
-    const child = spawn('ffmpeg', [
-      '-f', 'v4l2',
-      '-framerate', '30',
-      '-video_size', '640x480',
-      '-i', usbDev,
-      '-vf', 'format=yuv420p',
-      '-c:v', 'mjpeg',
-      '-q:v', '3',
-      '-f', 'mjpeg',
-      'pipe:1',
-    ], { stdio: ['ignore', 'pipe', 'pipe'] });
-
-    child.on('error', (err) => {
-      console.error('[USB] Spawn error:', err.message);
-      if (!res.headersSent) {
-        res.writeHead(503, { 'Content-Type': 'text/plain' });
-        res.end('FAIL: ffmpeg not available');
-      }
-    });
-    
-    child.stderr.on('data', (data) => {
-      // FFmpeg outputs a lot, only log errors
-      const str = data.toString();
-      if (str.includes('Error') || str.includes('Invalid') || str.includes('failed')) {
-        console.error('[USB] ffmpeg:', str.trim());
-      }
-    });
-
-    pipeAsMjpeg(res, child);
+    req.on('close', () => usbClients.delete(res));
     return;
   }
 
