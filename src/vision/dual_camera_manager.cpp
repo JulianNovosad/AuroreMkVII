@@ -100,7 +100,9 @@ std::optional<Detection> DualCameraManager::process_usb_frame() {
     if (bgr_frame.empty()) {
         return std::nullopt;
     }
-    
+
+    if (usb_frame_cb_) usb_frame_cb_(bgr_frame);
+
     if (orb_detector_ && orb_detector_->is_ready()) {
         auto detection = orb_detector_->detect(bgr_frame);
         if (detection.has_value()) {

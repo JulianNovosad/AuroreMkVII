@@ -838,10 +838,14 @@ aurore::CameraConfig cam_config;
                         // Feed detect thread every kDetectEveryN frames
                         if (yolo_loaded && (++detect_frame_count % kDetectEveryN == 0)) {
                             if (detect_shared.frame_mtx.try_lock()) {
-                                detect_shared.frame = bgr_frame;  // shallow copy (ref-counted)
-                                detect_shared.frame_ready = true;
+                                // PISP Dual-Stream: Use Stream 1 (640x360 BGR888) for YOLO branch.
+                                // This avoids software resizing and demosaic on the RT thread.
+                                detect_shared.frame = camera->wrap_as_mat(frame, aurore::PixelFormat::BGR888, 1);
+                                if (!detect_shared.frame.empty()) {
+                                    detect_shared.frame_ready = true;
+                                    detect_shared.frame_cv.notify_one();
+                                }
                                 detect_shared.frame_mtx.unlock();
-                                detect_shared.frame_cv.notify_one();
                             }
                         }
 

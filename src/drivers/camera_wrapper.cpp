@@ -43,7 +43,7 @@
 // Guarded by AURORE_USE_GPU compile-time flag
 #ifdef AURORE_USE_GPU
 #include <bcm_host.h>
-#include <GLES2/gl2.h>
+#include <GLES3/gl3.h>
 #include <EGL/egl.h>
 #include <sys/stat.h>
 #endif
@@ -103,9 +103,13 @@ struct CameraWrapper::Impl {
     EGLDisplay egl_display = EGL_NO_DISPLAY;
     EGLSurface egl_surface = EGL_NO_SURFACE;
     EGLContext egl_context = EGL_NO_CONTEXT;
-    GLuint shader_program = 0;
-    GLuint texture_id = 0;
+    GLuint gpu_program = 0;
+    GLuint gpu_texture = 0;
     GLuint vbo_id = 0;
+    GLuint gpu_fbo = 0;
+    GLuint gpu_rbo = 0;
+    GLint gpu_tex_loc = -1;
+    GLint gpu_texel_loc = -1;
 
     /**
      * @brief Check if VideoCore VII GPU is available
@@ -209,9 +213,9 @@ struct CameraWrapper::Impl {
             return false;
         }
 
-        // Create EGL context
+        // Create EGL context (ES 3.0 required for VAO support)
         EGLint context_attrs[] = {
-            EGL_CONTEXT_CLIENT_VERSION, 2,
+            EGL_CONTEXT_CLIENT_VERSION, 3,
             EGL_NONE
         };
         egl_context = eglCreateContext(egl_display, config, EGL_NO_CONTEXT, context_attrs);
@@ -249,10 +253,10 @@ struct CameraWrapper::Impl {
                 vec2 pos = v_texCoord;
                 // Bayer BGGR pattern: determine which color at this pixel
                 // BGGR: (even,even)=B, (odd,even)=G, (even,odd)=G, (odd,odd)=R
-                float x = pos.x * u_texelSize.x;
-                float y = pos.y * u_texelSize.y;
-                bool evenX = mod(floor(x), 2.0) < 0.5;
-                bool evenY = mod(floor(y), 2.0) < 0.5;
+                float px = floor(pos.x / u_texelSize.x);  // pixel column = pos.x * width
+                float py = floor(pos.y / u_texelSize.y);  // pixel row    = pos.y * height
+                bool evenX = mod(px, 2.0) < 0.5;
+                bool evenY = mod(py, 2.0) < 0.5;
 
                 float r, g, b;
 
@@ -294,8 +298,8 @@ struct CameraWrapper::Impl {
                     }
                 }
 
-                // Output BGR for OpenCV
-                gl_FragColor = vec4(b, g, r, 1.0);
+                // Output RGBA (GL_RGBA readback; caller converts to BGR via cvtColor)
+                gl_FragColor = vec4(r, g, b, 1.0);
             }
         )";
 
@@ -353,6 +357,32 @@ struct CameraWrapper::Impl {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
+        // Cache uniform locations
+        gpu_tex_loc   = glGetUniformLocation(gpu_program, "u_texture");
+        gpu_texel_loc = glGetUniformLocation(gpu_program, "u_texelSize");
+
+        // Allocate FBO + RBO for offscreen rendering (owned by Impl, released in cleanup_gpu)
+        glGenFramebuffers(1, &gpu_fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, gpu_fbo);
+        glGenRenderbuffers(1, &gpu_rbo);
+        glBindRenderbuffer(GL_RENDERBUFFER, gpu_rbo);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, gpu_rbo);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            std::cerr << "[camera] GPU: FBO incomplete during init\n";
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &gpu_fbo);
+            glDeleteRenderbuffers(1, &gpu_rbo);
+            gpu_fbo = 0;
+            gpu_rbo = 0;
+            glDeleteTextures(1, &gpu_texture);
+            glDeleteProgram(gpu_program);
+            eglDestroyContext(egl_display, egl_context);
+            eglDestroySurface(egl_display, egl_surface);
+            return false;
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
         gpu_initialized = true;
         std::cout << "[camera] GPU: VideoCore VII acceleration initialized\n";
         return true;
@@ -367,6 +397,23 @@ struct CameraWrapper::Impl {
         }
 
         if (egl_context != EGL_NO_CONTEXT) {
+            eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context);
+            if (gpu_fbo != 0) {
+                glDeleteFramebuffers(1, &gpu_fbo);
+                gpu_fbo = 0;
+            }
+            if (gpu_rbo != 0) {
+                glDeleteRenderbuffers(1, &gpu_rbo);
+                gpu_rbo = 0;
+            }
+            if (gpu_texture != 0) {
+                glDeleteTextures(1, &gpu_texture);
+                gpu_texture = 0;
+            }
+            if (gpu_program != 0) {
+                glDeleteProgram(gpu_program);
+                gpu_program = 0;
+            }
             eglDestroyContext(egl_display, egl_context);
             egl_context = EGL_NO_CONTEXT;
         }
@@ -387,67 +434,52 @@ struct CameraWrapper::Impl {
     /**
      * @brief Convert RAW10 to BGR888 using GPU (VideoCore VII)
      *
-     * Uses OpenGL ES 2.0 shader to perform parallel color conversion.
-     * Expected performance: < 0.5ms for 1536×864 frame on RPi 5.
+     * Uses OpenGL ES 3.0 shader to perform parallel Bayer demosaic.
+     * Expected performance: < 0.5ms for 1536x864 frame on RPi 5.
      *
-     * @param raw Raw RAW10 frame data
-     * @param bgr Output BGR888 frame
+     * Takes the DMA plane pointer directly to avoid aliasing bgr_scratch as
+     * both input and output.
+     *
+     * @param raw_data  Pointer to raw Bayer plane (DMA or staged)
+     * @param raw_stride Stride in bytes of the raw plane
+     * @param bgr       Output BGR888 frame (must not alias raw_data storage)
      * @return true if GPU conversion successful
      */
-    bool convert_raw10_to_bgr_gpu(const cv::Mat& raw, cv::Mat& bgr) {
+    bool convert_raw10_to_bgr_gpu(const void* raw_data, int raw_stride, cv::Mat& bgr) {
         if (!gpu_initialized) {
             return false;
         }
 
-        // Make context current (may be needed if called from different thread)
+        // Make context current (required when called from a different thread)
         if (eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context) != EGL_TRUE) {
             return false;
         }
 
-        // GPU-based RAW10→BGR888 conversion using VideoCore VII
-        // Upload RAW data as luminance texture
-        int width = raw.cols;
-        int height = raw.rows;
-
-        // Create FBO for offscreen rendering
-        static GLuint fbo = 0;
-        static GLuint rbo = 0;
-        if (fbo == 0) {
-            glGenFramebuffers(1, &fbo);
-            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-            glGenRenderbuffers(1, &rbo);
-            glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-            glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA, width, height);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rbo);
-            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-                std::cerr << "[camera] GPU: FBO incomplete\n";
-                return false;
-            }
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        }
-
-        // Upload as luminance texture (1 channel)
+        // Upload RAW Bayer data as luminance texture (1 byte/pixel)
         glBindTexture(GL_TEXTURE_2D, gpu_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, width, height, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, raw.data);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, raw_stride);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, width, height, 0,
+                     GL_LUMINANCE, GL_UNSIGNED_BYTE, raw_data);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
-        // Set up viewport and FBO
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        // Bind the pre-allocated FBO and configure viewport
+        glBindFramebuffer(GL_FRAMEBUFFER, gpu_fbo);
         glViewport(0, 0, width, height);
         glUseProgram(gpu_program);
 
-        // Set texture uniform
-        GLint tex_loc = glGetUniformLocation(gpu_program, "u_texture");
-        glUniform1i(tex_loc, 0);
-
-        // Set texel size uniform
-        GLint texel_loc = glGetUniformLocation(gpu_program, "u_texelSize");
-        glUniform2f(texel_loc, 1.0f/width, 1.0f/height);
+        // Bind texture unit 0 and set cached uniform locations
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, gpu_texture);
+        glUniform1i(gpu_tex_loc, 0);
+        glUniform2f(gpu_texel_loc,
+                    1.0f / static_cast<float>(width),
+                    1.0f / static_cast<float>(height));
 
         // Render fullscreen quad
         glClear(GL_COLOR_BUFFER_BIT);
         glDisable(GL_DEPTH_TEST);
 
-        // Simple quad vertices (two triangles)
+        // Quad: position (xy) + texcoord (uv), two triangles as a strip
         const float vertices[] = {
             -1.0f, -1.0f, 0.0f, 0.0f,
              1.0f, -1.0f, 1.0f, 0.0f,
@@ -455,7 +487,8 @@ struct CameraWrapper::Impl {
              1.0f,  1.0f, 1.0f, 1.0f,
         };
 
-        GLuint vbo, vao;
+        GLuint vao = 0;
+        GLuint vbo = 0;
         glGenVertexArrays(1, &vao);
         glGenBuffers(1, &vbo);
         glBindVertexArray(vao);
@@ -466,19 +499,25 @@ struct CameraWrapper::Impl {
         GLint tex_attr = glGetAttribLocation(gpu_program, "a_texCoord");
         glEnableVertexAttribArray(pos_attr);
         glEnableVertexAttribArray(tex_attr);
-        glVertexAttribPointer(pos_attr, 2, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)0);
-        glVertexAttribPointer(tex_attr, 2, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)(2*sizeof(float)));
+        glVertexAttribPointer(pos_attr, 2, GL_FLOAT, GL_FALSE, 4 * static_cast<GLsizei>(sizeof(float)),
+                              reinterpret_cast<const void*>(static_cast<uintptr_t>(0)));
+        glVertexAttribPointer(tex_attr, 2, GL_FLOAT, GL_FALSE, 4 * static_cast<GLsizei>(sizeof(float)),
+                              reinterpret_cast<const void*>(static_cast<uintptr_t>(2 * sizeof(float))));
 
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-        // Read back BGR data
-        bgr.create(height, width, CV_8UC3);
-        glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, bgr.data);
+        // Read back as RGBA (GL_BGR is not valid in GLES3; GL_RGBA always is).
+        // Then convert RGBA→BGR via OpenCV.
+        cv::Mat rgba_tmp(height, width, CV_8UC4);
+        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, rgba_tmp.data);
 
-        // Cleanup
+        // Release per-draw GPU objects
         glDeleteBuffers(1, &vbo);
         glDeleteVertexArrays(1, &vao);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // Convert RGBA → BGR
+        cv::cvtColor(rgba_tmp, bgr, cv::COLOR_RGBA2BGR);
 
         return true;
     }
@@ -492,7 +531,9 @@ struct CameraWrapper::Impl {
     std::shared_ptr<libcamera::Camera>               lc_camera;
     std::unique_ptr<libcamera::FrameBufferAllocator> lc_allocator;
     libcamera::Stream*                               lc_stream = nullptr;
+    libcamera::Stream*                               lc_stream_yolo = nullptr;
     std::vector<std::unique_ptr<libcamera::Request>> lc_requests;
+    int lc_stride_yolo = 0;
 
     // DMA buffer mapping: FrameBuffer* → {mmap ptr, size}
     struct MappedBuf { void* data; size_t size; };
@@ -657,9 +698,12 @@ struct CameraWrapper::Impl {
             return false;
         }
 
-        auto cfg = lc_camera->generateConfiguration({libcamera::StreamRole::Raw});
-        if (!cfg) {
-            std::cerr << "[camera] generateConfiguration failed\n";
+        auto cfg = lc_camera->generateConfiguration({
+            libcamera::StreamRole::VideoRecording, // Stream 0: Tracking (BGR888)
+            libcamera::StreamRole::Viewfinder      // Stream 1: YOLO (BGR888)
+        });
+        if (!cfg || cfg->size() < 2) {
+            std::cerr << "[camera] generateConfiguration failed for dual-stream\n";
             lc_camera->release();
             lc_camera.reset();
             lc_cm->stop();
@@ -667,11 +711,19 @@ struct CameraWrapper::Impl {
             return false;
         }
 
+        // --- Stream 0: Tracking (BGR888) ---
         auto& scfg        = cfg->at(0);
         scfg.size.width   = static_cast<unsigned int>(config.width);
         scfg.size.height  = static_cast<unsigned int>(config.height);
         scfg.pixelFormat  = libcamera::formats::BGR888;
         scfg.bufferCount  = static_cast<unsigned int>(config.buffer_count);
+
+        // --- Stream 1: YOLO (BGR888) ---
+        auto& scfg_yolo   = cfg->at(1);
+        scfg_yolo.size.width  = 640;
+        scfg_yolo.size.height = 360;
+        scfg_yolo.pixelFormat = libcamera::formats::BGR888;
+        scfg_yolo.bufferCount = static_cast<unsigned int>(config.buffer_count);
 
         if (cfg->validate() == libcamera::CameraConfiguration::Invalid) {
             std::cerr << "[camera] Configuration invalid\n";
@@ -692,33 +744,55 @@ struct CameraWrapper::Impl {
         }
 
         lc_stream = scfg.stream();
-        lc_stride = static_cast<int>(scfg.stride);  // actual stride after negotiation
+        lc_stride = static_cast<int>(scfg.stride);
+        
+        lc_stream_yolo = scfg_yolo.stream();
+        lc_stride_yolo = static_cast<int>(scfg_yolo.stride);
 
         lc_allocator = std::make_unique<libcamera::FrameBufferAllocator>(lc_camera);
         if (lc_allocator->allocate(lc_stream) < 0) {
-            std::cerr << "[camera] Buffer allocation failed\n";
-            lc_camera->release();
-            lc_camera.reset();
-            lc_cm->stop();
-            lc_cm.reset();
+            std::cerr << "[camera] Buffer allocation failed for stream 0\n";
+            return false;
+        }
+        if (lc_allocator->allocate(lc_stream_yolo) < 0) {
+            std::cerr << "[camera] Buffer allocation failed for stream 1\n";
             return false;
         }
 
-        for (const auto& fb : lc_allocator->buffers(lc_stream)) {
-            const auto& plane = fb->planes()[0];
-            const off_t off   = (plane.offset != libcamera::FrameBuffer::Plane::kInvalidOffset)
-                                ? static_cast<off_t>(plane.offset) : 0;
-            void* mapped = mmap(nullptr, plane.length, PROT_READ, MAP_SHARED,
-                                plane.fd.get(), off);
-            if (mapped == MAP_FAILED) {
-                std::cerr << "[camera] mmap failed: " << strerror(errno) << "\n";
-                continue;
-            }
-            lc_mapped[fb.get()] = {mapped, plane.length};
+        auto& bufs0 = lc_allocator->buffers(lc_stream);
+        auto& bufs1 = lc_allocator->buffers(lc_stream_yolo);
 
+        // Map buffers for both streams
+        auto map_buffers = [&](libcamera::Stream* stream) {
+            for (const auto& fb : lc_allocator->buffers(stream)) {
+                if (lc_mapped.count(fb.get())) continue;
+                
+                const auto& plane = fb->planes()[0];
+                const off_t off   = (plane.offset != libcamera::FrameBuffer::Plane::kInvalidOffset)
+                                    ? static_cast<off_t>(plane.offset) : 0;
+                void* mapped = mmap(nullptr, plane.length, PROT_READ, MAP_SHARED,
+                                    plane.fd.get(), off);
+                if (mapped == MAP_FAILED) {
+                    std::cerr << "[camera] mmap failed: " << strerror(errno) << "\n";
+                    continue;
+                }
+                lc_mapped[fb.get()] = {mapped, plane.length};
+            }
+        };
+
+        map_buffers(lc_stream);
+        map_buffers(lc_stream_yolo);
+
+        // Create requests with buffers for BOTH streams
+        size_t num_bufs = std::min(bufs0.size(), bufs1.size());
+
+        for (size_t i = 0; i < num_bufs; ++i) {
             auto req = lc_camera->createRequest();
-            if (req && req->addBuffer(lc_stream, fb.get()) == 0) {
-                lc_requests.push_back(std::move(req));
+            if (req) {
+                if (req->addBuffer(lc_stream, bufs0[i].get()) == 0 &&
+                    req->addBuffer(lc_stream_yolo, bufs1[i].get()) == 0) {
+                    lc_requests.push_back(std::move(req));
+                }
             }
         }
 
@@ -798,37 +872,50 @@ struct CameraWrapper::Impl {
         lock.unlock();
 
         const auto& bufs = req->buffers();
-        const auto  it   = bufs.find(lc_stream);
-        if (it == bufs.end()) {
-            std::fprintf(stderr, "FATAL: libcamera request has no buffer for our stream!\n");
+        
+        // --- Stream 0: Tracking ---
+        auto it0 = bufs.find(lc_stream);
+        if (it0 == bufs.end()) {
+            std::fprintf(stderr, "FATAL: libcamera request has no buffer for primary stream!\n");
+            return false;
+        }
+        libcamera::FrameBuffer* fb0 = it0->second;
+        const auto& meta0 = fb0->metadata();
+        const auto mit0 = lc_mapped.find(fb0);
+        if (mit0 == lc_mapped.end()) {
+            std::fprintf(stderr, "FATAL: libcamera buffer 0 not found in DMA map!\n");
             return false;
         }
 
-        libcamera::FrameBuffer* fb = it->second;
-        const auto& meta           = fb->metadata();
-
-        const auto mit = lc_mapped.find(fb);
-        if (mit == lc_mapped.end()) {
-            std::fprintf(stderr, "FATAL: libcamera buffer not found in DMA map!\n");
-            return false;
-        }
-
-        frame.sequence      = meta.sequence;
-        frame.timestamp_ns  = static_cast<TimestampNs>(meta.timestamp);
+        frame.sequence      = meta0.sequence;
+        frame.timestamp_ns  = static_cast<TimestampNs>(meta0.timestamp);
         frame.width         = width;
         frame.height        = height;
         frame.format        = PixelFormat::BGR888;
-        frame.plane_data[0] = mit->second.data;
-        frame.plane_size[0] = mit->second.size;
-        // Use actual stride from libcamera (format may differ from SGRBG10_CSI2P, e.g. PISP_COMP1)
+        frame.plane_data[0] = mit0->second.data;
+        frame.plane_size[0] = mit0->second.size;
         frame.stride[0]     = lc_stride;
+
+        // --- Stream 1: YOLO ---
+        auto it1 = bufs.find(lc_stream_yolo);
+        if (it1 != bufs.end()) {
+            libcamera::FrameBuffer* fb1 = it1->second;
+            const auto mit1 = lc_mapped.find(fb1);
+            if (mit1 != lc_mapped.end()) {
+                frame.width2         = 640;
+                frame.height2        = 360;
+                frame.format2        = PixelFormat::BGR888;
+                frame.plane_data2[0] = mit1->second.data;
+                frame.plane_size2[0] = mit1->second.size;
+                frame.stride2[0]     = lc_stride_yolo;
+            }
+        }
 
         frame.request_ptr   = req;
         frame.valid         = true;
         frame.error[0]      = 0;  // DMA buffer
 
         // Compute frame authentication (SHA256 + HMAC) - ICD-001 / AM7-L2-SEC-001
-        // Note: This is synchronous for correctness; async version available via AsyncFrameAuthenticator
         authenticate_frame(frame);
 
         frame_counter++;
@@ -1095,45 +1182,58 @@ void CameraWrapper::release_frame(ZeroCopyFrame& frame) {
 }
 
 cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
-                                    PixelFormat target_format) {
-    if (!frame.validate(config_.width, config_.height)) {
-        std::fprintf(stderr, "FATAL: wrap_as_mat: Frame validation failed (geometry/contract violation)\n");
-        return cv::Mat();
-    }
-    if (!frame.is_valid()) {
-        std::fprintf(stderr, "FATAL: wrap_as_mat: Frame is not valid!\n");
+                                    PixelFormat target_format,
+                                    int stream_index) {
+    if (stream_index == 0) {
+        if (!frame.validate(config_.width, config_.height)) {
+            std::fprintf(stderr, "FATAL: wrap_as_mat: Frame validation failed (geometry/contract violation)\n");
+            return cv::Mat();
+        }
+    } else if (stream_index == 1) {
+        if (!frame.is_valid(1)) {
+            std::fprintf(stderr, "FATAL: wrap_as_mat: Secondary frame is not valid!\n");
+            return cv::Mat();
+        }
+    } else {
+        std::fprintf(stderr, "FATAL: wrap_as_mat: Invalid stream_index %d\n", stream_index);
         return cv::Mat();
     }
 
-    if (frame.format == PixelFormat::BGR888 && target_format == PixelFormat::BGR888) {
+    const int f_width = (stream_index == 0) ? frame.width : frame.width2;
+    const int f_height = (stream_index == 0) ? frame.height : frame.height2;
+    const PixelFormat f_format = (stream_index == 0) ? frame.format : frame.format2;
+    void* const* f_plane_data = (stream_index == 0) ? frame.plane_data : frame.plane_data2;
+    const int* f_stride = (stream_index == 0) ? frame.stride : frame.stride2;
+
+    if (f_format == PixelFormat::BGR888 && target_format == PixelFormat::BGR888) {
         // ISP configured for BGR888: DMA bytes are already B,G,R — no conversion needed.
         // Zero-copy: return Mat header over DMA buffer (AM7-L3-VIS-001).
         // Caller MUST NOT use this Mat after camera->release_frame().
-        return cv::Mat(frame.height, frame.width, CV_8UC3,
-                       frame.plane_data[0], static_cast<size_t>(frame.stride[0]));
+        return cv::Mat(f_height, f_width, CV_8UC3,
+                       f_plane_data[0], static_cast<size_t>(f_stride[0]));
     }
 
     // Hardware: RAW10 → greyscale BGR888
-    // Supports both SGRBG10_CSI2P (5 bytes/4 pixels) and PISP_COMP1 (1 byte/pixel, stride=width).
-    // NEON SIMD path: ~1ms for 1536×864 on RPi 5 once the output buffer is warm.
-    if (frame.format == PixelFormat::RAW10 && target_format == PixelFormat::BGR888) {
+    if (f_format == PixelFormat::RAW10 && target_format == PixelFormat::BGR888) {
 #ifdef AURORE_DEBUG_TIMING
         const uint64_t tw0 = aurore::get_timestamp();
 #endif
         // Reuse persistent scratch buffer to avoid mmap/page-fault churn with MCL_FUTURE.
-        impl_->bgr_scratch.create(frame.height, frame.width, CV_8UC3);
+        impl_->bgr_scratch.create(f_height, f_width, CV_8UC3);
 #ifdef AURORE_DEBUG_TIMING
         const uint64_t tw1 = aurore::get_timestamp();
 #endif
-        const uint8_t* raw = static_cast<const uint8_t*>(frame.plane_data[0]);
-        const int stride   = frame.stride[0];
+        const uint8_t* raw = static_cast<const uint8_t*>(f_plane_data[0]);
+        const int stride   = f_stride[0];
 
 #ifdef AURORE_USE_GPU
         // Try GPU acceleration first (VideoCore VII)
-        // Expected performance: < 0.5ms for 1536×864
+        // Expected performance: < 0.5ms for 1536x864
+        // Pass the DMA plane pointer directly to avoid aliasing bgr_scratch as both input and output.
         if (impl_->gpu_initialized) {
-            // GPU path: convert using OpenGL ES shader (VideoCore VII)
-            if (impl_->convert_raw10_to_bgr_gpu(impl_->bgr_scratch, impl_->bgr_scratch)) {
+            if (impl_->convert_raw10_to_bgr_gpu(f_plane_data[0],
+                                                 f_stride[0],
+                                                 impl_->bgr_scratch)) {
                 return impl_->bgr_scratch;
             }
             // Fall through to NEON/CPU path if GPU fails
@@ -1147,33 +1247,33 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
         // PISP_COMP1 uses sequential 1-byte reads per pixel which allows the ARM
         // hardware prefetcher to work on the Non-Cacheable DMA buffer, reducing
         // decode time from ~25ms to ~1ms.
-        const bool is_pisp_comp1 = (stride == frame.width);
+        const bool is_pisp_comp1 = (stride == f_width);
 
 #if defined(__aarch64__) || defined(__arm__)
         if (is_pisp_comp1) {
             // Stage DMA to cached memory first (~1ms copy from non-cacheable DMA).
-            const size_t needed = static_cast<size_t>(frame.height) * static_cast<size_t>(stride);
+            const size_t needed = static_cast<size_t>(f_height) * static_cast<size_t>(stride);
             impl_->raw_staging.resize(needed);
             std::memcpy(impl_->raw_staging.data(), raw, needed);
 
             // Edge-aware demosaic using OpenCV
-            cv::Mat bayer_mat(frame.height, frame.width, CV_8UC1, impl_->raw_staging.data());
+            cv::Mat bayer_mat(f_height, f_width, CV_8UC1, impl_->raw_staging.data());
             cv::cvtColor(bayer_mat, impl_->bgr_scratch, cv::COLOR_BayerBG2BGR_EA);
         } else {
             // SGRBG10_CSI2P: 5 bytes per 4 pixels (packed 10-bit).
             static const uint8_t kPerm[8] = {0, 1, 2, 3, 5, 6, 7, 0};
             const uint8x8_t perm = vld1_u8(kPerm);
 
-            impl_->raw_staging.resize(static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
-            std::memcpy(impl_->raw_staging.data(), raw, static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
+            impl_->raw_staging.resize(static_cast<size_t>(f_height) * static_cast<size_t>(stride));
+            std::memcpy(impl_->raw_staging.data(), raw, static_cast<size_t>(f_height) * static_cast<size_t>(stride));
             const uint8_t* staged = impl_->raw_staging.data();
 
-            for (int row = 0; row < frame.height; ++row) {
+            for (int row = 0; row < f_height; ++row) {
                 const uint8_t* line = staged + row * stride;
                 uint8_t* out = impl_->bgr_scratch.ptr<uint8_t>(row);
                 int col = 0;
 
-                for (; col <= frame.width - 8; col += 8) {
+                for (; col <= f_width - 8; col += 8) {
                     uint8x8_t g = vld1_u8(line);
                     const uint8_t p7 = line[8];
                     line += 10;
@@ -1189,51 +1289,39 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
                     out += 24;
                 }
 
-                for (; col < frame.width; col += 4) {
+                for (; col < f_width; col += 4) {
                     const uint8_t g0 = line[0];
                     const uint8_t g1 = line[1];
                     const uint8_t g2 = line[2];
                     const uint8_t g3 = line[3];
                     line += 5;
 
-                    if (col     < frame.width) { out[0]=g0; out[1]=g0; out[2]=g0; out += 3; }
-                    if (col + 1 < frame.width) { out[0]=g1; out[1]=g1; out[2]=g1; out += 3; }
-                    if (col + 2 < frame.width) { out[0]=g2; out[1]=g2; out[2]=g2; out += 3; }
-                    if (col + 3 < frame.width) { out[0]=g3; out[1]=g3; out[2]=g3; out += 3; }
+                    if (col     < f_width) { out[0]=g0; out[1]=g0; out[2]=g0; out += 3; }
+                    if (col + 1 < f_width) { out[0]=g1; out[1]=g1; out[2]=g1; out += 3; }
+                    if (col + 2 < f_width) { out[0]=g2; out[1]=g2; out[2]=g2; out += 3; }
+                    if (col + 3 < f_width) { out[0]=g3; out[1]=g3; out[2]=g3; out += 3; }
                 }
             }
         }
 #else
         if (is_pisp_comp1) {
-            impl_->raw_staging.resize(static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
-            std::memcpy(impl_->raw_staging.data(), raw, static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
+            impl_->raw_staging.resize(static_cast<size_t>(f_height) * static_cast<size_t>(stride));
+            std::memcpy(impl_->raw_staging.data(), raw, static_cast<size_t>(f_height) * static_cast<size_t>(stride));
             const uint8_t* staged = impl_->raw_staging.data();
-            for (int row = 0; row < frame.height; ++row) {
+            for (int row = 0; row < f_height; ++row) {
                 const uint8_t* src = staged + row * stride;
                 uint8_t* out = impl_->bgr_scratch.ptr<uint8_t>(row);
-                for (int col = 0; col < frame.width; ++col) {
+                for (int col = 0; col < f_width; ++col) {
                     const uint8_t v = src[col];
                     *out++ = v; *out++ = v; *out++ = v;
                 }
             }
         } else {
-            impl_->raw_staging.resize(static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
-            std::memcpy(impl_->raw_staging.data(), raw, static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
-            const uint8_t* staged = impl_->raw_staging.data();
-            for (int row = 0; row < frame.height; ++row) {
-                const uint8_t* line = staged + row * stride;
-                uint8_t* out = impl_->bgr_scratch.ptr<uint8_t>(row);
-                for (int col = 0; col < frame.width; col += 4) {
-                    const uint8_t g0 = line[0];
-                    const uint8_t g1 = line[1];
-                    const uint8_t g2 = line[2];
-                    const uint8_t g3 = line[3];
-                    line += 5;
-
-                    if (col     < frame.width) { out[0]=g0; out[1]=g0; out[2]=g0; out += 3; }
-                    if (col + 1 < frame.width) { out[0]=g1; out[1]=g1; out[2]=g1; out += 3; }
-                    if (col + 2 < frame.width) { out[0]=g2; out[1]=g2; out[2]=g2; out += 3; }
-                    if (col + 3 < frame.width) { out[0]=g3; out[1]=g3; out[2]=g3; out += 3; }
+            // SGRBG10_CSI2P fallback
+            for (int y = 0; y < f_height; ++y) {
+                for (int x = 0; x < f_width; ++x) {
+                    const uint8_t val = raw[y * stride + x];
+                    impl_->bgr_scratch.at<cv::Vec3b>(y, x) = cv::Vec3b(val, val, val);
                 }
             }
         }

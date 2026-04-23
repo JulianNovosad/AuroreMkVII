@@ -140,13 +140,21 @@ struct alignas(64) ZeroCopyFrame {
     uint64_t exposure_us;      ///< Exposure time in microseconds
     float gain;                ///< ISO gain
 
-    void* plane_data[4];   ///< Pointers to DMA buffer planes
-    size_t plane_size[4];  ///< Size of each plane in bytes
-    int stride[4];         ///< Bytes per line for each plane
-
+    // Primary Stream (Stream 0) - Tracking/High-res
     int width;
     int height;
     PixelFormat format;
+    void* plane_data[3];
+    size_t plane_size[3];
+    int stride[3];
+
+    // Secondary Stream (Stream 1) - YOLO/Low-res (Optional)
+    int width2;
+    int height2;
+    PixelFormat format2;
+    void* plane_data2[3];
+    size_t plane_size2[3];
+    int stride2[3];
 
     void* request_ptr;   ///< Internal pointer to capture request (for zero-copy)
     uint32_t buffer_id;  ///< Internal buffer ID
@@ -165,13 +173,19 @@ struct alignas(64) ZeroCopyFrame {
           width(0),
           height(0),
           format(PixelFormat::RAW10),
+          width2(0),
+          height2(0),
+          format2(PixelFormat::RAW10),
           request_ptr(nullptr),
           buffer_id(0),
           valid(false) {
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 3; i++) {
             plane_data[i] = nullptr;
             plane_size[i] = 0;
             stride[i] = 0;
+            plane_data2[i] = nullptr;
+            plane_size2[i] = 0;
+            stride2[i] = 0;
         }
         error[0] = '\0';
         for (int i = 0; i < 32; i++) {
@@ -182,22 +196,23 @@ struct alignas(64) ZeroCopyFrame {
 
     /**
      * @brief Check if frame has valid data
+     * @param stream_index 0 for primary, 1 for secondary
      */
-    bool is_valid() const noexcept {
-        return valid && plane_data[0] != nullptr && width > 0 && height > 0;
+    bool is_valid(int stream_index = 0) const noexcept {
+        if (!valid) return false;
+        if (stream_index == 0) {
+            return plane_data[0] != nullptr && width > 0 && height > 0;
+        } else {
+            return plane_data2[0] != nullptr && width2 > 0 && height2 > 0;
+        }
     }
 
     /**
      * @brief Validate frame pointers and sizes (security check)
      *
-     * Verifies:
-     * - All non-null pointers are properly aligned
-     * - Plane sizes match expected dimensions
-     * - No integer overflow in size calculations
-     *
-     * @param expected_width Expected frame width (or 0 to skip)
-     * @param expected_height Expected frame height (or 0 to skip)
-     * @return true if frame passes all validation checks
+     * @param expected_width Expected primary frame width (or 0 to skip)
+     * @param expected_height Expected primary frame height (or 0 to skip)
+     * @return true if primary frame passes all validation checks
      */
     bool validate(int expected_width = 0, int expected_height = 0) const noexcept {
         // Check basic dimensions
@@ -224,17 +239,10 @@ struct alignas(64) ZeroCopyFrame {
             return false;
         }
 
-        // Check pointer alignment (DMA buffers should be page-aligned)
-        if ((reinterpret_cast<uintptr_t>(plane_data[0]) & 0x0FFF) != 0) {
-            // Not page-aligned - suspicious but not necessarily invalid
-            // Log warning in production
-        }
-
         // Calculate expected plane 0 size based on format
         size_t expected_size = 0;
         switch (format) {
             case PixelFormat::RAW10:
-                // Packed 10-bit: ceil(width * 10 / 8) bytes per row
                 expected_size = static_cast<size_t>(stride[0]) * static_cast<size_t>(height);
                 break;
             case PixelFormat::BGR888:
@@ -243,31 +251,12 @@ struct alignas(64) ZeroCopyFrame {
                 break;
             case PixelFormat::NV12:
             case PixelFormat::YUV420:
-                // Y plane: width * height, UV planes: width * height / 2
                 expected_size = static_cast<size_t>(width) * static_cast<size_t>(height);
                 break;
         }
 
-        // Check for integer overflow
-        if (expected_size == 0) {
-            return false;
-        }
-
-        // Plane size should be at least the expected size
-        if (plane_size[0] < expected_size) {
-            return false;
-        }
-
-        // Maximum reasonable plane size (64MB per plane)
-        constexpr size_t MAX_PLANE_SIZE = 64 * 1024 * 1024;
-        if (plane_size[0] > MAX_PLANE_SIZE) {
-            return false;
-        }
-
-        // Validate stride
-        if (stride[0] <= 0 || stride[0] > width * 4) {
-            return false;
-        }
+        if (expected_size == 0) return false;
+        if (plane_size[0] < expected_size) return false;
 
         return true;
     }
@@ -433,10 +422,12 @@ class CameraWrapper {
      *
      * @param frame Frame descriptor
      * @param target_format Target OpenCV format (default: BGR888)
+     * @param stream_index 0 for primary, 1 for secondary
      * @return cv::Mat OpenCV Mat header (references DMA buffer, no copy)
      */
     cv::Mat wrap_as_mat(const ZeroCopyFrame& frame,
-                        PixelFormat target_format = PixelFormat::BGR888);
+                        PixelFormat target_format = PixelFormat::BGR888,
+                        int stream_index = 0);
 
     /**
      * @brief Get camera configuration

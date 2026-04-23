@@ -20,6 +20,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <chrono>
@@ -78,6 +79,11 @@ public:
     DualStreamStatus get_status() const;
     
     std::optional<Detection> process_usb_frame();
+
+    // Optional callback invoked with the raw BGR frame on every successful USB capture.
+    // Called from whichever thread calls process_usb_frame().
+    using UsbFrameCallback = std::function<void(const cv::Mat&)>;
+    void set_usb_frame_callback(UsbFrameCallback cb) { usb_frame_cb_ = std::move(cb); }
     
     std::optional<RoiRegion> get_latest_roi() const;
     
@@ -91,6 +97,8 @@ public:
     void on_usb_reconnect();
 
 private:
+    UsbFrameCallback usb_frame_cb_;
+
     DualCameraConfig config_;
     
     CameraWrapper* mipi_camera_ = nullptr;
