@@ -186,11 +186,20 @@ endif()
 include_directories(${Protobuf_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 
 # ONNX Runtime for YOLO26n inference
+# Prefer the pip-installed ORT (fully self-contained, no separate libonnx.so.1
+# dependency) over the Debian system package, which carries libonnx.so.1 as a
+# split shared library.  Both the system ORT and libonnx.so.1 register ONNX
+# op schemas via global constructors → duplicate-registration errors at startup.
+# The pip ORT bundles ONNX internally so only one schema registration pass runs.
 find_package(PkgConfig QUIET)
 find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime/onnxruntime_cxx_api.h
     PATHS /usr/include /usr/local/include)
 find_library(ONNXRUNTIME_LIB onnxruntime
-    PATHS /usr/lib/aarch64-linux-gnu /usr/local/lib)
+    PATHS
+        /usr/local/lib/python3.13/dist-packages/onnxruntime/capi   # pip ORT — self-contained
+        /usr/lib/aarch64-linux-gnu                                  # Debian system ORT (fallback)
+        /usr/local/lib
+    NO_DEFAULT_PATH)
 if(ONNXRUNTIME_INCLUDE_DIR AND ONNXRUNTIME_LIB)
     message(STATUS "Found ONNX Runtime: ${ONNXRUNTIME_LIB}")
     set(ONNXRUNTIME_FOUND TRUE)
@@ -390,6 +399,13 @@ if(ONNXRUNTIME_FOUND)
     target_include_directories(aurore PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
     target_link_libraries(aurore PRIVATE ${ONNXRUNTIME_LIB})
     target_compile_definitions(aurore PRIVATE AURORE_HAS_ONNXRUNTIME)
+    # Set RPATH so the binary resolves libonnxruntime.so.1 from the same
+    # directory it was linked against (prevents system ORT being picked up
+    # if the pip path was used above).
+    get_filename_component(_ORT_RPATH "${ONNXRUNTIME_LIB}" DIRECTORY)
+    set_target_properties(aurore PROPERTIES
+        BUILD_RPATH  "${_ORT_RPATH}"
+        INSTALL_RPATH "${_ORT_RPATH}")
 endif()
 
 # Target compile definitions

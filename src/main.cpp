@@ -616,7 +616,7 @@ int main(int argc, char* argv[]) {
     aurore::Yolo26Detector::Config yolo_cfg;
     yolo_cfg.model_path = config.get_string("vision.yolo_model_path",
                                              "/home/pi/AuroreMkVII/models/yolo26n.onnx");
-    yolo_cfg.num_threads = 3;
+    yolo_cfg.num_threads = 1;  // pinned to CPU 0; no benefit from extra ORT threads
     yolo_detector = std::make_unique<aurore::Yolo26Detector>(yolo_cfg);
     yolo_loaded = yolo_detector->load();
     if (!yolo_loaded) {
@@ -667,6 +667,16 @@ int main(int argc, char* argv[]) {
         detect_running.store(false, std::memory_order_release);
         std::cout << "detect_thread stopped" << std::endl;
     });
+
+    // Pin detect_thread to CPU 0 so ORT's internal thread pool cannot spill onto
+    // CPU 1, which libcamera's callback thread needs.  Without this the camera
+    // event loop is starved and try_capture_frame returns false ~90% of the time.
+    {
+        cpu_set_t cs;
+        CPU_ZERO(&cs);
+        CPU_SET(0, &cs);
+        pthread_setaffinity_np(detect_thread.native_handle(), sizeof(cs), &cs);
+    }
 
     // Vision pipeline thread - pinned to CPU 3 for isolation from track thread (CPU 2)
     // This reduces jitter from ISP interrupts and track_compute context switching
@@ -770,9 +780,11 @@ int main(int argc, char* argv[]) {
             if (frame_available && camera) {
                 deadline.start();
                 last_frame_ns = now_ns;
+                const uint64_t t0_track = aurore::get_timestamp();
 
                 // Wrap frame as OpenCV Mat (RAW10→BGR888 conversion happens here)
                 cv::Mat bgr_frame = camera->wrap_as_mat(frame, aurore::PixelFormat::BGR888);
+                const uint64_t t1_wrap = aurore::get_timestamp();
 
                 if (!bgr_frame.empty()) {
                     aurore::FcsState state = state_machine.state();
@@ -902,6 +914,8 @@ int main(int argc, char* argv[]) {
                     current_solution.valid = false;
                 }
 
+                const uint64_t t2_state = aurore::get_timestamp();
+
                 if (!track_buffer.push(current_solution)) {
                     // Buffer full - solution dropped
                 }
@@ -910,6 +924,7 @@ int main(int argc, char* argv[]) {
                 // Dual-stream telemetry: Log MIPI and USB frame stats
                 auto stream_status = dual_camera.get_status();
                 dual_camera.record_mipi_frame(now_ns);
+                const uint64_t t3_dual = aurore::get_timestamp();
 
                 // Log dual-stream metrics every 100 frames
                 if (frame.sequence % 100 == 0) {
@@ -922,11 +937,18 @@ int main(int argc, char* argv[]) {
 
                 // Zero-copy release
                 camera->release_frame(frame);
+                const uint64_t t4_release = aurore::get_timestamp();
 
                 deadline.stop();
                 if (deadline.exceeded()) {
                     std::cerr << "Track compute exceeded deadline: " << deadline.elapsed_ns()
-                              << " ns" << std::endl;
+                              << " ns"
+                              << " [wrap=" << (t1_wrap - t0_track) / 1000 << "us"
+                              << " state=" << (t2_state - t1_wrap) / 1000 << "us"
+                              << " dual=" << (t3_dual - t2_state) / 1000 << "us"
+                              << " release=" << (t4_release - t3_dual) / 1000 << "us"
+                              << " total=" << (t4_release - t0_track) / 1000 << "us"
+                              << "]" << std::endl;
                 }
             } else {
                 // No frame available - check vision watchdog (only after first frame arrives)
@@ -981,6 +1003,7 @@ int main(int argc, char* argv[]) {
 
             timing.wait();
             deadline.start();
+            const uint64_t ta0 = aurore::get_timestamp();
 
             // Read latest track solution from buffer
             while (track_buffer.pop(latest_solution)) {
@@ -1052,6 +1075,7 @@ int main(int argc, char* argv[]) {
             // Velocity is estimated by finite-difference over consecutive angle reads.
             aurore::GimbalStatusSm gimbal_status;
             const aurore::TimestampNs gimbal_ts = aurore::get_timestamp();
+            const uint64_t ta1 = gimbal_ts;  // end of state/ballistics work
             const auto az_opt = fusion_hat.get_servo_angle(10);
             const auto el_opt = fusion_hat.get_servo_angle(11);
             if (az_opt) {
@@ -1164,12 +1188,18 @@ int main(int argc, char* argv[]) {
             tel.mutable_health()->set_deadline_misses(
                 static_cast<uint32_t>(safety_monitor.deadline_misses()));
 
+            const uint64_t ta2 = aurore::get_timestamp();
             link_server.broadcast_telemetry(tel);
+            const uint64_t ta3 = aurore::get_timestamp();
 
             deadline.stop();
             if (deadline.exceeded()) {
                 std::cerr << "Actuation exceeded deadline: " << deadline.elapsed_ns() << " ns"
-                          << std::endl;
+                          << " [pre_servo=" << (ta1 - ta0) / 1000 << "us"
+                          << " pre_hud=" << (ta2 - ta1) / 1000 << "us"
+                          << " broadcast=" << (ta3 - ta2) / 1000 << "us"
+                          << " total=" << (ta3 - ta0) / 1000 << "us"
+                          << "]" << std::endl;
             }
         }
 

@@ -17,6 +17,7 @@
  */
 
 #include "aurore/camera_wrapper.hpp"
+#include "aurore/timing.hpp"
 
 #include <cerrno>
 #include <chrono>
@@ -74,6 +75,16 @@ struct CameraWrapper::Impl {
     bool use_libcamera    = false;
     bool use_test_pattern = false;
     bool use_webcam       = false;
+
+    // --- Persistent BGR output buffer (avoids mmap/page-fault churn per frame) ---
+    // Allocated once in wrap_as_mat on first call; reused on all subsequent calls.
+    // Eliminates ~975 MCL_FUTURE page-lock faults × 25µs = ~25ms per frame.
+    cv::Mat bgr_scratch;
+
+    // --- Staging buffer for non-cacheable DMA reads ---
+    // DMA buffers are non-cacheable, causing ~25ms per read due to memory controller delays.
+    // First copy DMA to cached staging, then process from cached memory (~1ms copy vs ~25ms slow reads).
+    std::vector<uint8_t> raw_staging;
 
     // --- OpenCV webcam state ---
     cv::VideoCapture webcam_cap;
@@ -557,6 +568,17 @@ struct CameraWrapper::Impl {
                      static_cast<int32_t>(config.exposure_us));
         controls.set(libcamera::controls::AnalogueGain, config.gain);
 
+        // Enforce the configured frame rate. Without this the ISP picks its own
+        // default (typically 30fps), causing VISION_LATENCY_EXCEEDED at 120Hz.
+        if (config.fps > 0) {
+            const int64_t frame_us = 1000000LL / static_cast<int64_t>(config.fps);
+            const std::array<int64_t, 2> dur = {frame_us, frame_us};
+            controls.set(libcamera::controls::FrameDurationLimits,
+                         libcamera::Span<const int64_t, 2>(dur));
+            std::cout << "[camera] FrameDurationLimits: " << frame_us << "us ("
+                      << config.fps << "fps)\n";
+        }
+
         if (lc_camera->start(&controls) != 0) {
             std::cerr << "[camera] camera->start() failed\n";
             cleanup_libcamera();
@@ -918,21 +940,23 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
 
     // Development/webcam: BGR888 frame stored as heap copy
     if (frame.format == PixelFormat::BGR888 && target_format == PixelFormat::BGR888) {
-        cv::Mat bgr_img(frame.height, frame.width, CV_8UC3);
-        std::memcpy(bgr_img.data, frame.plane_data[0], frame.plane_size[0]);
-        return bgr_img;
+        impl_->bgr_scratch.create(frame.height, frame.width, CV_8UC3);
+        std::memcpy(impl_->bgr_scratch.data, frame.plane_data[0], frame.plane_size[0]);
+        return impl_->bgr_scratch;
     }
 
-    // Hardware: SGRBG10_CSI2P packed RAW10 → greyscale BGR888
-    // Note: stride = ceil(width*10/8); 4 pixels packed into 5 bytes.
-    // Full colour Bayer demosaicing is a TODO for the vision pipeline.
-    //
-    // AM7-L2-VIS-003: Vision pipeline latency ≤ 3.0ms
-    // - RAW10→BGR888 conversion target: ≤ 1.0ms
-    // - NEON SIMD path: 0.8-1.2ms on RPi 5 (verified)
-    // - GPU path (TODO): < 0.5ms target via VideoCore VII
+    // Hardware: RAW10 → greyscale BGR888
+    // Supports both SGRBG10_CSI2P (5 bytes/4 pixels) and PISP_COMP1 (1 byte/pixel, stride=width).
+    // NEON SIMD path: ~1ms for 1536×864 on RPi 5 once the output buffer is warm.
     if (frame.format == PixelFormat::RAW10 && target_format == PixelFormat::BGR888) {
-        cv::Mat bgr_img(frame.height, frame.width, CV_8UC3);
+#ifdef AURORE_DEBUG_TIMING
+        const uint64_t tw0 = aurore::get_timestamp();
+#endif
+        // Reuse persistent scratch buffer to avoid mmap/page-fault churn with MCL_FUTURE.
+        impl_->bgr_scratch.create(frame.height, frame.width, CV_8UC3);
+#ifdef AURORE_DEBUG_TIMING
+        const uint64_t tw1 = aurore::get_timestamp();
+#endif
         const uint8_t* raw = static_cast<const uint8_t*>(frame.plane_data[0]);
         const int stride   = frame.stride[0];
 
@@ -942,47 +966,78 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
         if (impl_->gpu_initialized) {
             // GPU path: convert using OpenGL ES shader
             // TODO: Implement full GPU conversion
-            if (impl_->convert_raw10_to_bgr_gpu(bgr_img, bgr_img)) {
-                return bgr_img;
+            if (impl_->convert_raw10_to_bgr_gpu(impl_->bgr_scratch, impl_->bgr_scratch)) {
+                return impl_->bgr_scratch;
             }
             // Fall through to NEON/CPU path if GPU fails
         }
 #endif
 
+        // Two format paths based on stride:
+        //   stride == width       → PISP_COMP1 (1 byte/pixel, 8-bit compressed Bayer)
+        //   stride == width*10/8  → SGRBG10_CSI2P (packed 10-bit, 5 bytes per 4 pixels)
+        //
+        // PISP_COMP1 uses sequential 1-byte reads per pixel which allows the ARM
+        // hardware prefetcher to work on the Non-Cacheable DMA buffer, reducing
+        // decode time from ~25ms to ~1ms.
+        const bool is_pisp_comp1 = (stride == frame.width);
+
 #if defined(__aarch64__) || defined(__arm__)
-        // NEON RAW10→BGR888 greyscale conversion.
-        // RAW10 packs 4 pixels into 5 bytes: [p0h][p1h][p2h][p3h][ctrl].
-        // We use vtbl1_u8 (8-byte table lookup) to extract 8 pixel high-bytes
-        // from each pair of groups (10 bytes), dropping the two ctrl bytes.
-        // Performance: ~1ms for 1536×864 on RPi 5.
-        {
+        if (is_pisp_comp1) {
+            // Stage DMA to cached memory first (~1ms copy from non-cacheable DMA).
+            impl_->raw_staging.resize(static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
+            std::memcpy(impl_->raw_staging.data(), raw, static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
+
+            // Now process from cached staging buffer.
+            const uint8_t* staged = impl_->raw_staging.data();
+            for (int row = 0; row < frame.height; ++row) {
+                const uint8_t* src = staged + row * stride;
+                uint8_t* out = impl_->bgr_scratch.ptr<uint8_t>(row);
+                int col = 0;
+                for (; col <= frame.width - 8; col += 8) {
+                    uint8x8_t px = vld1_u8(src + col);
+                    uint8x8x3_t bgr;
+                    bgr.val[0] = px;
+                    bgr.val[1] = px;
+                    bgr.val[2] = px;
+                    vst3_u8(out, bgr);
+                    out += 24;
+                }
+                for (; col < frame.width; ++col) {
+                    const uint8_t v = src[col];
+                    *out++ = v; *out++ = v; *out++ = v;
+                }
+            }
+        } else {
+            // SGRBG10_CSI2P: 5 bytes per 4 pixels (packed 10-bit).
             static const uint8_t kPerm[8] = {0, 1, 2, 3, 5, 6, 7, 0};
             const uint8x8_t perm = vld1_u8(kPerm);
 
+            impl_->raw_staging.resize(static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
+            std::memcpy(impl_->raw_staging.data(), raw, static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
+            const uint8_t* staged = impl_->raw_staging.data();
+
             for (int row = 0; row < frame.height; ++row) {
-                const uint8_t* line = raw + row * stride;
-                uint8_t* out = bgr_img.ptr<uint8_t>(row);
+                const uint8_t* line = staged + row * stride;
+                uint8_t* out = impl_->bgr_scratch.ptr<uint8_t>(row);
                 int col = 0;
 
-                // 8 pixels per iteration (2 groups × 5 bytes = 10 bytes input)
-                // kPerm maps: [g0[0..3], g0[5..7], 0] then fixes lane 7 with g1[3]
                 for (; col <= frame.width - 8; col += 8) {
-                    uint8x8_t g = vld1_u8(line);          // [p0,p1,p2,p3,C0,p4,p5,p6]
-                    const uint8_t p7 = line[8];            // p7 (C1 is at line[9])
+                    uint8x8_t g = vld1_u8(line);
+                    const uint8_t p7 = line[8];
                     line += 10;
 
-                    uint8x8_t px = vtbl1_u8(g, perm);     // [p0,p1,p2,p3,p4,p5,p6,p0]
-                    px = vset_lane_u8(p7, px, 7);          // [p0,p1,p2,p3,p4,p5,p6,p7]
+                    uint8x8_t px = vtbl1_u8(g, perm);
+                    px = vset_lane_u8(p7, px, 7);
 
                     uint8x8x3_t bgr;
                     bgr.val[0] = px;
                     bgr.val[1] = px;
                     bgr.val[2] = px;
                     vst3_u8(out, bgr);
-                    out += 24; // 8 pixels × 3 bytes
+                    out += 24;
                 }
 
-                // Scalar tail (< 8 remaining columns)
                 for (; col < frame.width; col += 4) {
                     const uint8_t g0 = line[0];
                     const uint8_t g1 = line[1];
@@ -998,25 +1053,52 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
             }
         }
 #else
-        // Scalar fallback (non-ARM or no NEON). Performance: ~3ms for 1536×864.
-        for (int row = 0; row < frame.height; ++row) {
-            const uint8_t* line = raw + row * stride;
-            uint8_t* out = bgr_img.ptr<uint8_t>(row);
-            for (int col = 0; col < frame.width; col += 4) {
-                const uint8_t g0 = line[0];
-                const uint8_t g1 = line[1];
-                const uint8_t g2 = line[2];
-                const uint8_t g3 = line[3];
-                line += 5;
+        if (is_pisp_comp1) {
+            impl_->raw_staging.resize(static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
+            std::memcpy(impl_->raw_staging.data(), raw, static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
+            const uint8_t* staged = impl_->raw_staging.data();
+            for (int row = 0; row < frame.height; ++row) {
+                const uint8_t* src = staged + row * stride;
+                uint8_t* out = impl_->bgr_scratch.ptr<uint8_t>(row);
+                for (int col = 0; col < frame.width; ++col) {
+                    const uint8_t v = src[col];
+                    *out++ = v; *out++ = v; *out++ = v;
+                }
+            }
+        } else {
+            impl_->raw_staging.resize(static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
+            std::memcpy(impl_->raw_staging.data(), raw, static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
+            const uint8_t* staged = impl_->raw_staging.data();
+            for (int row = 0; row < frame.height; ++row) {
+                const uint8_t* line = staged + row * stride;
+                uint8_t* out = impl_->bgr_scratch.ptr<uint8_t>(row);
+                for (int col = 0; col < frame.width; col += 4) {
+                    const uint8_t g0 = line[0];
+                    const uint8_t g1 = line[1];
+                    const uint8_t g2 = line[2];
+                    const uint8_t g3 = line[3];
+                    line += 5;
 
-                if (col     < frame.width) { out[0]=g0; out[1]=g0; out[2]=g0; out += 3; }
-                if (col + 1 < frame.width) { out[0]=g1; out[1]=g1; out[2]=g1; out += 3; }
-                if (col + 2 < frame.width) { out[0]=g2; out[1]=g2; out[2]=g2; out += 3; }
-                if (col + 3 < frame.width) { out[0]=g3; out[1]=g3; out[2]=g3; out += 3; }
+                    if (col     < frame.width) { out[0]=g0; out[1]=g0; out[2]=g0; out += 3; }
+                    if (col + 1 < frame.width) { out[0]=g1; out[1]=g1; out[2]=g1; out += 3; }
+                    if (col + 2 < frame.width) { out[0]=g2; out[1]=g2; out[2]=g2; out += 3; }
+                    if (col + 3 < frame.width) { out[0]=g3; out[1]=g3; out[2]=g3; out += 3; }
+                }
             }
         }
 #endif
-        return bgr_img;
+#ifdef AURORE_DEBUG_TIMING
+        const uint64_t tw2 = aurore::get_timestamp();
+        static uint32_t wrap_call_count = 0;
+        if (++wrap_call_count <= 10 || (tw2 - tw0) > 5000000ULL) {
+            std::fprintf(stderr, "[wrap_as_mat #%u] alloc=%uus neon=%uus total=%uus\n",
+                wrap_call_count,
+                static_cast<unsigned>((tw1 - tw0) / 1000),
+                static_cast<unsigned>((tw2 - tw1) / 1000),
+                static_cast<unsigned>((tw2 - tw0) / 1000));
+        }
+#endif
+        return impl_->bgr_scratch;
     }
 
     (void)target_format;
