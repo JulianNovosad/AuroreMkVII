@@ -701,11 +701,11 @@ let usbLatestFrame = null;
 const usbClients = new Set();
 
 function dropMipiClients(reason) {
-  if (mipiClients.size > 0) {
-    console.log(`[MIPI] ${reason} — closing ${mipiClients.size} browser client(s)`);
-    for (const r of mipiClients) { try { r.end(); } catch (_) {} }
-    mipiClients.clear();
-  }
+  if (mipiClients.size === 0) return;
+  console.log(`[MIPI] ${reason} — closing ${mipiClients.size} browser client(s)`);
+  const snapshot = [...mipiClients];
+  mipiClients.clear();
+  for (const r of snapshot) { try { r.end(); } catch (_) {} }
 }
 
 function resetMipiWatchdog() {
@@ -717,12 +717,32 @@ function resetMipiWatchdog() {
   }, 3000);
 }
 
+let usbFrameWatchdog = null;
+
 function dropUsbClients(reason) {
-  if (usbClients.size > 0) {
-    console.log(`[USB] ${reason} — closing ${usbClients.size} browser client(s)`);
-    for (const r of usbClients) { try { r.end(); } catch (_) {} }
-    usbClients.clear();
+  if (usbClients.size === 0) return;
+  console.log(`[USB] ${reason} — closing ${usbClients.size} browser client(s)`);
+  const snapshot = [...usbClients];
+  usbClients.clear();
+  for (const r of snapshot) { try { r.end(); } catch (_) {} }
+}
+
+function resetUsbWatchdog() {
+  if (usbFrameWatchdog) clearTimeout(usbFrameWatchdog);
+  usbFrameWatchdog = setTimeout(() => {
+    usbFrameWatchdog = null;
+    console.warn('[USB] No frame for 3s — dropping browser clients');
+    dropUsbClients('frame timeout');
+  }, 3000);
+}
+
+function broadcastUsbFrame(jpeg) {
+  usbLatestFrame = jpeg;
+  const header = `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n`;
+  for (const r of usbClients) {
+    if (!r.writableEnded) { r.write(header); r.write(jpeg); r.write('\r\n'); }
   }
+  resetUsbWatchdog();
 }
 
 let mipiSocket = null;
@@ -765,6 +785,7 @@ function connectMipiSocket() {
   mipiSocket.on('error', (err) => {
     console.warn('[MIPI] Socket error:', err.message);
     mipiSocket = null;
+    if (mipiFrameWatchdog) { clearTimeout(mipiFrameWatchdog); mipiFrameWatchdog = null; }
     dropMipiClients('socket error');
     scheduleMipiReconnect();
   });
@@ -772,6 +793,7 @@ function connectMipiSocket() {
   mipiSocket.on('close', () => {
     console.log('[MIPI] Socket closed — reconnecting in', MIPI_RECONNECT_MS, 'ms');
     mipiSocket = null;
+    if (mipiFrameWatchdog) { clearTimeout(mipiFrameWatchdog); mipiFrameWatchdog = null; }
     dropMipiClients('socket closed');
     scheduleMipiReconnect();
   });
@@ -792,6 +814,11 @@ setTimeout(connectMipiSocket, 1500);
 let usbSocket = null;
 let usbReconnectTimer = null;
 
+function scheduleUsbReconnect() {
+  if (usbReconnectTimer) return;
+  usbReconnectTimer = setTimeout(() => { usbReconnectTimer = null; connectUsbSocket(); }, MIPI_RECONNECT_MS);
+}
+
 function connectUsbSocket() {
   if (usbSocket) return;
 
@@ -808,11 +835,7 @@ function connectUsbSocket() {
       if (rxBuf.length < 4 + frameLen) break;
       const jpeg = rxBuf.slice(4, 4 + frameLen);
       rxBuf = rxBuf.slice(4 + frameLen);
-      usbLatestFrame = jpeg;
-      const header = `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n`;
-      for (const r of usbClients) {
-        if (!r.writableEnded) { r.write(header); r.write(jpeg); r.write('\r\n'); }
-      }
+      broadcastUsbFrame(jpeg);
     }
     if (rxBuf.length > 2 * 1024 * 1024) rxBuf = rxBuf.slice(-256 * 1024);
   });
@@ -820,14 +843,17 @@ function connectUsbSocket() {
   usbSocket.on('error', (err) => {
     console.warn('[USB] Socket error:', err.message);
     usbSocket = null;
+    if (usbFrameWatchdog) { clearTimeout(usbFrameWatchdog); usbFrameWatchdog = null; }
     dropUsbClients('socket error');
-    if (!usbReconnectTimer) usbReconnectTimer = setTimeout(() => { usbReconnectTimer = null; connectUsbSocket(); }, MIPI_RECONNECT_MS);
+    scheduleUsbReconnect();
   });
 
   usbSocket.on('close', () => {
+    console.log('[USB] Socket closed — reconnecting in', MIPI_RECONNECT_MS, 'ms');
     usbSocket = null;
+    if (usbFrameWatchdog) { clearTimeout(usbFrameWatchdog); usbFrameWatchdog = null; }
     dropUsbClients('socket closed');
-    if (!usbReconnectTimer) usbReconnectTimer = setTimeout(() => { usbReconnectTimer = null; connectUsbSocket(); }, MIPI_RECONNECT_MS);
+    scheduleUsbReconnect();
   });
 }
 
