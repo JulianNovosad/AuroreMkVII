@@ -226,8 +226,8 @@ class AuroreLinkServer {
     // Spec: AM7-L3-SEC-001 - Send NACK for failed HMAC verification
     void send_nack(int client_fd, uint32_t sequence, uint16_t message_id, uint8_t error_code);
 
-    // Heartbeat monitoring (500ms timeout → IDLE/SAFE)
-    static constexpr uint64_t kHeartbeatTimeoutNs = 500000000ULL;  // 500ms
+    // Heartbeat monitoring (1000ms timeout → IDLE/SAFE)
+    static constexpr uint64_t kHeartbeatTimeoutNs = 1000000000ULL;  // 1000ms
     std::atomic<TimestampNs> last_heartbeat_ns_{0};
     std::atomic<bool> heartbeat_timed_out_{false};  // edge-detect: fire callback once per event
     std::thread heartbeat_monitor_thread_;

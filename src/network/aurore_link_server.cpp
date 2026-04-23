@@ -500,7 +500,7 @@ void AuroreLinkServer::set_target_reject_callback(TargetRejectCallback cb) {
 
 void AuroreLinkServer::heartbeat_monitor_loop() {
     // Heartbeat timeout monitor thread
-    // Checks every 100ms for heartbeat timeout (500ms → IDLE/SAFE)
+    // Checks every 100ms for heartbeat timeout (1000ms → IDLE/SAFE)
     constexpr uint64_t kCheckIntervalNs = 100000000ULL;  // 100ms
     struct timespec sleep_ts {};
     sleep_ts.tv_nsec = kCheckIntervalNs;
@@ -516,7 +516,7 @@ void AuroreLinkServer::heartbeat_monitor_loop() {
         if (static_cast<uint64_t>(age_ns) > kHeartbeatTimeoutNs) {
             if (!heartbeat_timed_out_.exchange(true, std::memory_order_acq_rel)) {
                 std::cerr << "AuroreLink: HEARTBEAT TIMEOUT - " << (age_ns / 1000000)
-                          << "ms since last heartbeat (threshold: 500ms)\n";
+                          << "ms since last heartbeat (threshold: 1000ms)\n";
                 if (on_heartbeat_timeout_) {
                     on_heartbeat_timeout_();
                 }

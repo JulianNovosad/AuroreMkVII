@@ -503,7 +503,7 @@ struct CameraWrapper::Impl {
         auto& scfg        = cfg->at(0);
         scfg.size.width   = static_cast<unsigned int>(config.width);
         scfg.size.height  = static_cast<unsigned int>(config.height);
-        scfg.pixelFormat  = libcamera::formats::BGGR_PISP_COMP1;
+        scfg.pixelFormat  = libcamera::formats::BGR888;
         scfg.bufferCount  = static_cast<unsigned int>(config.buffer_count);
 
         if (cfg->validate() == libcamera::CameraConfiguration::Invalid) {
@@ -650,7 +650,7 @@ struct CameraWrapper::Impl {
         frame.timestamp_ns  = static_cast<TimestampNs>(meta.timestamp);
         frame.width         = width;
         frame.height        = height;
-        frame.format        = PixelFormat::RAW10;
+        frame.format        = PixelFormat::BGR888;
         frame.plane_data[0] = mit->second.data;
         frame.plane_size[0] = mit->second.size;
         // Use actual stride from libcamera (format may differ from SGRBG10_CSI2P, e.g. PISP_COMP1)
@@ -783,7 +783,7 @@ struct CameraWrapper::Impl {
     // Unified capture dispatch
     // =========================================================================
 
-    bool capture_frame_stub(ZeroCopyFrame& frame, int timeout_ms = 100) {
+    bool capture_frame_stub(ZeroCopyFrame& frame, int timeout_ms = 20) {
 #ifndef AURORE_LAPTOP_BUILD
         if (use_libcamera) {
             return capture_libcamera(frame, timeout_ms);
@@ -938,11 +938,9 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
         return cv::Mat();
     }
 
-    // Development/webcam: BGR888 frame stored as heap copy
+    // Zero-copy BGR888: wrap DMA buffer directly as cv::Mat (no memcpy)
     if (frame.format == PixelFormat::BGR888 && target_format == PixelFormat::BGR888) {
-        impl_->bgr_scratch.create(frame.height, frame.width, CV_8UC3);
-        std::memcpy(impl_->bgr_scratch.data, frame.plane_data[0], frame.plane_size[0]);
-        return impl_->bgr_scratch;
+        return cv::Mat(frame.height, frame.width, CV_8UC3, frame.plane_data[0]);
     }
 
     // Hardware: RAW10 → greyscale BGR888

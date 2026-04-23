@@ -347,10 +347,10 @@ int main(int argc, char* argv[]) {
 
     // Initialize camera (test pattern in dry-run, real camera otherwise)
     try {
-        aurore::CameraConfig cam_config;
-        cam_config.width = aurore::DEFAULT_WIDTH;
-        cam_config.height = aurore::DEFAULT_HEIGHT;
-        cam_config.fps = aurore::DEFAULT_FPS;
+aurore::CameraConfig cam_config;
+         cam_config.width = config.get_int("camera.width", aurore::DEFAULT_WIDTH);
+         cam_config.height = config.get_int("camera.height", aurore::DEFAULT_HEIGHT);
+         cam_config.fps = config.get_int("camera.fps", aurore::DEFAULT_FPS);
 
         camera = std::make_unique<aurore::CameraWrapper>(cam_config);
         camera->init();
@@ -715,7 +715,7 @@ int main(int argc, char* argv[]) {
             return;
         }
 
-        aurore::ThreadTiming timing(8333333, 0);    // 120Hz, no phase offset
+        aurore::ThreadTiming timing(16666667, 0);    // 60Hz, matches camera FPS
         aurore::DeadlineMonitor deadline(5000000);  // 5ms budget (ISP jitter can reach 5-6ms)
 
         vision_running.store(true, std::memory_order_release);

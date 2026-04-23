@@ -349,6 +349,7 @@ set(AURORE_SOURCES
 
     # Network
     src/network/aurore_link_server.cpp
+    src/network/mjpeg_streamer.cpp
 
     # Protobuf generated sources
     ${PROTO_SRCS}
@@ -414,6 +415,7 @@ target_compile_definitions(aurore PRIVATE
     AURORE_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
     AURORE_VERSION_MINOR=${PROJECT_VERSION_MINOR}
     AURORE_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+    AURORE_DEBUG_TIMING
 )
 
 # ============================================================================

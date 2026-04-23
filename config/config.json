@@ -23,8 +23,8 @@
   },
 
   "camera": {
-    "width": 1280,
-    "height": 720,
+    "width": 1536,
+    "height": 864,
     "fps": 60,
     "format": "RAW10",
     "buffer_count": 4,
@@ -69,7 +69,7 @@
     "vision_deadline_ns": 50000000,
     "actuation_deadline_ns": 16666000,
     "frame_stall_threshold": 2,
-    "max_consecutive_misses": 3,
+    "max_consecutive_misses": 20,
     "watchdog": {
       "enabled": true,
       "type": "software",
