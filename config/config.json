@@ -3,7 +3,7 @@
   "_version": "0.1.0",
 
   "system": {
-    "frame_rate_hz": 120,
+    "frame_rate_hz": 60,
     "control_loop_period_ms": 8.333,
     "safety_monitor_period_ms": 1.0,
     "use_preempt_rt": true,
@@ -23,9 +23,9 @@
   },
 
   "camera": {
-    "width": 1536,
-    "height": 864,
-    "fps": 120,
+    "width": 1280,
+    "height": 720,
+    "fps": 60,
     "format": "RAW10",
     "buffer_count": 4,
     "exposure_us": 1000,

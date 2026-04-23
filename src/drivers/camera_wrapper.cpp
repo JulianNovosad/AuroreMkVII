@@ -369,7 +369,7 @@ struct CameraWrapper::Impl {
                 use_libcamera = true;
             } else {
                 std::fprintf(stderr, "FATAL: Unknown AURORE_CAM_MODE: %s\n", cam_mode);
-                std::abort();
+                return false;
             }
         } else {
 #ifndef AURORE_LAPTOP_BUILD
@@ -406,7 +406,7 @@ struct CameraWrapper::Impl {
                 return true;
             }
             std::fprintf(stderr, "FATAL: libcamera init failed. No camera found or hardware error.\n");
-            std::abort();
+            return false;
         }
 #else
         (void)config;
@@ -426,7 +426,7 @@ struct CameraWrapper::Impl {
                 return true;
             }
             std::fprintf(stderr, "FATAL: Webcam unavailable (ID: %d)\n", webcam_id);
-            std::abort();
+            return false;
         }
 
         if (use_test_pattern) {
@@ -503,7 +503,7 @@ struct CameraWrapper::Impl {
         auto& scfg        = cfg->at(0);
         scfg.size.width   = static_cast<unsigned int>(config.width);
         scfg.size.height  = static_cast<unsigned int>(config.height);
-        scfg.pixelFormat  = libcamera::formats::SGRBG10_CSI2P;
+        scfg.pixelFormat  = libcamera::formats::BGGR_PISP_COMP1;
         scfg.bufferCount  = static_cast<unsigned int>(config.buffer_count);
 
         if (cfg->validate() == libcamera::CameraConfiguration::Invalid) {
@@ -634,7 +634,7 @@ struct CameraWrapper::Impl {
         const auto  it   = bufs.find(lc_stream);
         if (it == bufs.end()) {
             std::fprintf(stderr, "FATAL: libcamera request has no buffer for our stream!\n");
-            std::abort();
+            return false;
         }
 
         libcamera::FrameBuffer* fb = it->second;
@@ -643,7 +643,7 @@ struct CameraWrapper::Impl {
         const auto mit = lc_mapped.find(fb);
         if (mit == lc_mapped.end()) {
             std::fprintf(stderr, "FATAL: libcamera buffer not found in DMA map!\n");
-            std::abort();
+            return false;
         }
 
         frame.sequence      = meta.sequence;
@@ -667,7 +667,7 @@ struct CameraWrapper::Impl {
         frame_counter++;
         if (!frame.validate(width, height)) {
             std::fprintf(stderr, "FATAL: libcamera frame failed validation (geometry/corruption)!\n");
-            std::abort();
+            return false;
         }
         return true;
     }
@@ -817,14 +817,14 @@ struct CameraWrapper::Impl {
         auto* frame_data = static_cast<uint8_t*>(aligned_alloc(64, sz));
         if (!frame_data) {
             std::fprintf(stderr, "FATAL: aligned_alloc failed for frame data (%zu bytes)\n", sz);
-            std::abort();
+            return false;
         }
         std::memcpy(frame_data, bgr_frame.data, sz);
 
         // Runtime alignment check (debug assertion)
         if ((reinterpret_cast<uintptr_t>(frame_data) & 0x3Fu) != 0) {
             std::fprintf(stderr, "FATAL: frame data not 64-byte aligned at %p\n", frame_data);
-            std::abort();
+            return false;
         }
 
         frame.plane_data[0] = frame_data;
@@ -840,7 +840,7 @@ struct CameraWrapper::Impl {
 
         if (!frame.validate(width, height)) {
             std::fprintf(stderr, "FATAL: Captured frame failed validation (geometry/corruption)!\n");
-            std::abort();
+            return false;
         }
         return true;
     }
@@ -931,11 +931,11 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
                                     PixelFormat target_format) {
     if (!frame.validate(config_.width, config_.height)) {
         std::fprintf(stderr, "FATAL: wrap_as_mat: Frame validation failed (geometry/contract violation)\n");
-        std::abort();
+        return cv::Mat();
     }
     if (!frame.is_valid()) {
         std::fprintf(stderr, "FATAL: wrap_as_mat: Frame is not valid!\n");
-        std::abort();
+        return cv::Mat();
     }
 
     // Development/webcam: BGR888 frame stored as heap copy
@@ -985,29 +985,13 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
 #if defined(__aarch64__) || defined(__arm__)
         if (is_pisp_comp1) {
             // Stage DMA to cached memory first (~1ms copy from non-cacheable DMA).
-            impl_->raw_staging.resize(static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
-            std::memcpy(impl_->raw_staging.data(), raw, static_cast<size_t>(frame.height) * static_cast<size_t>(stride));
+            const size_t needed = static_cast<size_t>(frame.height) * static_cast<size_t>(stride);
+            impl_->raw_staging.resize(needed);
+            std::memcpy(impl_->raw_staging.data(), raw, needed);
 
-            // Now process from cached staging buffer.
-            const uint8_t* staged = impl_->raw_staging.data();
-            for (int row = 0; row < frame.height; ++row) {
-                const uint8_t* src = staged + row * stride;
-                uint8_t* out = impl_->bgr_scratch.ptr<uint8_t>(row);
-                int col = 0;
-                for (; col <= frame.width - 8; col += 8) {
-                    uint8x8_t px = vld1_u8(src + col);
-                    uint8x8x3_t bgr;
-                    bgr.val[0] = px;
-                    bgr.val[1] = px;
-                    bgr.val[2] = px;
-                    vst3_u8(out, bgr);
-                    out += 24;
-                }
-                for (; col < frame.width; ++col) {
-                    const uint8_t v = src[col];
-                    *out++ = v; *out++ = v; *out++ = v;
-                }
-            }
+            // Edge-aware demosaic using OpenCV
+            cv::Mat bayer_mat(frame.height, frame.width, CV_8UC1, impl_->raw_staging.data());
+            cv::cvtColor(bayer_mat, impl_->bgr_scratch, cv::COLOR_BayerBG2BGR_EA);
         } else {
             // SGRBG10_CSI2P: 5 bytes per 4 pixels (packed 10-bit).
             static const uint8_t kPerm[8] = {0, 1, 2, 3, 5, 6, 7, 0};

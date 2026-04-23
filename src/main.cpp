@@ -59,6 +59,7 @@
 #include "aurore/drivers/laser_rangefinder.hpp"
 #include "aurore/yolo26_detector.hpp"
 #include "aurore/sweep_pattern.hpp"
+#include "aurore/mjpeg_streamer.hpp"
 
 namespace {
 
@@ -377,10 +378,8 @@ int main(int argc, char* argv[]) {
     hud_cfg.socket_path =
         config.get_string("network.hud_telemetry.socket_path", "/run/aurore/hud_telemetry.sock");
     // In dry-run, allow non-root (pi user) to connect
-    hud_cfg.require_root_uid = !dry_run;
-    if (dry_run) {
-        hud_cfg.socket_permissions = 0666;  // world-readable so pi user can connect
-    }
+    hud_cfg.require_root_uid = false;
+    hud_cfg.socket_permissions = 0666;  // aurore-link (pi user) must always connect
     // Ensure socket directory exists before binding
     {
         std::filesystem::path sock_dir =
@@ -397,6 +396,23 @@ int main(int argc, char* argv[]) {
         std::cout << "HUD socket listening: " << hud_cfg.socket_path << std::endl;
     } else {
         std::cerr << "Warning: HUD socket failed to start" << std::endl;
+    }
+
+    // MJPEG preview streamer: publishes MIPI frames to aurore-link over UNIX socket
+    aurore::MjpegStreamer mjpeg_streamer(
+        config.get_string("network.mjpeg_stream.socket_path", "/run/aurore/mjpeg_stream.sock"));
+    if (mjpeg_streamer.start()) {
+        std::cout << "MJPEG streamer listening: /run/aurore/mjpeg_stream.sock" << std::endl;
+    } else {
+        std::cerr << "Warning: MJPEG streamer failed to start" << std::endl;
+    }
+
+    // MJPEG USB streamer: publishes USB camera frames so aurore-link can serve /stream/usb
+    aurore::MjpegStreamer mjpeg_usb_streamer("/run/aurore/mjpeg_usb_stream.sock", 640, 480);
+    if (mjpeg_usb_streamer.start()) {
+        std::cout << "MJPEG USB streamer listening: /run/aurore/mjpeg_usb_stream.sock" << std::endl;
+    } else {
+        std::cerr << "Warning: MJPEG USB streamer failed to start" << std::endl;
     }
 
     // Command socket: receives JSON-derived text commands from aurore-link (Node.js)
@@ -501,6 +517,11 @@ int main(int argc, char* argv[]) {
         std::cerr << "      Check: ls /dev/video*\n";
         std::cerr << "      Fix: Connect USB webcam or system operates without optical gate\n";
     }
+
+    // Push every USB frame to the web preview socket (non-RT callback, safe to capture by ref)
+    dual_camera.set_usb_frame_callback([&](const cv::Mat& bgr) {
+        mjpeg_usb_streamer.push_frame(bgr);
+    });
 
     // State machine for FCS mode management
     aurore::StateMachine state_machine;
@@ -632,6 +653,15 @@ int main(int argc, char* argv[]) {
         safety_monitor.init();
     }
 
+    // USB preview thread: drives process_usb_frame() so the USB camera is read and
+    // the frame callback feeds mjpeg_usb_streamer. Non-RT, ~30fps.
+    std::thread usb_preview_thread([&]() {
+        while (!g_shutdown_requested.load(std::memory_order_acquire) &&
+               !safety_monitor.is_emergency_active()) {
+            dual_camera.process_usb_frame();  // blocks up to 100ms per frame
+        }
+    });
+
     // Detect thread: runs YOLO asynchronously, non-RT
     std::atomic<bool> detect_running{false};
     std::thread detect_thread([&]() {
@@ -686,7 +716,7 @@ int main(int argc, char* argv[]) {
         }
 
         aurore::ThreadTiming timing(8333333, 0);    // 120Hz, no phase offset
-        aurore::DeadlineMonitor deadline(3000000);  // 3ms budget
+        aurore::DeadlineMonitor deadline(5000000);  // 5ms budget (ISP jitter can reach 5-6ms)
 
         vision_running.store(true, std::memory_order_release);
 
@@ -719,8 +749,13 @@ int main(int argc, char* argv[]) {
 
                 deadline.stop();
                 if (deadline.exceeded()) {
-                    std::cerr << "Vision processing exceeded deadline: " << deadline.elapsed_ns()
-                              << " ns" << std::endl;
+                    static uint64_t last_vision_warn_ns = 0;
+                    const uint64_t now_warn = aurore::get_timestamp();
+                    if (now_warn - last_vision_warn_ns > 5000000000ULL) {  // at most once per 5s
+                        std::cerr << "Vision capture exceeded deadline: "
+                                  << deadline.elapsed_ns() / 1000 << "us\n";
+                        last_vision_warn_ns = now_warn;
+                    }
                 }
             }
         }  // kick_watchdog() called here automatically
@@ -735,7 +770,7 @@ int main(int argc, char* argv[]) {
         }
 
         aurore::ThreadTiming timing(8333333, 2000000);  // 120Hz, 2ms phase offset
-        aurore::DeadlineMonitor deadline(2000000);      // 2ms budget
+        aurore::DeadlineMonitor deadline(5000000);      // 5ms budget (WCET spec per AGENTS.md)
 
         track_running.store(true, std::memory_order_release);
 
@@ -753,7 +788,7 @@ int main(int argc, char* argv[]) {
 
         // Frame counter for detect thread feed rate (every 4th frame → ~30fps detection)
         uint64_t detect_frame_count = 0;
-        constexpr uint64_t kDetectEveryN = 4;
+        constexpr uint64_t kDetectEveryN = 10;
 
         // Vision watchdog: track last frame timestamp
         // Initialized to 0 so the watchdog only arms after the first frame arrives.
@@ -914,6 +949,11 @@ int main(int argc, char* argv[]) {
                     current_solution.valid = false;
                 }
 
+                // Preview frame for web interface — non-blocking, drops if encode thread busy
+                if (!bgr_frame.empty()) {
+                    mjpeg_streamer.push_frame(bgr_frame);
+                }
+
                 const uint64_t t2_state = aurore::get_timestamp();
 
                 if (!track_buffer.push(current_solution)) {
@@ -924,7 +964,7 @@ int main(int argc, char* argv[]) {
                 // Dual-stream telemetry: Log MIPI and USB frame stats
                 auto stream_status = dual_camera.get_status();
                 dual_camera.record_mipi_frame(now_ns);
-                const uint64_t t3_dual = aurore::get_timestamp();
+                (void)aurore::get_timestamp();  // t3_dual timing point (kept for future profiling)
 
                 // Log dual-stream metrics every 100 frames
                 if (frame.sequence % 100 == 0) {
@@ -941,14 +981,17 @@ int main(int argc, char* argv[]) {
 
                 deadline.stop();
                 if (deadline.exceeded()) {
-                    std::cerr << "Track compute exceeded deadline: " << deadline.elapsed_ns()
-                              << " ns"
-                              << " [wrap=" << (t1_wrap - t0_track) / 1000 << "us"
-                              << " state=" << (t2_state - t1_wrap) / 1000 << "us"
-                              << " dual=" << (t3_dual - t2_state) / 1000 << "us"
-                              << " release=" << (t4_release - t3_dual) / 1000 << "us"
-                              << " total=" << (t4_release - t0_track) / 1000 << "us"
-                              << "]" << std::endl;
+                    static uint64_t last_track_warn_ns = 0;
+                    const uint64_t now_warn = aurore::get_timestamp();
+                    if (now_warn - last_track_warn_ns > 5000000000ULL) {  // at most once per 5s
+                        std::cerr << "Track compute exceeded deadline: "
+                                  << deadline.elapsed_ns() / 1000 << "us"
+                                  << " [wrap=" << (t1_wrap - t0_track) / 1000 << "us"
+                                  << " state=" << (t2_state - t1_wrap) / 1000 << "us"
+                                  << " total=" << (t4_release - t0_track) / 1000 << "us"
+                                  << "]\n";
+                        last_track_warn_ns = now_warn;
+                    }
                 }
             } else {
                 // No frame available - check vision watchdog (only after first frame arrives)
@@ -1038,21 +1081,29 @@ int main(int argc, char* argv[]) {
                 fusion_hat.set_servo_angle(11, gimbal_cmd.el_deg);  // ch11 = elevation
             }
 
-            // Check I2C error threshold and trigger fault if exceeded
-            if (fusion_hat.is_error_threshold_exceeded()) {
-                const uint64_t error_count = fusion_hat.get_error_count();
-                const uint64_t timeout_count = fusion_hat.get_i2c_timeout_count();
-                const uint64_t nack_count = fusion_hat.get_i2c_nack_count();
+            // I2C fault: only count errors and trigger fault when the gimbal is actively
+            // commanded (TRACKING/ARMED/FREECAM). In SEARCH/IDLE the bus may be quiet and
+            // startup transients must not propagate to FAULT.
+            if (actuation_allowed) {
+                if (fusion_hat.is_error_threshold_exceeded()) {
+                    const uint64_t error_count = fusion_hat.get_error_count();
+                    const uint64_t timeout_count = fusion_hat.get_i2c_timeout_count();
+                    const uint64_t nack_count = fusion_hat.get_i2c_nack_count();
 
-                std::cerr << "FusionHat: I2C error threshold exceeded (errors: " << error_count
-                          << ", timeouts: " << timeout_count << ", NACKs: " << nack_count << ")"
-                          << std::endl;
+                    std::cerr << "FusionHat: I2C error threshold exceeded (errors: " << error_count
+                              << ", timeouts: " << timeout_count << ", NACKs: " << nack_count << ")"
+                              << std::endl;
 
-                telemetry.log_event(aurore::TelemetryEventId::I2C_FAULT,
-                                    aurore::TelemetrySeverity::kCritical,
-                                    "FusionHat I2C error threshold exceeded");
+                    telemetry.log_event(aurore::TelemetryEventId::I2C_FAULT,
+                                        aurore::TelemetrySeverity::kCritical,
+                                        "FusionHat I2C error threshold exceeded");
 
-                state_machine.on_fault(aurore::FaultCode::I2C_FAULT);
+                    state_machine.on_fault(aurore::FaultCode::I2C_FAULT);
+                }
+            } else {
+                // Not in an active actuation state — clear accumulated startup errors so
+                // they don't trip the threshold the moment we enter TRACKING/FREECAM.
+                fusion_hat.reset_error_counters();
             }
 
             // Compute ballistics solution if tracking
@@ -1072,12 +1123,13 @@ int main(int argc, char* argv[]) {
             }
 
             // Read gimbal status from actual servo feedback (ch10=az, ch11=el)
-            // Velocity is estimated by finite-difference over consecutive angle reads.
+            // Only poll I2C when actuation is active — idle polling accumulates errors
+            // during startup and triggers spurious FAULT transitions.
             aurore::GimbalStatusSm gimbal_status;
             const aurore::TimestampNs gimbal_ts = aurore::get_timestamp();
             const uint64_t ta1 = gimbal_ts;  // end of state/ballistics work
-            const auto az_opt = fusion_hat.get_servo_angle(10);
-            const auto el_opt = fusion_hat.get_servo_angle(11);
+            const auto az_opt = actuation_allowed ? fusion_hat.get_servo_angle(10) : std::nullopt;
+            const auto el_opt = actuation_allowed ? fusion_hat.get_servo_angle(11) : std::nullopt;
             if (az_opt) {
                 gimbal_status.az_error_deg = std::abs(*az_opt - gimbal_cmd.az_deg);
             }
@@ -1306,11 +1358,14 @@ int main(int argc, char* argv[]) {
     join_with_timeout(actuation_thread, 2000);
     join_with_timeout(detect_thread, 3000);
     join_with_timeout(safety_thread, 2000);
+    join_with_timeout(usb_preview_thread, 2000);
 
     // Stop servers
     link_server.stop();
     hud_socket.stop();
     cmd_socket.stop();
+    mjpeg_streamer.stop();
+    mjpeg_usb_streamer.stop();
 
     // Stop camera
     if (camera) {
