@@ -241,18 +241,117 @@ struct CameraWrapper::Impl {
         )";
 
         const char* fragment_shader_src = R"(
-            precision mediump float;
+            precision highp float;
             varying vec2 v_texCoord;
             uniform sampler2D u_texture;
+            uniform vec2 u_texelSize;  // 1.0/width, 1.0/height
             void main() {
-                float gray = texture2D(u_texture, v_texCoord).r;
-                gl_FragColor = vec4(gray, gray, gray, 1.0);
+                vec2 pos = v_texCoord;
+                // Bayer BGGR pattern: determine which color at this pixel
+                // BGGR: (even,even)=B, (odd,even)=G, (even,odd)=G, (odd,odd)=R
+                float x = pos.x * u_texelSize.x;
+                float y = pos.y * u_texelSize.y;
+                bool evenX = mod(floor(x), 2.0) < 0.5;
+                bool evenY = mod(floor(y), 2.0) < 0.5;
+
+                float r, g, b;
+
+                if (!evenX && !evenY) {
+                    // Red pixel (odd, odd)
+                    r = texture2D(u_texture, pos).r;
+                    g = (texture2D(u_texture, pos + vec2(-u_texelSize.x, 0.0)).r +
+                         texture2D(u_texture, pos + vec2(u_texelSize.x, 0.0)).r +
+                         texture2D(u_texture, pos + vec2(0.0, -u_texelSize.y)).r +
+                         texture2D(u_texture, pos + vec2(0.0, u_texelSize.y)).r) * 0.25;
+                    b = (texture2D(u_texture, pos + vec2(-u_texelSize.x, -u_texelSize.y)).r +
+                         texture2D(u_texture, pos + vec2(u_texelSize.x, -u_texelSize.y)).r +
+                         texture2D(u_texture, pos + vec2(-u_texelSize.x, u_texelSize.y)).r +
+                         texture2D(u_texture, pos + vec2(u_texelSize.x, u_texelSize.y)).r) * 0.25;
+                } else if (evenX && evenY) {
+                    // Blue pixel (even, even)
+                    b = texture2D(u_texture, pos).r;
+                    g = (texture2D(u_texture, pos + vec2(u_texelSize.x, 0.0)).r +
+                         texture2D(u_texture, pos + vec2(-u_texelSize.x, 0.0)).r +
+                         texture2D(u_texture, pos + vec2(0.0, u_texelSize.y)).r +
+                         texture2D(u_texture, pos + vec2(0.0, -u_texelSize.y)).r) * 0.25;
+                    r = (texture2D(u_texture, pos + vec2(u_texelSize.x, u_texelSize.y)).r +
+                         texture2D(u_texture, pos + vec2(-u_texelSize.x, -u_texelSize.y)).r +
+                         texture2D(u_texture, pos + vec2(u_texelSize.x, -u_texelSize.y)).r +
+                         texture2D(u_texture, pos + vec2(-u_texelSize.x, u_texelSize.y)).r) * 0.25;
+                } else {
+                    // Green pixel
+                    g = texture2D(u_texture, pos).r;
+                    if (evenX) {  // (odd, even) = top/bottom green
+                        r = (texture2D(u_texture, pos + vec2(-u_texelSize.x, 0.0)).r +
+                             texture2D(u_texture, pos + vec2(u_texelSize.x, 0.0)).r) * 0.5;
+                        b = (texture2D(u_texture, pos + vec2(0.0, -u_texelSize.y)).r +
+                             texture2D(u_texture, pos + vec2(0.0, u_texelSize.y)).r) * 0.5;
+                    } else {  // (even, odd) = left/right green
+                        r = (texture2D(u_texture, pos + vec2(0.0, -u_texelSize.y)).r +
+                             texture2D(u_texture, pos + vec2(0.0, u_texelSize.y)).r) * 0.5;
+                        b = (texture2D(u_texture, pos + vec2(-u_texelSize.x, 0.0)).r +
+                             texture2D(u_texture, pos + vec2(u_texelSize.x, 0.0)).r) * 0.5;
+                    }
+                }
+
+                // Output BGR for OpenCV
+                gl_FragColor = vec4(b, g, r, 1.0);
             }
         )";
 
-        // Compile shaders and link program (implementation omitted for brevity)
-        // TODO: Implement full shader compilation and texture upload
-        // For now, GPU path is a stub that falls back to NEON/CPU
+        // Compile and link shader program
+        auto compile_shader = [](GLenum type, const char* src) -> GLuint {
+            GLuint shader = glCreateShader(type);
+            glShaderSource(shader, 1, &src, nullptr);
+            glCompileShader(shader);
+            GLint status;
+            glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+            if (status == GL_FALSE) {
+                char log[512];
+                glGetShaderInfoLog(shader, 512, nullptr, log);
+                std::cerr << "[camera] GPU: Shader compile failed: " << log << "\n";
+                return 0;
+            }
+            return shader;
+        };
+
+        GLuint vs = compile_shader(GL_VERTEX_SHADER, vertex_shader_src);
+        GLuint fs = compile_shader(GL_FRAGMENT_SHADER, fragment_shader_src);
+        if (vs == 0 || fs == 0) {
+            if (vs) glDeleteShader(vs);
+            if (fs) glDeleteShader(fs);
+            eglDestroyContext(egl_display, egl_context);
+            eglDestroySurface(egl_display, egl_surface);
+            return false;
+        }
+
+        gpu_program = glCreateProgram();
+        glAttachShader(gpu_program, vs);
+        glAttachShader(gpu_program, fs);
+        glLinkProgram(gpu_program);
+        GLint link_status;
+        glGetProgramiv(gpu_program, GL_LINK_STATUS, &link_status);
+        if (link_status == GL_FALSE) {
+            char log[512];
+            glGetProgramInfoLog(gpu_program, 512, nullptr, log);
+            std::cerr << "[camera] GPU: Program link failed: " << log << "\n";
+            glDeleteShader(vs);
+            glDeleteShader(fs);
+            glDeleteProgram(gpu_program);
+            eglDestroyContext(egl_display, egl_context);
+            eglDestroySurface(egl_display, egl_surface);
+            return false;
+        }
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+
+        glUseProgram(gpu_program);
+        glGenTextures(1, &gpu_texture);
+        glBindTexture(GL_TEXTURE_2D, gpu_texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
         gpu_initialized = true;
         std::cout << "[camera] GPU: VideoCore VII acceleration initialized\n";
@@ -305,15 +404,83 @@ struct CameraWrapper::Impl {
             return false;
         }
 
-        // TODO: Implement full GPU-based RAW10→BGR888 conversion
-        // Steps:
-        // 1. Upload RAW10 data to OpenGL texture (glTexImage2D)
-        // 2. Render fullscreen quad with fragment shader
-        // 3. Read back converted BGR data (glReadPixels)
-        // 4. Handle RAW10 unpacking (10-bit to 8-bit) in vertex/fragment shader
+        // GPU-based RAW10→BGR888 conversion using VideoCore VII
+        // Upload RAW data as luminance texture
+        int width = raw.cols;
+        int height = raw.rows;
 
-        // For now, fall back to NEON/CPU path
-        return false;
+        // Create FBO for offscreen rendering
+        static GLuint fbo = 0;
+        static GLuint rbo = 0;
+        if (fbo == 0) {
+            glGenFramebuffers(1, &fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glGenRenderbuffers(1, &rbo);
+            glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA, width, height);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rbo);
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                std::cerr << "[camera] GPU: FBO incomplete\n";
+                return false;
+            }
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+
+        // Upload as luminance texture (1 channel)
+        glBindTexture(GL_TEXTURE_2D, gpu_texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, width, height, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, raw.data);
+
+        // Set up viewport and FBO
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glViewport(0, 0, width, height);
+        glUseProgram(gpu_program);
+
+        // Set texture uniform
+        GLint tex_loc = glGetUniformLocation(gpu_program, "u_texture");
+        glUniform1i(tex_loc, 0);
+
+        // Set texel size uniform
+        GLint texel_loc = glGetUniformLocation(gpu_program, "u_texelSize");
+        glUniform2f(texel_loc, 1.0f/width, 1.0f/height);
+
+        // Render fullscreen quad
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDisable(GL_DEPTH_TEST);
+
+        // Simple quad vertices (two triangles)
+        const float vertices[] = {
+            -1.0f, -1.0f, 0.0f, 0.0f,
+             1.0f, -1.0f, 1.0f, 0.0f,
+            -1.0f,  1.0f, 0.0f, 1.0f,
+             1.0f,  1.0f, 1.0f, 1.0f,
+        };
+
+        GLuint vbo, vao;
+        glGenVertexArrays(1, &vao);
+        glGenBuffers(1, &vbo);
+        glBindVertexArray(vao);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+        GLint pos_attr = glGetAttribLocation(gpu_program, "a_position");
+        GLint tex_attr = glGetAttribLocation(gpu_program, "a_texCoord");
+        glEnableVertexAttribArray(pos_attr);
+        glEnableVertexAttribArray(tex_attr);
+        glVertexAttribPointer(pos_attr, 2, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)0);
+        glVertexAttribPointer(tex_attr, 2, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)(2*sizeof(float)));
+
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+        // Read back BGR data
+        bgr.create(height, width, CV_8UC3);
+        glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, bgr.data);
+
+        // Cleanup
+        glDeleteBuffers(1, &vbo);
+        glDeleteVertexArrays(1, &vao);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        return true;
     }
 #endif  // AURORE_USE_GPU
 
@@ -938,9 +1105,12 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
         return cv::Mat();
     }
 
-    // Zero-copy BGR888: wrap DMA buffer directly as cv::Mat (no memcpy)
     if (frame.format == PixelFormat::BGR888 && target_format == PixelFormat::BGR888) {
-        return cv::Mat(frame.height, frame.width, CV_8UC3, frame.plane_data[0]);
+        // ISP configured for BGR888: DMA bytes are already B,G,R — no conversion needed.
+        // Zero-copy: return Mat header over DMA buffer (AM7-L3-VIS-001).
+        // Caller MUST NOT use this Mat after camera->release_frame().
+        return cv::Mat(frame.height, frame.width, CV_8UC3,
+                       frame.plane_data[0], static_cast<size_t>(frame.stride[0]));
     }
 
     // Hardware: RAW10 → greyscale BGR888
@@ -962,8 +1132,7 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
         // Try GPU acceleration first (VideoCore VII)
         // Expected performance: < 0.5ms for 1536×864
         if (impl_->gpu_initialized) {
-            // GPU path: convert using OpenGL ES shader
-            // TODO: Implement full GPU conversion
+            // GPU path: convert using OpenGL ES shader (VideoCore VII)
             if (impl_->convert_raw10_to_bgr_gpu(impl_->bgr_scratch, impl_->bgr_scratch)) {
                 return impl_->bgr_scratch;
             }
