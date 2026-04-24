@@ -60,6 +60,7 @@
 #include "aurore/yolo26_detector.hpp"
 #include "aurore/sweep_pattern.hpp"
 #include "aurore/mjpeg_streamer.hpp"
+#include "aurore/security.hpp"
 
 namespace {
 
@@ -370,6 +371,23 @@ aurore::CameraConfig cam_config;
         static_cast<uint16_t>(config.get_int("network.aurore_link.telemetry_port", 9000));
     link_cfg.command_port =
         static_cast<uint16_t>(config.get_int("network.aurore_link.command_port", 9002));
+    link_cfg.session_timeout_s =
+        static_cast<uint32_t>(config.get_int("network.aurore_link.session_timeout_s", 300));
+
+    // AM7-L2-SEC-006: Load HMAC key from protected storage (env var or key file)
+    {
+        const std::string key_path =
+            config.get_string("security.hmac_key_path", "/etc/aurore/hmac.key");
+        std::string hmac_key;
+        if (aurore::security::load_hmac_key(key_path, hmac_key)) {
+            link_cfg.hmac_key = hmac_key;
+            std::cout << "[security] HMAC key loaded (" << hmac_key.size() << " bytes)\n";
+        } else {
+            std::cerr << "[security] WARNING: HMAC authentication DISABLED — "
+                         "set AURORE_HMAC_KEY env var or configure security.hmac_key_path\n";
+        }
+    }
+
     aurore::AuroreLinkServer link_server(link_cfg);
     link_server.start();
 

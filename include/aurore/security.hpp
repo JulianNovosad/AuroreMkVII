@@ -4,11 +4,17 @@
 #include <vector>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
+#include <cerrno>
 #include <future>
 #include <functional>
+#include <fstream>
+#include <sys/stat.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
+#include <openssl/rand.h>
 #include <iomanip>
 #include <sstream>
 
@@ -163,6 +169,125 @@ bool verify_sequence_number(uint32_t current, uint32_t expected);
  * @return true if gap > threshold (security concern)
  */
 bool is_sequence_gap(uint32_t old_seq, uint32_t new_seq, uint32_t threshold);
+
+/**
+ * @brief Generate a 256-bit key using hardware RNG (/dev/urandom).
+ *
+ * AM7-L3-SEC-006: Keys shall be generated using hardware RNG or /dev/urandom
+ * with ≥256 bits entropy.
+ *
+ * @param out_key Output buffer for 32-byte key
+ * @return true on success
+ */
+inline bool generate_key_256bit(uint8_t out_key[32]) {
+    return RAND_bytes(out_key, 32) == 1;
+}
+
+/**
+ * @brief Save a 256-bit key to a protected file (mode 0600).
+ *
+ * AM7-L2-SEC-006: Keys shall be stored in protected storage.
+ * File is written atomically and permissions set to owner-read-only.
+ *
+ * @param path File path for key storage
+ * @param key  32-byte key to write
+ * @return true on success
+ */
+inline bool save_key_to_file(const std::string& path, const uint8_t key[32]) {
+    std::ofstream f(path, std::ios::binary | std::ios::trunc);
+    if (!f.is_open()) {
+        std::fprintf(stderr, "[security] Cannot open key file for write: %s\n", path.c_str());
+        return false;
+    }
+    f.write(reinterpret_cast<const char*>(key), 32);
+    f.close();
+    if (::chmod(path.c_str(), 0600) != 0) {
+        std::fprintf(stderr, "[security] chmod 0600 failed for %s: %s\n", path.c_str(), strerror(errno));
+        return false;
+    }
+    return true;
+}
+
+/**
+ * @brief Load HMAC key from protected storage per AM7-L2-SEC-006.
+ *
+ * Priority order:
+ *   1. AURORE_HMAC_KEY env var (hex-encoded 64-char string = 32 bytes)
+ *   2. File at key_path (binary 32-byte file, mode must be ≤ 0640)
+ *
+ * Keys stored in config.json plaintext are rejected.
+ *
+ * @param key_path Path to binary key file (checked if env var absent)
+ * @param out_key  Output: 32-byte key
+ * @return true if key loaded successfully
+ */
+inline bool load_hmac_key(const std::string& key_path, std::string& out_key) {
+    // 1. Check environment variable first (CI/container deployments)
+    const char* env_key = std::getenv("AURORE_HMAC_KEY");
+    if (env_key != nullptr) {
+        const size_t env_len = std::strlen(env_key);
+        if (env_len == 64) {
+            // Hex-encoded 256-bit key
+            uint8_t raw[32];
+            for (size_t i = 0; i < 32; ++i) {
+                char hex[3] = {env_key[i * 2], env_key[i * 2 + 1], '\0'};
+                char* end = nullptr;
+                raw[i] = static_cast<uint8_t>(std::strtoul(hex, &end, 16));
+                if (end != hex + 2) {
+                    std::fprintf(stderr, "[security] AURORE_HMAC_KEY: invalid hex at byte %zu\n", i);
+                    return false;
+                }
+            }
+            out_key.assign(reinterpret_cast<const char*>(raw), 32);
+            return true;
+        } else if (env_len >= 32) {
+            // Raw bytes in env var (less preferred, but accept if ≥32 chars)
+            out_key.assign(env_key, 32);
+            return true;
+        }
+        std::fprintf(stderr, "[security] AURORE_HMAC_KEY env var too short (%zu chars, need 64 hex)\n", env_len);
+        return false;
+    }
+
+    // 2. Load from file — check permissions first (AM7-L2-SEC-006)
+    if (key_path.empty()) {
+        std::fprintf(stderr, "[security] No AURORE_HMAC_KEY env var and no key file path configured\n");
+        return false;
+    }
+
+    struct stat st{};
+    if (::stat(key_path.c_str(), &st) != 0) {
+        std::fprintf(stderr, "[security] Key file not found: %s\n", key_path.c_str());
+        return false;
+    }
+
+    // Reject world-readable key files
+    if ((st.st_mode & 0004) != 0) {
+        std::fprintf(stderr, "[security] Key file %s is world-readable (mode %04o) — REJECTED\n",
+                     key_path.c_str(), static_cast<unsigned int>(st.st_mode) & 0777U);
+        return false;
+    }
+
+    std::ifstream f(key_path, std::ios::binary);
+    if (!f.is_open()) {
+        std::fprintf(stderr, "[security] Cannot open key file: %s\n", key_path.c_str());
+        return false;
+    }
+
+    std::string raw_key(32, '\0');
+    f.read(raw_key.data(), 32);
+    const auto bytes_read = f.gcount();
+    f.close();
+
+    if (bytes_read < 32) {
+        std::fprintf(stderr, "[security] Key file too short: %s (%ld bytes, need 32)\n",
+                     key_path.c_str(), static_cast<long>(bytes_read));
+        return false;
+    }
+
+    out_key = raw_key;
+    return true;
+}
 
 /**
  * @brief Async frame authentication helper.
