@@ -599,6 +599,22 @@ aurore::CameraConfig cam_config;
         state_machine.on_fault(aurore::FaultCode::WATCHDOG_TIMEOUT);
     });
 
+    // AM7-L3-SEC-001/AM7-L3-SEC-004: Security event callback — log and fault on attacks
+    link_server.set_security_event_callback(
+        [&](const std::string& event_type, uint32_t sequence) {
+            telemetry.log_event(aurore::TelemetryEventId::SAFETY_FAULT,
+                                aurore::TelemetrySeverity::kCritical,
+                                "AuroreLink security event: " + event_type);
+            if (event_type == "HMAC_VERIFY_FAIL") {
+                state_machine.on_fault(aurore::FaultCode::AUTH_FAILURE);
+            } else if (event_type == "SEQ_GAP_FAULT") {
+                // AM7-L3-SEC-004: sequence gap > 1000 triggers security fault
+                std::cerr << "AuroreLink: SEQ_GAP_FAULT seq=" << sequence
+                          << " — triggering security FAULT\n";
+                state_machine.on_fault(aurore::FaultCode::SEQUENCE_GAP);
+            }
+        });
+
     // Command socket callbacks: browser UI → state machine
     cmd_socket.set_mode_callback([&](const std::string& mode) {
         std::cout << "CommandSocket: mode → " << mode << std::endl;
