@@ -21,6 +21,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "aurore/timing.hpp"
@@ -77,12 +78,15 @@ bool FusionHat::write_sysfs_with_retry(const std::string& path, int value) {
                 return false;
             }
 
+            i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
             attempt++;
             if (attempt <= config_.max_i2c_retries) {
                 std::cerr << "FusionHat: I2C NACK on write to " << path
                           << " (attempt: " << attempt << "/" << (config_.max_i2c_retries + 1) << ")" << std::endl;
-                i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
-                continue;  // Retry
+                // Short delay before retry to avoid bus hammering
+                struct timespec ts = {0, 500000L};  // 500µs
+                nanosleep(&ts, nullptr);
+                continue;
             }
 
             error_count_.fetch_add(1, std::memory_order_relaxed);
@@ -103,24 +107,25 @@ bool FusionHat::write_sysfs_with_retry(const std::string& path, int value) {
                 return false;
             }
 
+            i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
             attempt++;
             if (attempt <= config_.max_i2c_retries) {
-                i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
-                continue;  // Retry
+                struct timespec ts = {0, 500000L};  // 500µs
+                nanosleep(&ts, nullptr);
+                continue;
             }
 
             error_count_.fetch_add(1, std::memory_order_relaxed);
             return false;
         }
 
-        // Check for timeout even on success
+        // Operation succeeded; log slow response but do NOT count as error —
+        // the write went through and treating it as failure inflates the fault counter.
         if (elapsed_ns > timeout_ns) {
             i2c_timeout_count_.fetch_add(1, std::memory_order_relaxed);
-            error_count_.fetch_add(1, std::memory_order_relaxed);
             std::cerr << "FusionHat: I2C slow response on write to " << path
                       << " (elapsed: " << (elapsed_ns / 1000000) << "ms > "
                       << config_.i2c_timeout_ms << "ms threshold)" << std::endl;
-            return false;
         }
 
         return true;  // Success
@@ -150,10 +155,12 @@ int FusionHat::read_sysfs_with_retry(const std::string& path) {
                 return -1;
             }
 
+        i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
             attempt++;
             if (attempt <= config_.max_i2c_retries) {
-                i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
-                continue;  // Retry
+                struct timespec ts = {0, 500000L};  // 500µs
+                nanosleep(&ts, nullptr);
+                continue;
             }
 
             error_count_.fetch_add(1, std::memory_order_relaxed);
@@ -175,24 +182,24 @@ int FusionHat::read_sysfs_with_retry(const std::string& path) {
                 return -1;
             }
 
+            i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
             attempt++;
             if (attempt <= config_.max_i2c_retries) {
-                i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
-                continue;  // Retry
+                struct timespec ts = {0, 500000L};  // 500µs
+                nanosleep(&ts, nullptr);
+                continue;
             }
 
             error_count_.fetch_add(1, std::memory_order_relaxed);
             return -1;
         }
 
-        // Check for timeout even on success
+        // Operation succeeded; log slow response but do NOT count as error.
         if (elapsed_ns > timeout_ns) {
             i2c_timeout_count_.fetch_add(1, std::memory_order_relaxed);
-            error_count_.fetch_add(1, std::memory_order_relaxed);
             std::cerr << "FusionHat: I2C slow response on read from " << path
                       << " (elapsed: " << (elapsed_ns / 1000000) << "ms > "
                       << config_.i2c_timeout_ms << "ms threshold)" << std::endl;
-            return -1;
         }
 
         return value;  // Success

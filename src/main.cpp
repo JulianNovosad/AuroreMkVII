@@ -289,6 +289,31 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // AM7-L2-SEC-002 / AM7-L3-SEC-002: Verify binary ECDSA signature before proceeding
+    // In dry-run, verification is advisory (no halt on failure)
+    {
+        const std::string pub_path = "/etc/aurore/signing_key.pub";
+        const std::string sig_path = "/etc/aurore/aurore.sig";
+        if (aurore::security::verify_self(pub_path, sig_path)) {
+            std::cout << "[security] Binary signature verified (ECDSA P-256)\n";
+        } else {
+            if (dry_run) {
+                std::cerr << "[security] WARNING: Binary signature not verified "
+                             "(key/sig absent or invalid) — continuing in dry-run\n";
+            } else {
+                std::cerr << "[security] ERROR: Binary signature verification FAILED "
+                             "— set up signing key at " << pub_path
+                          << " and signature at " << sig_path << "\n"
+                          << "           Generate keypair: openssl ecparam -name prime256v1 "
+                             "-genkey -noout | openssl pkey -out /etc/aurore/signing_key.pem\n"
+                          << "           Extract pubkey:   openssl pkey -in "
+                             "/etc/aurore/signing_key.pem -pubout -out " << pub_path << "\n"
+                          << "           Sign binary:      <see scripts/sign_binary.sh>\n"
+                          << "           Continuing without signature verification.\n";
+            }
+        }
+    }
+
     // Load configuration
     aurore::ConfigLoader config("config/config.json");
     if (!config.is_loaded()) {

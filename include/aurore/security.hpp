@@ -11,9 +11,11 @@
 #include <functional>
 #include <fstream>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 #include <openssl/evp.h>
+#include <openssl/pem.h>
 #include <openssl/rand.h>
 #include <iomanip>
 #include <sstream>
@@ -169,6 +171,181 @@ bool verify_sequence_number(uint32_t current, uint32_t expected);
  * @return true if gap > threshold (security concern)
  */
 bool is_sequence_gap(uint32_t old_seq, uint32_t new_seq, uint32_t threshold);
+
+// ---------------------------------------------------------------------------
+// ECDSA P-256 firmware signing (AM7-L2-SEC-002 / AM7-L3-SEC-002)
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Sign a file with ECDSA P-256, writing the DER-encoded signature.
+ *
+ * The key is a PEM-encoded EC private key (prime256v1 / P-256).
+ * Output signature is DER-encoded and written to sig_path.
+ *
+ * @param file_path  Path to the file to sign (e.g. the aurore binary)
+ * @param key_pem    PEM-encoded EC private key string
+ * @param sig_path   Output path for DER-encoded ECDSA signature
+ * @return true on success
+ */
+inline bool sign_file_ecdsa(const std::string& file_path,
+                             const std::string& key_pem,
+                             const std::string& sig_path) {
+    // Hash the file with SHA-256
+    unsigned char file_hash[32];
+    {
+        std::ifstream f(file_path, std::ios::binary);
+        if (!f.is_open()) {
+            std::fprintf(stderr, "[security] sign_file: cannot open %s\n", file_path.c_str());
+            return false;
+        }
+        SHA256_CTX ctx;
+        SHA256_Init(&ctx);
+        char buf[65536];
+        while (f.read(buf, sizeof(buf)) || f.gcount() > 0) {
+            SHA256_Update(&ctx, buf, static_cast<size_t>(f.gcount()));
+        }
+        SHA256_Final(file_hash, &ctx);
+    }
+
+    // Load private key from PEM string
+    BIO* bio = BIO_new_mem_buf(key_pem.data(), static_cast<int>(key_pem.size()));
+    if (!bio) return false;
+    EVP_PKEY* pkey = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
+    BIO_free(bio);
+    if (!pkey) {
+        std::fprintf(stderr, "[security] sign_file: failed to load private key\n");
+        return false;
+    }
+
+    // Sign the hash
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+    if (!mdctx) { EVP_PKEY_free(pkey); return false; }
+    if (EVP_DigestSignInit(mdctx, nullptr, EVP_sha256(), nullptr, pkey) != 1 ||
+        EVP_DigestSignUpdate(mdctx, file_hash, 32) != 1) {
+        EVP_MD_CTX_free(mdctx);
+        EVP_PKEY_free(pkey);
+        return false;
+    }
+    size_t sig_len = 0;
+    EVP_DigestSignFinal(mdctx, nullptr, &sig_len);
+    std::vector<uint8_t> sig(sig_len);
+    if (EVP_DigestSignFinal(mdctx, sig.data(), &sig_len) != 1) {
+        EVP_MD_CTX_free(mdctx);
+        EVP_PKEY_free(pkey);
+        return false;
+    }
+    EVP_MD_CTX_free(mdctx);
+    EVP_PKEY_free(pkey);
+
+    // Write DER signature to file
+    std::ofstream out(sig_path, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+        std::fprintf(stderr, "[security] sign_file: cannot write %s\n", sig_path.c_str());
+        return false;
+    }
+    out.write(reinterpret_cast<const char*>(sig.data()), static_cast<std::streamsize>(sig_len));
+    ::chmod(sig_path.c_str(), 0644);
+    return true;
+}
+
+/**
+ * @brief Verify ECDSA P-256 signature of a file.
+ *
+ * Reads the DER-encoded signature from sig_path and verifies against
+ * the SHA-256 hash of file_path using the provided PEM public key.
+ *
+ * @param file_path  Path to the file whose signature to verify
+ * @param pubkey_pem PEM-encoded EC public key (prime256v1)
+ * @param sig_path   Path to DER-encoded ECDSA signature
+ * @return true if signature is valid
+ */
+inline bool verify_file_ecdsa(const std::string& file_path,
+                               const std::string& pubkey_pem,
+                               const std::string& sig_path) {
+    // Hash the file
+    unsigned char file_hash[32];
+    {
+        std::ifstream f(file_path, std::ios::binary);
+        if (!f.is_open()) return false;
+        SHA256_CTX ctx;
+        SHA256_Init(&ctx);
+        char buf[65536];
+        while (f.read(buf, sizeof(buf)) || f.gcount() > 0) {
+            SHA256_Update(&ctx, buf, static_cast<size_t>(f.gcount()));
+        }
+        SHA256_Final(file_hash, &ctx);
+    }
+
+    // Load signature
+    std::ifstream sf(sig_path, std::ios::binary);
+    if (!sf.is_open()) {
+        std::fprintf(stderr, "[security] verify_file: no signature at %s\n", sig_path.c_str());
+        return false;
+    }
+    sf.seekg(0, std::ios::end);
+    std::vector<uint8_t> sig(static_cast<size_t>(sf.tellg()));
+    sf.seekg(0, std::ios::beg);
+    sf.read(reinterpret_cast<char*>(sig.data()), static_cast<std::streamsize>(sig.size()));
+
+    // Load public key
+    BIO* bio = BIO_new_mem_buf(pubkey_pem.data(), static_cast<int>(pubkey_pem.size()));
+    if (!bio) return false;
+    EVP_PKEY* pkey = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
+    BIO_free(bio);
+    if (!pkey) {
+        std::fprintf(stderr, "[security] verify_file: failed to load public key\n");
+        return false;
+    }
+
+    // Verify
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+    bool ok = false;
+    if (mdctx &&
+        EVP_DigestVerifyInit(mdctx, nullptr, EVP_sha256(), nullptr, pkey) == 1 &&
+        EVP_DigestVerifyUpdate(mdctx, file_hash, 32) == 1 &&
+        EVP_DigestVerifyFinal(mdctx, sig.data(), sig.size()) == 1) {
+        ok = true;
+    }
+    if (mdctx) EVP_MD_CTX_free(mdctx);
+    EVP_PKEY_free(pkey);
+    return ok;
+}
+
+/**
+ * @brief Verify this process's own binary using a detached ECDSA signature.
+ *
+ * Reads /proc/self/exe for the binary path, public key from pubkey_path,
+ * and DER signature from sig_path. Per AM7-L3-SEC-002.
+ *
+ * @param pubkey_path Path to PEM public key (default /etc/aurore/signing_key.pub)
+ * @param sig_path    Path to detached signature (default /etc/aurore/aurore.sig)
+ * @return true if binary is authentic; false if verification fails or files absent
+ */
+inline bool verify_self(const std::string& pubkey_path = "/etc/aurore/signing_key.pub",
+                        const std::string& sig_path    = "/etc/aurore/aurore.sig") {
+    // Resolve self binary path via /proc/self/exe
+    char exe_path[4096] = {};
+    ssize_t n = ::readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (n <= 0) {
+        std::fprintf(stderr, "[security] verify_self: readlink /proc/self/exe failed\n");
+        return false;
+    }
+    exe_path[n] = '\0';
+
+    // Load public key
+    std::ifstream pkf(pubkey_path);
+    if (!pkf.is_open()) {
+        std::fprintf(stderr, "[security] verify_self: public key not found at %s\n",
+                     pubkey_path.c_str());
+        return false;
+    }
+    pkf.seekg(0, std::ios::end);
+    std::string pubkey_pem(static_cast<size_t>(pkf.tellg()), '\0');
+    pkf.seekg(0, std::ios::beg);
+    pkf.read(pubkey_pem.data(), static_cast<std::streamsize>(pubkey_pem.size()));
+
+    return verify_file_ecdsa(exe_path, pubkey_pem, sig_path);
+}
 
 /**
  * @brief Generate a 256-bit key using hardware RNG (/dev/urandom).
