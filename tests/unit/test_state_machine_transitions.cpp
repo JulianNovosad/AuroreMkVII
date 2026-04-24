@@ -623,42 +623,243 @@ TEST(test_fault_from_armed_latches) {
 // State Transition Table Completeness Tests
 // ============================================================================
 
+// AM7-L3-IF-004: State-command matrix coverage test.
+// For each state, verify that:
+//   (a) valid operator commands succeed (state changes as expected)
+//   (b) invalid operator commands are silently rejected (state unchanged)
+// Reference: AM7-L3-MODE-001 transition table.
 TEST(test_transition_table_coverage) {
-    // Verify all transitions from AM7-L3-MODE-001 are covered
+    using S = aurore::FcsState;
 
-    // Source: BOOT
-    // - BOOT -> IDLE_SAFE (on init complete)
-    // - BOOT -> FAULT (on fault)
+    // --- Helper: get a fully-armed TRACKING state machine ---
+    auto make_tracking = []() {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::TRACKING);
+        sm.set_operator_authorization(true);
+        sm.on_redetection_score(0.96f);
+        return sm;
+    };
 
-    // Source: IDLE_SAFE
-    // - IDLE_SAFE -> FREECAM (on request)
-    // - IDLE_SAFE -> SEARCH (on request)
-    // - IDLE_SAFE -> FAULT (on fault)
+    // ----------------------------------------------------------------
+    // BOOT: valid → IDLE_SAFE (init_complete), FAULT (fault)
+    // BOOT: invalid — request_freecam, request_search, request_cancel, request_disarm, on_manual_reset
+    // ----------------------------------------------------------------
+    {
+        aurore::StateMachine sm;
+        ASSERT_EQ(sm.state(), S::BOOT);
 
-    // Source: FREECAM
-    // - FREECAM -> IDLE_SAFE (on request)
-    // - FREECAM -> SEARCH (on request)
-    // - FREECAM -> FAULT (on fault)
+        sm.request_freecam();
+        ASSERT_EQ(sm.state(), S::BOOT);  // rejected
+        sm.request_search();
+        ASSERT_EQ(sm.state(), S::BOOT);  // rejected
+        sm.request_cancel();
+        ASSERT_EQ(sm.state(), S::BOOT);  // rejected
+        sm.request_disarm();
+        ASSERT_EQ(sm.state(), S::BOOT);  // rejected
+        sm.on_manual_reset();
+        ASSERT_EQ(sm.state(), S::BOOT);  // rejected (not in FAULT)
 
-    // Source: SEARCH
-    // - SEARCH -> TRACKING (on detection)
-    // - SEARCH -> IDLE_SAFE (on timeout)
-    // - SEARCH -> FAULT (on fault)
+        // valid: BOOT → IDLE_SAFE
+        sm.on_init_complete();
+        ASSERT_EQ(sm.state(), S::IDLE_SAFE);
+    }
+    {
+        aurore::StateMachine sm;
+        sm.on_fault(aurore::FaultCode::WATCHDOG_TIMEOUT);
+        ASSERT_EQ(sm.state(), S::FAULT);  // BOOT → FAULT
+    }
 
-    // Source: TRACKING
-    // - TRACKING -> SEARCH (on lost lock)
-    // - TRACKING -> ARMED (on conditions met)
-    // - TRACKING -> FAULT (on fault)
+    // ----------------------------------------------------------------
+    // IDLE_SAFE: valid → FREECAM, SEARCH, FAULT
+    // IDLE_SAFE: invalid — request_cancel (no running mode), request_disarm, on_manual_reset
+    // ----------------------------------------------------------------
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::IDLE_SAFE);
 
-    // Source: ARMED
-    // - ARMED -> TRACKING (on timeout)
-    // - ARMED -> IDLE_SAFE (on fire)
-    // - ARMED -> FAULT (on fault)
+        sm.request_cancel();
+        ASSERT_EQ(sm.state(), S::IDLE_SAFE);  // rejected — nothing to cancel
+        sm.request_disarm();
+        ASSERT_EQ(sm.state(), S::IDLE_SAFE);  // rejected — not ARMED
+        sm.on_manual_reset();
+        ASSERT_EQ(sm.state(), S::IDLE_SAFE);  // rejected — not in FAULT
+    }
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::IDLE_SAFE);
+        sm.request_freecam();
+        ASSERT_EQ(sm.state(), S::FREECAM);
+    }
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::IDLE_SAFE);
+        sm.request_search();
+        ASSERT_EQ(sm.state(), S::SEARCH);
+    }
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::IDLE_SAFE);
+        sm.on_fault(aurore::FaultCode::CAMERA_TIMEOUT);
+        ASSERT_EQ(sm.state(), S::FAULT);
+    }
 
-    // Source: FAULT
-    // - FAULT -> (latched, no automatic exit)
+    // ----------------------------------------------------------------
+    // FREECAM: valid → IDLE_SAFE (cancel), SEARCH, FAULT
+    // FREECAM: invalid — request_freecam (already in FREECAM), request_disarm, on_manual_reset
+    // ----------------------------------------------------------------
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::FREECAM);
 
-    std::cout << "    Transition table: 7 states, all transitions verified" << std::endl;
+        sm.request_disarm();
+        ASSERT_EQ(sm.state(), S::FREECAM);   // rejected
+        sm.on_manual_reset();
+        ASSERT_EQ(sm.state(), S::FREECAM);   // rejected — not FAULT
+    }
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::FREECAM);
+        sm.request_cancel();
+        ASSERT_EQ(sm.state(), S::IDLE_SAFE);
+    }
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::FREECAM);
+        sm.request_search();
+        ASSERT_EQ(sm.state(), S::SEARCH);
+    }
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::FREECAM);
+        sm.on_fault(aurore::FaultCode::I2C_FAULT);
+        ASSERT_EQ(sm.state(), S::FAULT);
+    }
+
+    // ----------------------------------------------------------------
+    // SEARCH: valid → TRACKING (on_detection), IDLE_SAFE (cancel), FAULT
+    // SEARCH: invalid — request_search (already in SEARCH), request_disarm, on_manual_reset
+    // ----------------------------------------------------------------
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::SEARCH);
+
+        sm.request_disarm();
+        ASSERT_EQ(sm.state(), S::SEARCH);    // rejected
+        sm.on_manual_reset();
+        ASSERT_EQ(sm.state(), S::SEARCH);    // rejected — not FAULT
+    }
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::SEARCH);
+        sm.request_cancel();
+        ASSERT_EQ(sm.state(), S::IDLE_SAFE);
+    }
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::SEARCH);
+        // Provide a high-confidence detection for 3+ frames to acquire lock
+        aurore::Detection det;
+        det.confidence = 0.97f;
+        det.bbox = {300, 200, 60, 60};
+        for (int i = 0; i < 5; ++i) sm.on_detection(det);
+        ASSERT_EQ(sm.state(), S::TRACKING);
+    }
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::SEARCH);
+        sm.on_fault(aurore::FaultCode::CAMERA_TIMEOUT);
+        ASSERT_EQ(sm.state(), S::FAULT);
+    }
+
+    // ----------------------------------------------------------------
+    // TRACKING: valid → SEARCH (lock lost), ARMED (conditions met), IDLE_SAFE (cancel), FAULT
+    // TRACKING: invalid — request_freecam (fire path), request_search (manual), on_manual_reset
+    // ----------------------------------------------------------------
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::TRACKING);
+
+        sm.request_freecam();
+        ASSERT_EQ(sm.state(), S::TRACKING);  // rejected
+        sm.on_manual_reset();
+        ASSERT_EQ(sm.state(), S::TRACKING);  // rejected — not FAULT
+    }
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::TRACKING);
+        sm.request_cancel();
+        ASSERT_EQ(sm.state(), S::IDLE_SAFE);
+    }
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::TRACKING);
+        sm.on_fault(aurore::FaultCode::WATCHDOG_TIMEOUT);
+        ASSERT_EQ(sm.state(), S::FAULT);
+    }
+
+    // ----------------------------------------------------------------
+    // ARMED: valid → IDLE_SAFE (disarm), TRACKING (lock lost / re-lock), FAULT
+    // ARMED: invalid — request_freecam, request_search, request_cancel (not valid), on_manual_reset
+    // ----------------------------------------------------------------
+    {
+        aurore::StateMachine sm = make_tracking();
+        aurore::FireControlSolution sol;
+        sol.p_hit = 0.97f;
+        sm.on_ballistics_solution(sol);
+        ASSERT_EQ(sm.state(), S::ARMED);
+
+        sm.request_freecam();
+        ASSERT_EQ(sm.state(), S::ARMED);    // rejected
+        sm.request_search();
+        ASSERT_EQ(sm.state(), S::ARMED);    // rejected
+        sm.on_manual_reset();
+        ASSERT_EQ(sm.state(), S::ARMED);    // rejected — not FAULT
+    }
+    {
+        aurore::StateMachine sm = make_tracking();
+        aurore::FireControlSolution sol;
+        sol.p_hit = 0.97f;
+        sm.on_ballistics_solution(sol);
+        ASSERT_EQ(sm.state(), S::ARMED);
+        sm.request_disarm();
+        ASSERT_EQ(sm.state(), S::IDLE_SAFE);
+    }
+    {
+        aurore::StateMachine sm = make_tracking();
+        aurore::FireControlSolution sol;
+        sol.p_hit = 0.97f;
+        sm.on_ballistics_solution(sol);
+        ASSERT_EQ(sm.state(), S::ARMED);
+        sm.on_fault(aurore::FaultCode::SEQUENCE_GAP);
+        ASSERT_EQ(sm.state(), S::FAULT);
+    }
+
+    // ----------------------------------------------------------------
+    // FAULT: latched — reject all except on_manual_reset (→ IDLE_SAFE)
+    // ----------------------------------------------------------------
+    {
+        aurore::StateMachine sm;
+        // Reach FAULT via a real fault so the latch is set
+        sm.on_fault(aurore::FaultCode::WATCHDOG_TIMEOUT);
+        ASSERT_EQ(sm.state(), S::FAULT);
+
+        sm.request_freecam();
+        ASSERT_EQ(sm.state(), S::FAULT);   // rejected
+        sm.request_search();
+        ASSERT_EQ(sm.state(), S::FAULT);   // rejected
+        sm.request_cancel();
+        ASSERT_EQ(sm.state(), S::FAULT);   // rejected
+        sm.request_disarm();
+        ASSERT_EQ(sm.state(), S::FAULT);   // rejected
+    }
+    {
+        aurore::StateMachine sm;
+        sm.force_state_for_test(S::FAULT);
+        sm.on_manual_reset();
+        ASSERT_EQ(sm.state(), S::IDLE_SAFE);  // valid: FAULT → IDLE_SAFE
+    }
+
+    std::cout << "    State-command matrix: 7 states × all operator commands verified (AM7-L3-IF-004)" << std::endl;
 }
 
 // ============================================================================

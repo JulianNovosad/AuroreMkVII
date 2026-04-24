@@ -238,6 +238,12 @@ void AuroreLinkServer::command_accept_loop() {
                 ::setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
             }
 
+            // AM7-L3-IF-003: Per-client token bucket — max 120 msg/sec, drop newest on overflow
+            static constexpr uint64_t kWindowNs = 1000000000ULL;  // 1-second sliding window
+            uint64_t window_start_ns = aurore::get_timestamp();
+            int window_count = 0;
+            const int kMaxPerWindow = static_cast<int>(kMaxCommandRateHz);
+
             while (running_.load(std::memory_order_acquire)) {
                 LinkInputMessage msg{};
                 ssize_t n = ::recv(client, &msg, sizeof(msg), MSG_WAITALL);
@@ -251,6 +257,23 @@ void AuroreLinkServer::command_accept_loop() {
                     break;
                 }
                 if (n != sizeof(msg)) continue;
+
+                // AM7-L3-IF-003: Enforce rate limit — drop newest on overflow, assert warning
+                {
+                    uint64_t now_ns = aurore::get_timestamp();
+                    if (now_ns - window_start_ns >= kWindowNs) {
+                        window_start_ns = now_ns;
+                        window_count = 0;
+                    }
+                    if (window_count >= kMaxPerWindow) {
+                        overflow_count_.fetch_add(1, std::memory_order_relaxed);
+                        std::cerr << "AuroreLink: WARN input buffer overflow — dropping message"
+                                  << " (AM7-L3-IF-003, overflow #"
+                                  << overflow_count_.load(std::memory_order_relaxed) << ")\n";
+                        continue;  // drop newest
+                    }
+                    ++window_count;
+                }
 
                 if (msg.header.sync_word != 0xA7050005) {  // AURORE05 mnemonic -> 0xA7050005
                     std::cerr << "AuroreLink: Invalid sync word\n";

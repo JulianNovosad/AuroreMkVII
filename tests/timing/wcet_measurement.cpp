@@ -150,6 +150,9 @@ void write_csv(const char* filename, const std::vector<uint64_t>& samples) {
 
 }  // anonymous namespace
 
+// Declared in jitter_analysis.cpp
+void run_jitter_analysis(size_t num_samples);
+
 int main(int argc, char* argv[]) {
     WcetConfig config = parse_args(argc, argv);
     
@@ -193,6 +196,9 @@ int main(int argc, char* argv[]) {
         write_csv(config.output_file, samples);
         std::cout << "\nRaw data written to: " << config.output_file << std::endl;
     }
-    
+
+    // AM7-L2-TIM-003: Run jitter analysis (10k samples = ~83s at 120Hz)
+    run_jitter_analysis(std::min(config.num_samples, static_cast<size_t>(10000)));
+
     return 0;
 }

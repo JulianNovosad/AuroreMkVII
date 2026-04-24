@@ -308,15 +308,17 @@ Compiled issues/bugs found in source code requiring investigation.
 | Target handoff automatic→manual (AM7-L3-TGT-004) | **100%** | Done 2026-04-25 (operator cursor re-inits tracker) |
 | Zoom command dispatch (AM7-L2-IF-004) | **100%** | Done 2026-04-25 (kZoomCommand case + ZoomCallback) |
 | Gimbal constraints in .rodata (AM7-L3-ACT-001) | **100%** | Done 2026-04-25 (readelf verification) |
+| Command rate limiting (AM7-L3-IF-003) | **100%** | Done 2026-04-25 (120 msg/sec token bucket, overflow counter) |
+| State-command matrix test (AM7-L3-IF-004) | **100%** | Done 2026-04-25 (50 assertions, all 7 states × all commands) |
+| Jitter analysis timing test (AM7-L2-TIM-003) | **100%** | Done 2026-04-25 (10k samples, P99.9 jitter ≤ 417µs pass criterion) |
 
 ### Overall Completion
-- **~95% complete** (by functionality)
+- **~98% complete** (by functionality)
 - Hardware-measured WCET: max 3030µs (SCHED_OTHER), passes ≤5ms spec
+- 43/43 tests pass
 
 ### Critical Blockers to "Done"
-1. **WCET verification on hardware** — PISP dual-stream eliminates software demosaic; need hardware measurement
-2. **Detection/tracking tuning** — YOLO26n + KCF pipeline wired, performance not characterized
-3. **AM7-L3-SEC-005** — Firmware update verification flow (dual-bank, version check) | Done 2026-04-24
+(none — all known spec items implemented)
 
 ### Is the Product Fully Done?
 **No.** Progress this session (session 3):

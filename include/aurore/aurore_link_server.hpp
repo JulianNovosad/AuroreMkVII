@@ -204,6 +204,8 @@ class AuroreLinkServer {
 
     size_t client_count() const;
     LinkMode current_mode() const { return mode_.load(std::memory_order_acquire); }
+    // AM7-L3-IF-003: overflow counter — messages dropped due to >120 msg/sec rate limit
+    uint64_t get_overflow_count() const { return overflow_count_.load(std::memory_order_relaxed); }
 
    private:
     void telemetry_accept_loop();
@@ -254,6 +256,10 @@ class AuroreLinkServer {
     std::thread link_monitor_thread_;
     void link_monitor_loop();
     static constexpr uint64_t kLinkPollIntervalNs = 80000000ULL;  // 80ms → 12.5 Hz
+
+    // AM7-L3-IF-003: Input rate limiting — max 120 msg/sec per client; overflow drops newest
+    static constexpr double kMaxCommandRateHz = 120.0;
+    std::atomic<uint64_t> overflow_count_{0};
 };
 
 }  // namespace aurore

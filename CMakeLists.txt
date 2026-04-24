@@ -30,7 +30,10 @@ set(CTEST_PARALLEL_LEVEL 1)
 # ============================================================================
 
 option(AURORE_ENABLE_NEON "Enable ARM NEON SIMD optimizations" ON)
-option(AURORE_ENABLE_GPU "Enable VideoCore VII GPU acceleration" ON)
+option(AURORE_ENABLE_GPU "Enable VideoCore VII GPU acceleration" OFF)
+if(AURORE_ENABLE_GPU)
+    add_definitions(-DAURORE_USE_GPU)
+endif()
 option(AURORE_ENABLE_TESTS "Build unit tests" ON)
 option(AURORE_ENABLE_COVERAGE "Enable code coverage" OFF)
 option(AURORE_ENABLE_SANITIZERS "Enable sanitizers (debug only)" OFF)
@@ -598,6 +601,16 @@ if(AURORE_ENABLE_TESTS)
     set_tests_properties(BallisticsStressTest PROPERTIES TIMEOUT 60)
 
 
+    # Firmware updater tests (AM7-L3-SEC-005)
+    add_executable(firmware_updater_test
+        tests/unit/firmware_updater_test.cpp
+        src/common/security.cpp
+    )
+    target_include_directories(firmware_updater_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(firmware_updater_test PRIVATE Threads::Threads OpenSSL::Crypto)
+    add_test(NAME FirmwareUpdaterTest COMMAND firmware_updater_test)
+    set_tests_properties(FirmwareUpdaterTest PROPERTIES TIMEOUT 30)
+
     # Gimbal controller tests
     add_executable(gimbal_controller_test
         tests/unit/gimbal_controller_test.cpp
@@ -931,7 +944,7 @@ if(AURORE_ENABLE_TESTS)
     # Timing/integration tests (require real-time kernel)
     add_executable(aurore_timing_tests
         tests/timing/wcet_measurement.cpp
-        # tests/timing/jitter_analysis.cpp    # TODO: Implement
+        tests/timing/jitter_analysis.cpp      # AM7-L2-TIM-003: jitter analysis at 120Hz
         # tests/timing/thread_sync_test.cpp   # TODO: Implement
     )
 
@@ -1146,6 +1159,27 @@ add_executable(lrf_analyzer
     tools/lrf_analyzer.cpp
 )
 target_link_libraries(lrf_analyzer PRIVATE Threads::Threads)
+
+# End-to-end latency measurement (requires camera + tracker hardware)
+add_executable(aurore_latency_measurement
+    src/latency_measurement.cpp
+    ${CAMERA_WRAPPER_SRC}
+    ${CAMERA_AUTH_SRC}
+    src/tracking/kcf_tracker.cpp
+    src/common/config_loader.cpp
+)
+target_include_directories(aurore_latency_measurement PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${OPENCV_INCLUDE_DIRS}
+    ${LIBCAMERA_INCLUDE_DIRS}
+)
+target_link_libraries(aurore_latency_measurement PRIVATE
+    Threads::Threads
+    ${OPENCV_LIBRARIES}
+    ${LIBCAMERA_LIBRARIES}
+    rt
+    OpenSSL::Crypto
+)
 
 # ============================================================================
 # Print Configuration Summary
