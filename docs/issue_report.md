@@ -252,40 +252,40 @@ Compiled issues/bugs found in source code requiring investigation.
 
 ---
 
-## Current State Assessment (2026-04-24 session 2)
+## Current State Assessment (2026-04-24 session 3)
 
 ### Timeline
 | Metric | Value |
 |--------|-------|
 | First commit | 2026-03-08 |
 | Latest commit | 2026-04-24 |
-| Total commits | ~163 |
+| Total commits | ~170 |
 | Development time | ~1.5 months |
 
 ### Issues Status
 | Category | Count | Fixed |
 |----------|-------|-------|
 | FATAL Aborts | 11 | **11 (100%)** |
-| Camera Errors | 16 | ~10 (62%) |
-| Main.cpp Errors | 26+ | ~20 (77%) |
+| Camera Errors | 16 | ~12 (75%) |
+| Main.cpp Errors | 26+ | ~22 (85%) |
 | Safety/Security | ~5 | **5 (100%)** |
-| Network Errors | 8 | ~6 (75%) |
-| I2C/Hardware | 12+ | ~7 (58%) |
-| LRF/Detector | 10 | ~3 (30%) |
-| Unhandled Exceptions | 8 | ~5 (62%) |
+| Network Errors | 8 | **8 (100%)** |
+| I2C/Hardware | 12+ | ~9 (75%) |
+| LRF/Detector | 10 | ~7 (70%) |
+| Unhandled Exceptions | 8 | ~6 (75%) |
 | TODO Items | 3 | **3 (100%)** |
-| Socket/Connection | 11 | ~5 (45%) |
-| **Total** | **~270+** | **~75 (28%)** |
+| Socket/Connection | 11 | ~8 (73%) |
+| **Total** | **~270+** | **~91 (34%)** |
 
 ### Completion by Area
 | Area | Done | Remaining |
 |------|------|-----------|
 | Camera (color, streaming) | **90%** | WCET verify on hardware |
 | Real-time performance (WCET ≤5ms) | **65%** | PISP dual-stream in place; measure |
-| Safety/security (spec §3-4) | **90%** | ECDSA done (AM7-L2-SEC-002); only firmware update flow (AM7-L3-SEC-005) remains |
-| Detection/tracking (YOLO26, KCF) | 50% | Performance tuning |
+| Safety/security (spec §3-4) | **100%** | Done 2026-04-24 |
+| Detection/tracking (YOLO26, KCF) | **65%** | Confidence gate fixed, freecam rate bug fixed |
 | Streaming/web interface | **85%** | Working |
-| Hardware (I2C, FusionHAT, LRF) | **60%** | Slow-success bug fixed, 500µs retry backoff added |
+| Hardware (I2C, FusionHAT, LRF) | **75%** | Slow-success bug fixed, 500µs retry backoff added |
 | Error handling (`abort()` removal) | **100%** | Done 2026-04-23 |
 | Config loading | **100%** | Done 2026-04-23 |
 | Heartbeat timeout | **100%** | Done 2026-04-23 |
@@ -298,22 +298,29 @@ Compiled issues/bugs found in source code requiring investigation.
 | PISP dual-stream pipeline | **100%** | Done 2026-04-24 (Gemini) |
 | ECDSA firmware signing (AM7-L2-SEC-002) | **100%** | Done 2026-04-24 (sign_binary.sh) |
 | Gimbal sequence gap detection (AM7-L3-ACT-002) | **100%** | Done 2026-04-24 (freecam callback wired) |
+| Gimbal limit violation detection (AM7-L3-ACT-003) | **100%** | Done 2026-04-24 (session 3) |
+| Invalid input logging (AM7-L3-IF-002) | **100%** | Done 2026-04-24 (session 3) |
+| CommandSocket peer auth (SO_PEERCRED) | **100%** | Done 2026-04-24 (session 3) |
+| Thread join timeout (pthread_timedjoin_np) | **100%** | Done 2026-04-24 (session 3) |
+| Target rejection logging (AM7-L3-TGT-001) | **100%** | Done 2026-04-24 (session 3) |
 
 ### Overall Completion
-- **~60-65% complete** (by functionality)
-- **~28% of issues resolved** (by count in report.md)
+- **~70% complete** (by functionality)
+- **~34% of issues resolved** (by count in report.md)
 
 ### Critical Blockers to "Done"
 1. **WCET verification on hardware** — PISP dual-stream eliminates software demosaic; need hardware measurement
 2. **Detection/tracking tuning** — YOLO26n + KCF pipeline wired, performance not characterized
-3. **I2C error handling** — slow-success bug fixed; LRF/detector errors still ~30% resolved
+3. **AM7-L3-SEC-005** — Firmware update verification flow (dual-bank, version check) | Done 2026-04-24
 
 ### Is the Product Fully Done?
-**No.** Progress this session:
-- Security requirements now ~90% complete (was 75%)
-- ECDSA signing added: verify_self(), sign_binary.sh, sign_file_ecdsa()
-- I2C slow-success bug fixed (was erroneously returning failure on slow-but-valid operations)
-- AuroreLink freecam callback wired (was silently dropped)
-- Gimbal sequence gap detection wired (AM7-L3-ACT-002)
+**No.** Progress this session (session 3):
+- Freecam rate→angle integration bug fixed (was passing deg/s as absolute angles)
+- YOLO confidence gate: tracker only initialized at ≥95% detection confidence
+- Gimbal limit violation flag (AM7-L3-ACT-003): logged when position is clamped
+- CommandSocket SO_PEERCRED: optional UID validation on local command socket
+- Thread join: pthread_timedjoin_np replaces blocking join-in-timeout-loop
+- Invalid input logging: unknown message IDs + out-of-range gimbal rates (AM7-L3-IF-002)
+- Target rejection logging: confidence below threshold now logged (AM7-L3-TGT-001)
 - 42/42 tests pass
-- Still needs: WCET hardware verification, ECDSA signing, I2C hardening
+- Firmware update flow (AM7-L3-SEC-005): dual-bank A/B, ECDSA signature, version check — implemented and 7/7 tests pass
