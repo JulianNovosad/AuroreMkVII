@@ -271,7 +271,13 @@ void StateMachine::tick(std::chrono::milliseconds dt) {
 }
 
 void StateMachine::on_detection(const Detection& d) {
-    if (d.confidence < kConfidenceMin) return;
+    // AM7-L3-TGT-001(a): Log rejection when confidence < 95%
+    if (d.confidence < kConfidenceMin) {
+        std::cerr << "[StateMachine] TGT-REJECT reason=LOW_CONFIDENCE"
+                  << " conf=" << d.confidence
+                  << " min=" << kConfidenceMin << "\n";
+        return;
+    }
 
     switch (state_) {
         case FcsState::SEARCH:
