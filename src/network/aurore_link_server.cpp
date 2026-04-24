@@ -390,6 +390,13 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
                 // Convert milliradians/sec * 100 to degrees/sec
                 float az_dps = (static_cast<float>(payload.azimuth_rate) / 100.0f) * 0.0572958f;
                 float el_dps = (static_cast<float>(payload.elevation_rate) / 100.0f) * 0.0572958f;
+                // AM7-L3-IF-002: Log out-of-range gimbal rates (physical limit 60°/s)
+                constexpr float kMaxRateDps = 60.0f;
+                if (std::abs(az_dps) > kMaxRateDps || std::abs(el_dps) > kMaxRateDps) {
+                    std::cerr << "AuroreLink: WARN gimbal rate out of range"
+                              << " az=" << az_dps << " el=" << el_dps << " dps (max "
+                              << kMaxRateDps << " dps) — clamped by controller\n";
+                }
                 on_freecam_(az_dps, el_dps, 0.0f, msg.header.sequence);
             }
             break;
@@ -443,6 +450,10 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
             break;
         }
         default:
+            // AM7-L3-IF-002: Log unknown/unsupported message IDs as warnings
+            std::cerr << "AuroreLink: WARN unknown message_id=0x"
+                      << std::hex << msg.header.message_id << std::dec
+                      << " seq=" << msg.header.sequence << " — ignored\n";
             break;
     }
 }
