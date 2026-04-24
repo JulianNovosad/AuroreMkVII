@@ -172,6 +172,31 @@ TEST(test_limits_clamp_commands) {
     }
 }
 
+TEST(test_limit_violation_flag) {
+    // AM7-L3-ACT-003: limit_violated_ is set when position is clamped.
+    // Use tight limits so the rate limiter exceeds the positional bound quickly.
+    GimbalController ctrl;
+    ctrl.set_limits(-0.1f, 0.1f, -0.1f, 0.1f);
+
+    // No violation initially
+    ASSERT_TRUE(!ctrl.check_and_clear_limit_violation());
+
+    // Command within limits — no violation on very first call (starting at 0)
+    ctrl.command_absolute(0.f, 0.f);
+    ASSERT_TRUE(!ctrl.check_and_clear_limit_violation());
+
+    // Drive into limit: desired=10° is well outside ±0.1° bounds.
+    // Rate limiter will accumulate position until it exceeds the tight limit.
+    bool got_violation = false;
+    for (int i = 0; i < 50 && !got_violation; ++i) {
+        ctrl.command_absolute(10.f, 10.f);
+        got_violation = ctrl.check_and_clear_limit_violation();
+    }
+    ASSERT_TRUE(got_violation);
+    // Flag is cleared after each check_and_clear call
+    ASSERT_TRUE(!ctrl.check_and_clear_limit_violation());
+}
+
 TEST(test_source_switch_auto_to_freecam) {
     GimbalController ctrl;
 
@@ -268,6 +293,7 @@ int main() {
     RUN_TEST(test_auto_source_accumulates_angle_monotonically);
     RUN_TEST(test_freecam_source_converges_to_absolute);
     RUN_TEST(test_limits_clamp_commands);
+    RUN_TEST(test_limit_violation_flag);
     RUN_TEST(test_source_switch_auto_to_freecam);
     RUN_TEST(test_gimbal_velocity_exceeds_limit_clamps);
     RUN_TEST(test_edge_gimbal_acceleration_exceeds_limit_clamps);

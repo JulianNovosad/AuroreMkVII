@@ -13,10 +13,12 @@
  * @copyright Aurore MkVII Project - Educational/Personal Use Only
  */
 
+#include <pthread.h>
 #include <sched.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -1542,19 +1544,20 @@ aurore::CameraConfig cam_config;
     track_running.store(false);
     actuation_running.store(false);
 
-    // Wait for threads with timeout
+    // Wait for threads with timeout using pthread_timedjoin_np (Linux).
+    // std::thread::join() is blocking with no timeout; pthread allows timed join.
     auto join_with_timeout = [](std::thread& t, int timeout_ms) {
-        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
-        while (std::chrono::steady_clock::now() < deadline) {
-            if (t.joinable()) {
-                // Try to join with a short wait
-                t.join();
-                return;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        if (t.joinable()) {
-            std::cerr << "Thread did not terminate, detaching" << std::endl;
+        if (!t.joinable()) return;
+        struct timespec ts{};
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec  += timeout_ms / 1000;
+        ts.tv_nsec += static_cast<long>(timeout_ms % 1000) * 1000000L;
+        if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
+        const int rc = pthread_timedjoin_np(t.native_handle(), nullptr, &ts);
+        if (rc == 0) {
+            t.detach();  // Native handle already joined; detach to avoid double-join in destructor
+        } else {
+            std::cerr << "Thread did not terminate within timeout, detaching\n";
             t.detach();
         }
     };
