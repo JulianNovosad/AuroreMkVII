@@ -1345,13 +1345,32 @@ aurore::CameraConfig cam_config;
                 (state == aurore::FcsState::TRACKING || state == aurore::FcsState::ARMED) ? 1 : 0;
             hud_frame.fault_active = (state == aurore::FcsState::FAULT) ? 1 : 0;
             // CPU temp: read from /sys/class/thermal/thermal_zone0/temp (millidegrees C)
+            // Read every 120 actuation cycles (~1s at 120Hz) to minimise RT thread file I/O.
             {
-                std::ifstream thermal_file("/sys/class/thermal/thermal_zone0/temp");
-                int temp_milli = 0;
-                if (thermal_file >> temp_milli) {
-                    hud_frame.cpu_temp_c = static_cast<uint16_t>(temp_milli / 100);  // ×10
+                static uint32_t temp_read_counter = 0;
+                static int last_temp_milli = 0;
+                if (++temp_read_counter >= 120) {
+                    temp_read_counter = 0;
+                    std::ifstream thermal_file("/sys/class/thermal/thermal_zone0/temp");
+                    if (thermal_file >> last_temp_milli) {
+                        hud_frame.cpu_temp_c = static_cast<uint16_t>(last_temp_milli / 100);
+                    } else {
+                        last_temp_milli = 0;
+                        hud_frame.cpu_temp_c = 0;
+                    }
+                    // AM7-L3-ENV-001: Fault on critical temperature (>85°C)
+                    constexpr int kTempCriticalMilliC = 85000;  // 85°C in millidegrees
+                    if (last_temp_milli > kTempCriticalMilliC) {
+                        std::cerr << "CRITICAL: CPU temperature " << (last_temp_milli / 1000)
+                                  << "°C exceeds 85°C threshold\n";
+                        telemetry.log_event(aurore::TelemetryEventId::TEMPERATURE_CRITICAL,
+                                            aurore::TelemetrySeverity::kCritical,
+                                            "CPU over-temperature: " +
+                                            std::to_string(last_temp_milli / 1000) + "C");
+                        state_machine.on_fault(aurore::FaultCode::TEMPERATURE_CRITICAL);
+                    }
                 } else {
-                    hud_frame.cpu_temp_c = 0;
+                    hud_frame.cpu_temp_c = static_cast<uint16_t>(last_temp_milli / 100);
                 }
             }
 
