@@ -1099,6 +1099,11 @@ aurore::CameraConfig cam_config;
 
                 const uint64_t t2_state = aurore::get_timestamp();
 
+                // Advance state machine clock — drives SEARCH and ARMED timeouts.
+                // Period is nominally 8.333ms (120Hz); use constant to avoid per-frame
+                // timestamp arithmetic on the RT path.
+                state_machine.tick(std::chrono::milliseconds(8));
+
                 if (!track_buffer.push(current_solution)) {
                     // Buffer full - solution dropped
                 }
