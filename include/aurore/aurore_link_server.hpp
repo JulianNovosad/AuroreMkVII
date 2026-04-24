@@ -81,6 +81,16 @@ struct LinkPayloadModeRequest {
 };
 
 /**
+ * @brief ZOOM_COMMAND payload (ICD-005, 0x0103)
+ */
+struct LinkPayloadZoomCmd {
+    int8_t  zoom_direction;  ///< -1=out, 0=stop, +1=in
+    uint8_t zoom_rate;       ///< 0-10, max 10% FOV/second
+    uint16_t reserved;
+    std::array<uint8_t, 28> padding{};
+};
+
+/**
  * @brief GIMBAL_COMMAND payload (ICD-005)
  */
 struct LinkPayloadGimbalCmd {
@@ -156,6 +166,7 @@ using EmergencyStopCallback = std::function<void()>;
 using TargetSelectCallback = std::function<void(uint16_t cursor_x, uint16_t cursor_y, uint8_t confidence)>;  // Spec: ICD-005
 using TargetConfirmCallback = std::function<void(uint32_t target_id)>;  // Spec: ICD-005
 using TargetRejectCallback = std::function<void(uint32_t target_id, uint8_t reason)>;  // Spec: ICD-005
+using ZoomCallback = std::function<void(int8_t direction, uint8_t rate)>;              // Spec: AM7-L2-IF-004
 // Spec: AM7-L3-SEC-001 - HMAC security event callback for logging authentication failures
 using SecurityEventCallback = std::function<void(const std::string& event_type, uint32_t sequence)>;
 
@@ -188,6 +199,7 @@ class AuroreLinkServer {
     void set_target_select_callback(TargetSelectCallback cb);   // Spec: ICD-005
     void set_target_confirm_callback(TargetConfirmCallback cb); // Spec: ICD-005
     void set_target_reject_callback(TargetRejectCallback cb);   // Spec: ICD-005
+    void set_zoom_callback(ZoomCallback cb);                     // Spec: AM7-L2-IF-004
     void set_security_event_callback(SecurityEventCallback cb); // Spec: AM7-L3-SEC-001
 
     size_t client_count() const;
@@ -225,6 +237,7 @@ class AuroreLinkServer {
     TargetSelectCallback on_target_select_;     // Spec: ICD-005
     TargetConfirmCallback on_target_confirm_;   // Spec: ICD-005
     TargetRejectCallback on_target_reject_;     // Spec: ICD-005
+    ZoomCallback on_zoom_;                      // Spec: AM7-L2-IF-004
     SecurityEventCallback on_security_event_;   // Spec: AM7-L3-SEC-001
 
     // Spec: AM7-L3-SEC-001 - Send NACK for failed HMAC verification

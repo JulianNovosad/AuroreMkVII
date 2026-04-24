@@ -278,6 +278,7 @@ void StateMachine::enter_state(FcsState s) {
         case FcsState::TRACKING:
             // AM7-L2-MODE-005: TRACKING state - continuous lock
             interlock_enabled_ = false;  // Inhibit until ARMED
+            low_conf_frames_ = 0;        // AM7-L3-TGT-003: reset de-selection counter
             break;
 
         case FcsState::ARMED:
@@ -388,9 +389,25 @@ void StateMachine::on_tracker_update(const TrackSolution& sol) {
         // INT-006: KCF tracker does not provide PSR. Track validity is determined
         // by sol.valid flag and redetection score, not PSR threshold.
         if (!sol.valid) {
+            low_conf_frames_ = 0;
             // Lost lock, return to SEARCH
             transition(FcsState::SEARCH);
         } else {
+            // AM7-L3-TGT-003: Track sustained low PSR (< 3.0 = proxy for < 90% confidence)
+            // 30 consecutive low-PSR frames = 250ms at 120Hz → de-select to SEARCH
+            if (sol.psr > 0.f && sol.psr < kPsrLowThreshold) {
+                if (++low_conf_frames_ >= kLowConfFramesMax) {
+                    low_conf_frames_ = 0;
+                    std::cerr << "[StateMachine] AM7-L3-TGT-003: PSR < "
+                              << kPsrLowThreshold << " for >" << kLowConfFramesMax
+                              << " frames — de-selecting TRACKING -> SEARCH\n";
+                    transition(FcsState::SEARCH);
+                    return;
+                }
+            } else {
+                low_conf_frames_ = 0;
+            }
+
             // AM7-L3-TGT-002: Check predicted vs measured position (Δ ≤ 5px)
             const bool prediction_ok = check_prediction_delta(sol.centroid_x, sol.centroid_y);
 

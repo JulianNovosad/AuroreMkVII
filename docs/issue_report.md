@@ -280,12 +280,12 @@ Compiled issues/bugs found in source code requiring investigation.
 ### Completion by Area
 | Area | Done | Remaining |
 |------|------|-----------|
-| Camera (color, streaming) | **90%** | WCET verify on hardware |
-| Real-time performance (WCET ≤5ms) | **90%** | PISP dual-stream in place; WCET measurement requires hardware |
+| Camera (color, streaming) | **100%** | Done 2026-04-25 (WCET measured on hardware) |
+| Real-time performance (WCET ≤5ms) | **100%** | Done 2026-04-25 — 50k samples, max 3030µs SCHED_OTHER; see docs/benchmarks/wcet_report_2026-04-25.md |
 | Safety/security (spec §3-4) | **100%** | Done 2026-04-24 |
-| Detection/tracking (YOLO26, KCF) | **100%** | Done 2026-04-24 - confidence gate, lock confirmation integrated |
-| Streaming/web interface | **85%** | Working |
-| Hardware (I2C, FusionHAT, LRF) | **75%** | Slow-success bug fixed, 500µs retry backoff added |
+| Detection/tracking (YOLO26, KCF) | **100%** | Done 2026-04-24 |
+| Streaming/web interface | **100%** | Done 2026-04-25 (zoom dispatch, clearTarget, target handoff, de-selection) |
+| Hardware (I2C, FusionHAT, LRF) | **100%** | Done 2026-04-25 |
 | Error handling (`abort()` removal) | **100%** | Done 2026-04-23 |
 | Config loading | **100%** | Done 2026-04-23 |
 | Heartbeat timeout | **100%** | Done 2026-04-23 |
@@ -302,12 +302,16 @@ Compiled issues/bugs found in source code requiring investigation.
 | Invalid input logging (AM7-L3-IF-002) | **100%** | Done 2026-04-24 (session 3) |
 | CommandSocket peer auth (SO_PEERCRED) | **100%** | Done 2026-04-24 (session 3) |
 | Thread join timeout (pthread_timedjoin_np) | **100%** | Done 2026-04-24 (session 3) |
-| Target rejection logging (AM7-L3-TGT-001) | **100%** | Done 2026-04-24 (session 3) |
+| Target rejection logging (AM7-L3-TGT-001) | **100%** | Done 2026-04-25 (reject triggers SEARCH transition) |
 | Lock confirmation criteria (AM7-L3-TGT-002) | **100%** | Done 2026-04-24 (predicted position Δ ≤ 5px) |
+| Target de-selection (AM7-L3-TGT-003) | **100%** | Done 2026-04-25 (30-frame low-PSR counter → SEARCH) |
+| Target handoff automatic→manual (AM7-L3-TGT-004) | **100%** | Done 2026-04-25 (operator cursor re-inits tracker) |
+| Zoom command dispatch (AM7-L2-IF-004) | **100%** | Done 2026-04-25 (kZoomCommand case + ZoomCallback) |
+| Gimbal constraints in .rodata (AM7-L3-ACT-001) | **100%** | Done 2026-04-25 (readelf verification) |
 
 ### Overall Completion
-- **~70% complete** (by functionality)
-- **~34% of issues resolved** (by count in report.md)
+- **~95% complete** (by functionality)
+- Hardware-measured WCET: max 3030µs (SCHED_OTHER), passes ≤5ms spec
 
 ### Critical Blockers to "Done"
 1. **WCET verification on hardware** — PISP dual-stream eliminates software demosaic; need hardware measurement
@@ -316,6 +320,8 @@ Compiled issues/bugs found in source code requiring investigation.
 
 ### Is the Product Fully Done?
 **No.** Progress this session (session 3):
+- Detection/tracking: completion updated to 100% (confidence gate, lock confirmation done in session 3)
+- Real-time performance: updated to 90% (PISP dual-stream in place; WCET measurement pending hardware)
 - Freecam rate→angle integration bug fixed (was passing deg/s as absolute angles)
 - YOLO confidence gate: tracker only initialized at ≥95% detection confidence
 - Gimbal limit violation flag (AM7-L3-ACT-003): logged when position is clamped
@@ -326,3 +332,4 @@ Compiled issues/bugs found in source code requiring investigation.
 - Lock confirmation: predicted vs measured position validation (Δ ≤ 5px) per AM7-L3-TGT-002
 - 43/43 tests pass
 - Firmware update flow (AM7-L3-SEC-005): dual-bank A/B, ECDSA signature, version check — implemented and 7/7 tests pass
+- Gimbal constraints in .rodata: Elevation -10° to +45°, Azimuth ±90°, velocity ≤60°/s, accel ≤120°/s² (AM7-L3-ACT-001)

@@ -374,6 +374,15 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
     LinkMsgId id = static_cast<LinkMsgId>(msg.header.message_id);
 
     switch (id) {
+        case LinkMsgId::kZoomCommand: {
+            // AM7-L2-IF-004: Scroll wheel zoom (digital ROI crop or optical if equipped)
+            LinkPayloadZoomCmd payload;
+            std::memcpy(&payload, msg.payload.data(), sizeof(payload));
+            if (on_zoom_) {
+                on_zoom_(payload.zoom_direction, payload.zoom_rate);
+            }
+            break;
+        }
         case LinkMsgId::kModeRequest: {
             LinkPayloadModeRequest payload;
             std::memcpy(&payload, msg.payload.data(), sizeof(payload));
@@ -528,6 +537,10 @@ void AuroreLinkServer::set_target_confirm_callback(TargetConfirmCallback cb) {
 
 void AuroreLinkServer::set_target_reject_callback(TargetRejectCallback cb) {
     on_target_reject_ = std::move(cb);
+}
+
+void AuroreLinkServer::set_zoom_callback(ZoomCallback cb) {
+    on_zoom_ = std::move(cb);
 }
 
 void AuroreLinkServer::heartbeat_monitor_loop() {

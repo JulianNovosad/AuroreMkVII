@@ -679,7 +679,26 @@ aurore::CameraConfig cam_config;
     });
 
     // AM7-L2-LOG-OP-003: Log target selection events
+    // AM7-L3-TGT-004: Operator target handoff — queued for vision thread to reinit tracker
+    std::atomic<bool> pending_manual_target{false};
+    aurore::Detection pending_manual_det{};
+    // AM7-L3-TGT-001: Operator target reject — queued for vision thread to reset tracker
+    std::atomic<bool> pending_target_reject{false};
+
     link_server.set_target_select_callback([&](uint16_t cx, uint16_t cy, uint8_t confidence) {
+        aurore::FcsState cur = state_machine.state();
+        if (cur == aurore::FcsState::TRACKING || cur == aurore::FcsState::SEARCH) {
+            // Build a 32×32px init bbox centred on the operator cursor
+            constexpr int kHalf = 16;
+            aurore::Detection det{};
+            det.confidence = static_cast<float>(confidence) / 100.0f;
+            det.bbox.x = static_cast<int>(cx) - kHalf;
+            det.bbox.y = static_cast<int>(cy) - kHalf;
+            det.bbox.w = kHalf * 2;
+            det.bbox.h = kHalf * 2;
+            pending_manual_det = det;
+            pending_manual_target.store(true, std::memory_order_release);
+        }
         telemetry.log_event(aurore::TelemetryEventId::DETECTION_VALID,
                             aurore::TelemetrySeverity::kInfo,
                             "Operator target select @ (" + std::to_string(cx) + "," +
@@ -691,10 +710,25 @@ aurore::CameraConfig cam_config;
                             "Operator confirmed target id=" + std::to_string(target_id));
     });
     link_server.set_target_reject_callback([&](uint32_t target_id, uint8_t reason) {
+        // AM7-L3-TGT-001: Rejection logged with reason code
         telemetry.log_event(aurore::TelemetryEventId::DETECTION_INVALID,
                             aurore::TelemetrySeverity::kInfo,
                             "Operator rejected target id=" + std::to_string(target_id) +
                             " reason=" + std::to_string(reason));
+        // Return to SEARCH — tracker.reset() is deferred to vision thread via atomic flag
+        aurore::FcsState cur = state_machine.state();
+        if (cur == aurore::FcsState::TRACKING || cur == aurore::FcsState::ARMED) {
+            pending_target_reject.store(true, std::memory_order_release);
+            state_machine.request_search();
+        }
+    });
+    link_server.set_zoom_callback([&](int8_t direction, uint8_t rate) {
+        // AM7-L2-IF-004: Zoom (digital ROI crop; optical zoom not equipped)
+        telemetry.log_event(aurore::TelemetryEventId::DETECTION_VALID,
+                            aurore::TelemetrySeverity::kInfo,
+                            std::string("Zoom ") +
+                            (direction > 0 ? "in" : direction < 0 ? "out" : "stop") +
+                            " rate=" + std::to_string(rate));
     });
 
     // Command socket callbacks: browser UI → state machine
@@ -1035,6 +1069,31 @@ aurore::CameraConfig cam_config;
                                state == aurore::FcsState::ARMED) {
                         // Entering TRACKING — clear candidate confirmation state
                         candidate_found = false;
+
+                        // AM7-L3-TGT-001: Process pending operator target reject
+                        if (pending_target_reject.load(std::memory_order_acquire)) {
+                            pending_target_reject.store(false, std::memory_order_release);
+                            tracker.reset();
+                            candidate_found = false;
+                            sweep.reset();
+                        }
+
+                        // AM7-L3-TGT-004: Process pending operator target handoff
+                        if (pending_manual_target.load(std::memory_order_acquire)) {
+                            pending_manual_target.store(false, std::memory_order_release);
+                            const cv::Rect2d new_bbox(
+                                static_cast<double>(pending_manual_det.bbox.x),
+                                static_cast<double>(pending_manual_det.bbox.y),
+                                static_cast<double>(pending_manual_det.bbox.w),
+                                static_cast<double>(pending_manual_det.bbox.h));
+                            if (tracker.init(bgr_frame, new_bbox)) {
+                                state_machine.on_detection(pending_manual_det);
+                                std::cerr << "[Vision] AM7-L3-TGT-004: tracker handoff @ ("
+                                          << pending_manual_det.bbox.x << ","
+                                          << pending_manual_det.bbox.y << ")\n";
+                            }
+                        }
+
                         // TRACKING/ARMED: update KCF tracker
                         current_solution = tracker.update(bgr_frame);
                         {

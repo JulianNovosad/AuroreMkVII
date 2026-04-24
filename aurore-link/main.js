@@ -718,7 +718,9 @@ function assignTargetAtPosition(screenX, screenY) {
 }
 
 function clearTarget() {
-  // TODO: Send clear target command when backend supports it
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'mode_switch', mode: 'AUTO' }));
+  }
   showNotification('TARGET: CLEARED');
 }
 

@@ -723,6 +723,55 @@ void test_position_stability_exceeds_2px() {
     std::cout << "PASS: >2px exceeds stability threshold (AM7-L2-TGT-003)\n";
 }
 
+// AM7-L3-TGT-003: Low-confidence de-selection (< 90% for > 250ms = 30 frames at 120Hz)
+void test_tracking_deselect_low_confidence() {
+    StateMachine sm;
+    sm.force_state_for_test(FcsState::TRACKING);
+
+    TrackSolution sol;
+    sol.valid = true;
+    sol.centroid_x = 100.f;
+    sol.centroid_y = 100.f;
+    sol.psr = 1.5f;  // below kPsrLowThreshold (3.0) → low confidence
+
+    // 29 frames must NOT trigger de-selection
+    for (int i = 0; i < 29; ++i) {
+        sm.on_tracker_update(sol);
+    }
+    assert(sm.state() == FcsState::TRACKING);
+
+    // 30th frame tips over the 250ms window → SEARCH
+    sm.on_tracker_update(sol);
+    assert(sm.state() == FcsState::SEARCH);
+    std::cout << "PASS: AM7-L3-TGT-003 TRACKING -> SEARCH on 30 low-confidence frames\n";
+}
+
+// AM7-L3-TGT-003: Good PSR resets the low-confidence counter
+void test_tracking_good_psr_resets_counter() {
+    StateMachine sm;
+    sm.force_state_for_test(FcsState::TRACKING);
+
+    TrackSolution bad;
+    bad.valid = true;
+    bad.centroid_x = 100.f;
+    bad.centroid_y = 100.f;
+    bad.psr = 1.5f;  // low
+
+    TrackSolution good;
+    good.valid = true;
+    good.centroid_x = 100.f;
+    good.centroid_y = 100.f;
+    good.psr = 10.0f;  // good — above kPsrLowThreshold
+
+    // 28 bad frames, then 1 good frame should reset
+    for (int i = 0; i < 28; ++i) sm.on_tracker_update(bad);
+    sm.on_tracker_update(good);  // resets counter
+    // Another 29 bad frames: still should not deselect (counter was reset)
+    for (int i = 0; i < 29; ++i) sm.on_tracker_update(bad);
+    assert(sm.state() == FcsState::TRACKING);
+    std::cout << "PASS: AM7-L3-TGT-003 good PSR resets low-confidence counter\n";
+}
+
 int main() {
     test_initial_state();
     test_boot_to_idle_safe();
@@ -776,6 +825,10 @@ int main() {
     test_lock_confirmation_stable_window();
     test_position_stability_boundary_2px();
     test_position_stability_exceeds_2px();
+
+    // AM7-L3-TGT-003: Low-confidence de-selection
+    test_tracking_deselect_low_confidence();
+    test_tracking_good_psr_resets_counter();
 
     std::cout << "\nAll state machine tests passed.\n";
     return 0;

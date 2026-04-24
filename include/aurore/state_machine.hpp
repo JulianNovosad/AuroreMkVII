@@ -306,6 +306,11 @@ class StateMachine {
     float predicted_y_{0.f};
     bool have_prediction_{false};
 
+    // AM7-L3-TGT-003: Low-confidence de-selection (PSR < 3.0 for > 250ms = 30 frames at 120Hz)
+    static constexpr int   kLowConfFramesMax  = 30;
+    static constexpr float kPsrLowThreshold   = 3.0f;
+    int low_conf_frames_{0};
+
     // AM7-L2-TGT-003: Check if position is stable (Δ ≤ 2 pixels for 3 frames)
     bool is_position_stable() const noexcept;
 
