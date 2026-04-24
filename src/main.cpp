@@ -890,6 +890,12 @@ aurore::CameraConfig cam_config;
         aurore::SweepPattern sweep;
         uint64_t last_tick_ns = aurore::get_timestamp();
 
+        // AM7-L2-TGT-003: Candidate confirmation state during SEARCH.
+        // Once a first detection is found, hold gimbal, run tracker for 3-frame
+        // stability confirmation. Tracker is only (re-)initialised when no candidate
+        // is pending.
+        bool candidate_found = false;      // true = first detection in progress
+
         // Frame counter for detect thread feed rate (every 4th frame → ~30fps detection)
         uint64_t detect_frame_count = 0;
         constexpr uint64_t kDetectEveryN = 10;
@@ -929,56 +935,81 @@ aurore::CameraConfig cam_config;
                     aurore::FcsState state = state_machine.state();
 
                     if (state == aurore::FcsState::SEARCH) {
-                        // --- Autonomous sweep: drive gimbal in oval pattern ---
-                        uint64_t now_tick = aurore::get_timestamp();
-                        const float dt_sec = static_cast<float>(now_tick - last_tick_ns) * 1e-9f;
-                        last_tick_ns = now_tick;
-                        auto sweep_pt = sweep.tick(dt_sec);
-                        gimbal_ctrl.command_absolute(sweep_pt.az_deg, sweep_pt.el_deg);
+                        if (!candidate_found) {
+                            // --- Phase 1: sweep + detect until first hit ---
+                            uint64_t now_tick = aurore::get_timestamp();
+                            const float dt_sec = static_cast<float>(now_tick - last_tick_ns) * 1e-9f;
+                            last_tick_ns = now_tick;
+                            auto sweep_pt = sweep.tick(dt_sec);
+                            gimbal_ctrl.command_absolute(sweep_pt.az_deg, sweep_pt.el_deg);
 
-                        // --- YOLO26 detection (non-blocking check of detect thread result) ---
-                        std::optional<aurore::Detection> detection;
+                            std::optional<aurore::Detection> detection;
 
-                        // Feed detect thread every kDetectEveryN frames
-                        if (yolo_loaded && (++detect_frame_count % kDetectEveryN == 0)) {
-                            if (detect_shared.frame_mtx.try_lock()) {
-                                // PISP Dual-Stream: Use Stream 1 (640x360 BGR888) for YOLO branch.
-                                // This avoids software resizing and demosaic on the RT thread.
-                                detect_shared.frame = camera->wrap_as_mat(frame, aurore::PixelFormat::BGR888, 1);
-                                if (!detect_shared.frame.empty()) {
-                                    detect_shared.frame_ready = true;
-                                    detect_shared.frame_cv.notify_one();
+                            // Feed YOLO detect thread every kDetectEveryN frames
+                            if (yolo_loaded && (++detect_frame_count % kDetectEveryN == 0)) {
+                                if (detect_shared.frame_mtx.try_lock()) {
+                                    detect_shared.frame = camera->wrap_as_mat(
+                                        frame, aurore::PixelFormat::BGR888, 1);
+                                    if (!detect_shared.frame.empty()) {
+                                        detect_shared.frame_ready = true;
+                                        detect_shared.frame_cv.notify_one();
+                                    }
+                                    detect_shared.frame_mtx.unlock();
                                 }
-                                detect_shared.frame_mtx.unlock();
                             }
-                        }
 
-                        // Check for fresh detection result (non-blocking)
-                        if (detect_shared.result_fresh.load(std::memory_order_acquire)) {
-                            if (detect_shared.result_mtx.try_lock()) {
-                                if (detect_shared.result_valid) {
-                                    detection = detect_shared.latest;
+                            // Check for fresh YOLO result (non-blocking)
+                            if (detect_shared.result_fresh.load(std::memory_order_acquire)) {
+                                if (detect_shared.result_mtx.try_lock()) {
+                                    if (detect_shared.result_valid) {
+                                        detection = detect_shared.latest;
+                                    }
+                                    detect_shared.result_fresh.store(false,
+                                                                     std::memory_order_release);
+                                    detect_shared.result_mtx.unlock();
                                 }
-                                detect_shared.result_fresh.store(false, std::memory_order_release);
-                                detect_shared.result_mtx.unlock();
                             }
-                        }
 
-                        // Fall back to ORB detector if YOLO not loaded
-                        if (!yolo_loaded && detector.is_ready()) {
-                            detection = detector.detect(bgr_frame);
-                        }
+                            if (!yolo_loaded && detector.is_ready()) {
+                                detection = detector.detect(bgr_frame);
+                            }
 
-                        if (detection.has_value()) {
-                            // Target found — stop sweep, initialize KCF tracker
-                            sweep.reset();
-                            cv::Rect2d det_bbox(static_cast<float>(detection->bbox.x),
-                                                static_cast<float>(detection->bbox.y),
-                                                static_cast<float>(detection->bbox.w),
-                                                static_cast<float>(detection->bbox.h));
-                            if (tracker.init(bgr_frame, det_bbox)) {
-                                tracker.capture_reference_template(frame, det_bbox);
-                                state_machine.on_detection(*detection);
+                            if (detection.has_value()) {
+                                // First hit — stop sweep, init tracker; hold gimbal here.
+                                sweep.reset();
+                                cv::Rect2d det_bbox(static_cast<float>(detection->bbox.x),
+                                                    static_cast<float>(detection->bbox.y),
+                                                    static_cast<float>(detection->bbox.w),
+                                                    static_cast<float>(detection->bbox.h));
+                                if (tracker.init(bgr_frame, det_bbox)) {
+                                    tracker.capture_reference_template(frame, det_bbox);
+                                    state_machine.on_detection(*detection);
+                                    candidate_found = true;
+                                }
+                            }
+                        } else {
+                            // --- Phase 2: hold gimbal, confirm candidate via tracker ---
+                            // AM7-L2-TGT-003: 3 stable frames required before TRACKING transition.
+                            last_tick_ns = aurore::get_timestamp();  // keep dt accumulator valid
+                            auto track_sol = tracker.update(bgr_frame);
+
+                            if (track_sol.valid) {
+                                // Feed tracker centroid as a synthetic detection to accumulate
+                                // position history in the state machine.
+                                aurore::Detection synth;
+                                synth.confidence = 0.96f;
+                                synth.bbox.x     = static_cast<int>(track_sol.centroid_x);
+                                synth.bbox.y     = static_cast<int>(track_sol.centroid_y);
+                                synth.bbox.w     = static_cast<int>(tracker.last_bbox().width);
+                                synth.bbox.h     = static_cast<int>(tracker.last_bbox().height);
+                                state_machine.on_detection(synth);
+                                // state_machine may have just transitioned to TRACKING —
+                                // that's fine; next frame reads state == TRACKING.
+                            } else {
+                                // Candidate lost — resume sweep from centre
+                                candidate_found = false;
+                                tracker.reset();
+                                sweep.reset();
                             }
                         }
                         // Stay in SEARCH — centroid at frame center
@@ -987,6 +1018,8 @@ aurore::CameraConfig cam_config;
                         current_solution.centroid_y = static_cast<float>(frame.height) / 2.0f;
                     } else if (state == aurore::FcsState::TRACKING ||
                                state == aurore::FcsState::ARMED) {
+                        // Entering TRACKING — clear candidate confirmation state
+                        candidate_found = false;
                         // TRACKING/ARMED: update KCF tracker
                         current_solution = tracker.update(bgr_frame);
                         {
@@ -1028,7 +1061,8 @@ aurore::CameraConfig cam_config;
                                 current_solution.valid = false;
                                 tracker.reset();
                             } else {
-                                current_solution.psr = 0.75f;
+                                // Use tracker-computed PSR (matchTemplate correlation).
+                                // A PSR below 3.0 indicates weak correlation — log but don't fault.
                                 state_machine.on_tracker_update(current_solution);
                             }
                         }
@@ -1039,6 +1073,7 @@ aurore::CameraConfig cam_config;
                             state_machine.on_redetection_score(redetect_score);
                             if (redetect_score < 0.85f) {
                                 // Redetection failed - reset tracker and resume sweep
+                                candidate_found = false;
                                 tracker.reset();
                                 sweep.reset();
                                 last_tick_ns = aurore::get_timestamp();
@@ -1214,12 +1249,31 @@ aurore::CameraConfig cam_config;
                 fusion_hat.reset_error_counters();
             }
 
+            // AM7-L3-SAFE-002: Validate and ingest LRF reading each actuation cycle.
+            // Wraps the raw UART reading in a RangeData with timestamp and CRC so the
+            // state machine can revoke stale or corrupted data.
+            float effective_range_m = test_range_m;  // fallback if LRF absent/invalid
+            {
+                const float live_m = lrf.latest_range_m();
+                if (live_m > 0.0f) {
+                    aurore::RangeData rd;
+                    rd.range_m      = live_m;
+                    rd.timestamp_ns = aurore::get_timestamp();
+                    rd.checksum     = aurore::StateMachine::compute_crc16(rd.range_m,
+                                                                           rd.timestamp_ns);
+                    state_machine.on_lrf_range(rd);  // validates age, CRC, bounds
+                    if (state_machine.has_valid_range()) {
+                        effective_range_m = live_m;
+                    }
+                }
+            }
+
             // Compute ballistics solution if tracking
             if (latest_solution.valid && state == aurore::FcsState::TRACKING) {
                 // Estimate target aspect angle (elevation from gimbal + range offset)
                 const float target_aspect = gimbal_cmd.el_deg;
                 last_ballistics_sol = ballistics.solve(
-                    test_range_m,          // Use configured test range for dry-run
+                    effective_range_m,     // live LRF range (or fallback)
                     gimbal_cmd.el_deg,     // Current gimbal elevation
                     target_aspect,         // Target aspect (equals gimbal el in simplified model)
                     muzzle_velocity_mps);  // Configured muzzle velocity

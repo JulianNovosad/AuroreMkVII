@@ -214,6 +214,7 @@ class StateMachine {
     bool has_stable_timing() const;
     bool has_zero_faults() const;
     bool has_operator_authorization() const;
+    bool has_valid_range() const noexcept { return have_valid_range_; }
 
     // Report timing stability from safety_monitor.deadline_misses().
     // Call once per actuation cycle: stable = (safety_monitor.deadline_misses() == 0).
