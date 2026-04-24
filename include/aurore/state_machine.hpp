@@ -87,6 +87,13 @@ struct PositionHistoryEntry {
     uint64_t timestamp_ns{0};
 };
 
+// AM7-L3-TGT-002: Velocity history entry for predicted position validation
+struct VelocityHistoryEntry {
+    float vx{0.f};
+    float vy{0.f};
+    uint64_t timestamp_ns{0};
+};
+
 // Note: Named GimbalStatusSm to avoid conflict with proto-generated aurore::GimbalStatus
 struct GimbalStatusSm {
     float az_error_deg{999.f};
@@ -291,6 +298,14 @@ class StateMachine {
     static constexpr int kLockConfirmWindowMs = 250;
     static constexpr float kLockConfirmThreshold = 0.95f;  // 95% stability
 
+    // AM7-L3-TGT-002: Predicted position validation (Δ ≤ 5 pixels)
+    static constexpr float kPredictionDeltaPx = 5.0f;
+    VelocityHistoryEntry velocity_history_[2]{};  // For linear prediction
+    int velocity_history_idx_{0};
+    float predicted_x_{0.f};
+    float predicted_y_{0.f};
+    bool have_prediction_{false};
+
     // AM7-L2-TGT-003: Check if position is stable (Δ ≤ 2 pixels for 3 frames)
     bool is_position_stable() const noexcept;
 
@@ -302,6 +317,12 @@ class StateMachine {
 
     // AM7-L2-TGT-004: Reset validation state on state transition
     void reset_target_validation() noexcept;
+
+    // AM7-L3-TGT-002: Predicted vs measured position validation
+    bool check_prediction_delta(float measured_x, float measured_y) const noexcept;
+
+    // AM7-L3-TGT-002: Update velocity history and compute predicted position
+    void update_prediction(const TrackSolution& sol) noexcept;
 };
 
 const char* fcs_state_name(FcsState s);

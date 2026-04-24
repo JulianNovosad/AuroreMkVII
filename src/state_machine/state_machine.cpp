@@ -13,6 +13,59 @@ namespace aurore {
 StateMachine::StateMachine() = default;
 
 /**
+ * @brief AM7-L3-TGT-002: Check if measured position matches predicted position.
+ *
+ * Uses linear prediction based on velocity history. If measured position
+ * deviates from predicted by > 5 pixels, returns false.
+ */
+bool StateMachine::check_prediction_delta(float measured_x, float measured_y) const noexcept {
+    if (!have_prediction_) {
+        return true;  // First frame - no prediction to compare
+    }
+
+    const float dx = measured_x - predicted_x_;
+    const float dy = measured_y - predicted_y_;
+    const float delta = std::sqrt(dx * dx + dy * dy);
+
+    return delta <= kPredictionDeltaPx;
+}
+
+/**
+ * @brief AM7-L3-TGT-002: Update velocity history and compute predicted position.
+ *
+ * Called with TrackSolution from KCF tracker. Updates velocity history
+ * and computes predicted position for next frame validation.
+ */
+void StateMachine::update_prediction(const TrackSolution& sol) noexcept {
+    if (!sol.valid) {
+        have_prediction_ = false;
+        return;
+    }
+
+    const float cx = sol.centroid_x;
+    const float cy = sol.centroid_y;
+    const uint64_t now_ns = get_timestamp(ClockId::MonotonicRaw);
+
+    // Update velocity history
+    velocity_history_[velocity_history_idx_] = {sol.velocity_x, sol.velocity_y, now_ns};
+    velocity_history_idx_ = (velocity_history_idx_ + 1) % 2;
+
+    // Compute prediction for next frame if we have at least 2 velocity samples
+    const auto& v0 = velocity_history_[(velocity_history_idx_ + 1) % 2];
+    const auto& v1 = velocity_history_[velocity_history_idx_];
+
+    if (v0.timestamp_ns != 0 && v1.timestamp_ns != 0) {
+        // Use average velocity for prediction (simple linear model)
+        const float avg_vx = (v0.vx + v1.vx) * 0.5f;
+        const float avg_vy = (v0.vy + v1.vy) * 0.5f;
+
+        predicted_x_ = cx + avg_vx;
+        predicted_y_ = cy + avg_vy;
+        have_prediction_ = true;
+    }
+}
+
+/**
  * @brief AM7-L2-TGT-003: Check if position is stable over last 3 frames.
  *
  * Stability criterion: Δposition ≤ 2 pixels between consecutive frames.
@@ -115,7 +168,13 @@ void StateMachine::update_lock_confirmation(bool is_stable) noexcept {
         const float stability_ratio = static_cast<float>(lock_confirm_stable_frames_) /
                                       static_cast<float>(kLockConfirmWindowMs / kFrameTimeMs);
 
+        const bool was_confirmed = lock_confirmed_;
         lock_confirmed_ = (stability_ratio >= kLockConfirmThreshold);
+
+        // AM7-L2-TGT-004: Log lock confirmation state change
+        if (lock_confirmed_ && !was_confirmed) {
+            std::cout << "[StateMachine] LOCK-CONFIRMED stability_ratio=" << stability_ratio << "\n";
+        }
 
         // Reset window for continuous monitoring
         lock_confirm_age_ms_ = std::chrono::milliseconds(0);
@@ -138,6 +197,14 @@ void StateMachine::reset_target_validation() noexcept {
     lock_confirm_age_ms_ = std::chrono::milliseconds(0);
     lock_confirm_stable_frames_ = 0;
     lock_confirmed_ = false;
+
+    // AM7-L3-TGT-002: Reset prediction state
+    velocity_history_[0] = {};
+    velocity_history_[1] = {};
+    velocity_history_idx_ = 0;
+    predicted_x_ = 0.f;
+    predicted_y_ = 0.f;
+    have_prediction_ = false;
 }
 
 FcsState StateMachine::state() const { return state_; }
@@ -324,17 +391,32 @@ void StateMachine::on_tracker_update(const TrackSolution& sol) {
             // Lost lock, return to SEARCH
             transition(FcsState::SEARCH);
         } else {
+            // AM7-L3-TGT-002: Check predicted vs measured position (Δ ≤ 5px)
+            const bool prediction_ok = check_prediction_delta(sol.centroid_x, sol.centroid_y);
+
             // AM7-L2-TGT-004: Update lock confirmation when tracking
-            // Lock is stable when tracker reports valid and position is stable
-            update_lock_confirmation(is_position_stable());
+            // Lock is stable when tracker reports valid, position is stable,
+            // and predicted position matches measured (within 5px)
+            const bool is_stable = is_position_stable() && prediction_ok;
+            update_lock_confirmation(is_stable);
+
+            // Update prediction for next frame
+            update_prediction(sol);
         }
     } else if (state_ == FcsState::ARMED) {
         // AM7-L3-MODE-006: ARMED -> TRACKING on lock lost
         if (!sol.valid) {
             transition(FcsState::TRACKING);
         } else {
+            // AM7-L3-TGT-002: Check predicted vs measured position
+            const bool prediction_ok = check_prediction_delta(sol.centroid_x, sol.centroid_y);
+
             // AM7-L2-TGT-004: Continue lock confirmation in ARMED state
-            update_lock_confirmation(is_position_stable());
+            const bool is_stable = is_position_stable() && prediction_ok;
+            update_lock_confirmation(is_stable);
+
+            // Update prediction for next frame
+            update_prediction(sol);
         }
     }
 }
