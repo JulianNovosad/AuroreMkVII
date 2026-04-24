@@ -522,4 +522,15 @@ class FusionHat {
     static constexpr uint16_t PRODUCT_ID = 0x0774;
 };
 
+// ============================================================================
+// Gimbal Motion Constraints - .rodata (read-only data segment)
+// Per AM7-L3-ACT-001: stored in .rodata for verification via memory map
+// Per AM7-L2-ACT-002: Elevation -10° to +45°, Azimuth ±90°
+// ============================================================================
+constexpr float kElevationMinDeg = -10.0f;
+constexpr float kElevationMaxDeg = 45.0f;
+constexpr float kAzimuthMaxDeg = 90.0f;
+constexpr float kGimbalVelocityMaxDps = 60.0f;
+constexpr float kGimbalAccelMaxDps2 = 120.0f;
+
 }  // namespace aurore
