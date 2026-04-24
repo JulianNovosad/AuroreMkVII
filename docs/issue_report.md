@@ -281,9 +281,9 @@ Compiled issues/bugs found in source code requiring investigation.
 | Area | Done | Remaining |
 |------|------|-----------|
 | Camera (color, streaming) | **90%** | WCET verify on hardware |
-| Real-time performance (WCET ≤5ms) | **65%** | PISP dual-stream in place; measure |
+| Real-time performance (WCET ≤5ms) | **90%** | PISP dual-stream in place; WCET measurement requires hardware |
 | Safety/security (spec §3-4) | **100%** | Done 2026-04-24 |
-| Detection/tracking (YOLO26, KCF) | **70%** | Confidence gate fixed, lock confirmation complete |
+| Detection/tracking (YOLO26, KCF) | **100%** | Done 2026-04-24 - confidence gate, lock confirmation integrated |
 | Streaming/web interface | **85%** | Working |
 | Hardware (I2C, FusionHAT, LRF) | **75%** | Slow-success bug fixed, 500µs retry backoff added |
 | Error handling (`abort()` removal) | **100%** | Done 2026-04-23 |
