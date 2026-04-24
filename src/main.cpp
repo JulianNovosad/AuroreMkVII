@@ -544,16 +544,20 @@ aurore::CameraConfig cam_config;
     // State machine for FCS mode management
     aurore::StateMachine state_machine;
 
-    // Set state change callback for telemetry and stdout logging
+    // AM7-L2-LOG-OP-001: Log all state transitions to telemetry with context
     state_machine.set_state_change_callback(
         [&telemetry](aurore::FcsState from, aurore::FcsState to) {
+            const aurore::TelemetrySeverity sev =
+                (to == aurore::FcsState::FAULT) ? aurore::TelemetrySeverity::kCritical
+                                                : aurore::TelemetrySeverity::kInfo;
+            const aurore::TelemetryEventId evt =
+                (to == aurore::FcsState::FAULT) ? aurore::TelemetryEventId::SAFETY_FAULT
+                                                : aurore::TelemetryEventId::SYSTEM_BOOT;
+            telemetry.log_event(evt, sev,
+                std::string("State: ") + aurore::fcs_state_name(from) +
+                " -> " + aurore::fcs_state_name(to));
             std::cout << "State: " << aurore::fcs_state_name(from) << " -> "
                       << aurore::fcs_state_name(to) << std::endl;
-            if (to == aurore::FcsState::FAULT) {
-                telemetry.log_event(aurore::TelemetryEventId::SAFETY_FAULT,
-                                    aurore::TelemetrySeverity::kCritical,
-                                    "State machine transitioned to FAULT");
-            }
         });
 
     // Install mode callback for FREECAM/AUTO switching
@@ -569,8 +573,13 @@ aurore::CameraConfig cam_config;
         }
     });
 
-    // Install arm callback for operator authorization
+    // AM7-L2-LOG-OP-004: Log arm/disarm transitions with authorization context
     link_server.set_arm_callback([&](bool authorized) {
+        telemetry.log_event(authorized ? aurore::TelemetryEventId::SAFETY_INHIBIT_RELEASED
+                                       : aurore::TelemetryEventId::SAFETY_INHIBIT_ENGAGED,
+                            aurore::TelemetrySeverity::kInfo,
+                            authorized ? "Operator authorization granted (ARM)"
+                                       : "Operator authorization revoked (DISARM)");
         std::cout << "AuroreLink: Operator authorization " << (authorized ? "granted" : "revoked")
                   << std::endl;
         state_machine.set_operator_authorization(authorized);
@@ -614,6 +623,25 @@ aurore::CameraConfig cam_config;
                 state_machine.on_fault(aurore::FaultCode::SEQUENCE_GAP);
             }
         });
+
+    // AM7-L2-LOG-OP-003: Log target selection events
+    link_server.set_target_select_callback([&](uint16_t cx, uint16_t cy, uint8_t confidence) {
+        telemetry.log_event(aurore::TelemetryEventId::DETECTION_VALID,
+                            aurore::TelemetrySeverity::kInfo,
+                            "Operator target select @ (" + std::to_string(cx) + "," +
+                            std::to_string(cy) + ") conf=" + std::to_string(confidence));
+    });
+    link_server.set_target_confirm_callback([&](uint32_t target_id) {
+        telemetry.log_event(aurore::TelemetryEventId::TRACK_ACQUIRED,
+                            aurore::TelemetrySeverity::kInfo,
+                            "Operator confirmed target id=" + std::to_string(target_id));
+    });
+    link_server.set_target_reject_callback([&](uint32_t target_id, uint8_t reason) {
+        telemetry.log_event(aurore::TelemetryEventId::DETECTION_INVALID,
+                            aurore::TelemetrySeverity::kInfo,
+                            "Operator rejected target id=" + std::to_string(target_id) +
+                            " reason=" + std::to_string(reason));
+    });
 
     // Command socket callbacks: browser UI → state machine
     cmd_socket.set_mode_callback([&](const std::string& mode) {
