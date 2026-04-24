@@ -649,11 +649,23 @@ aurore::CameraConfig cam_config;
             }
         });
 
-    // AM7-L3-ACT-002: Gimbal command sequence gap detection — reject out-of-order commands
+    // AM7-L3-ACT-002: Gimbal command sequence gap detection — reject out-of-order commands.
+    // The link protocol sends angular RATES (deg/s); integrate over dt to get absolute target.
+    std::atomic<uint64_t> freecam_last_ns{0};
     link_server.set_freecam_callback([&](float az_dps, float el_dps, float /*vel*/,
                                          uint32_t seq_num) {
-        auto cmd = gimbal_ctrl.process_command_with_gap_check(az_dps, el_dps,
-                                                               seq_num);
+        const uint64_t now_ns = aurore::get_timestamp();
+        const uint64_t prev_ns = freecam_last_ns.exchange(now_ns, std::memory_order_acq_rel);
+        const float dt_s = (prev_ns == 0)
+                           ? (1.0f / 120.0f)
+                           : std::clamp(static_cast<float>(now_ns - prev_ns) * 1e-9f,
+                                        0.001f, 0.1f);
+
+        // Integrate rate onto current gimbal position to get absolute target.
+        const float new_az = gimbal_ctrl.current_az() + az_dps * dt_s;
+        const float new_el = gimbal_ctrl.current_el() + el_dps * dt_s;
+
+        auto cmd = gimbal_ctrl.process_command_with_gap_check(new_az, new_el, seq_num);
         if (!cmd.has_value()) {
             std::cerr << "AuroreLink: gimbal sequence gap detected (seq=" << seq_num
                       << ") — holding position\n";
@@ -974,7 +986,8 @@ aurore::CameraConfig cam_config;
                                 detection = detector.detect(bgr_frame);
                             }
 
-                            if (detection.has_value()) {
+                            // AM7-L2-TGT-003: Only initiate tracking on ≥95% confidence detections.
+                            if (detection.has_value() && detection->confidence >= 0.95f) {
                                 // First hit — stop sweep, init tracker; hold gimbal here.
                                 sweep.reset();
                                 cv::Rect2d det_bbox(static_cast<float>(detection->bbox.x),
@@ -1318,6 +1331,16 @@ aurore::CameraConfig cam_config;
             prev_gimbal_ts = gimbal_ts;
             state_machine.on_gimbal_status(gimbal_status);
             state_machine.set_timing_stable(safety_monitor.deadline_misses() == 0);
+
+            // AM7-L3-ACT-003: Detect and log gimbal position limit violations
+            if (gimbal_ctrl.check_and_clear_limit_violation()) {
+                std::cerr << "GimbalCtrl: WARN position limit violation clamped"
+                          << " (az=" << gimbal_cmd.az_deg
+                          << " el=" << gimbal_cmd.el_deg << ")\n";
+                telemetry.log_event(aurore::TelemetryEventId::SAFETY_FAULT,
+                                    aurore::TelemetrySeverity::kWarning,
+                                    "Gimbal position limit violation (AM7-L3-ACT-003)");
+            }
 
             // Update safety monitor for actuation frame
             if (last_actuation_sequence > 0) {

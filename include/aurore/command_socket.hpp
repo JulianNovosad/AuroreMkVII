@@ -4,6 +4,7 @@
 #include <functional>
 #include <mutex>
 #include <string>
+#include <sys/types.h>
 #include <thread>
 #include <vector>
 
@@ -30,6 +31,8 @@ public:
 
     struct Config {
         std::string socket_path = "/tmp/aurore_cmd.sock";
+        // SEC: SO_PEERCRED UID validation (0 = accept any UID)
+        uid_t allowed_uid = 0;
     };
 
     CommandSocket();

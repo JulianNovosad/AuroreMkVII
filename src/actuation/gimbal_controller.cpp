@@ -92,6 +92,11 @@ GimbalCommand GimbalController::command_absolute(float az_deg, float el_deg, std
     const float clamped_az = std::clamp(limited_az, az_min_, az_max_);
     const float clamped_el = std::clamp(limited_el, el_min_, el_max_);
 
+    // AM7-L3-ACT-003: Flag limit violation when position is clamped
+    if (clamped_az != limited_az || clamped_el != limited_el) {
+        limit_violated_.store(true, std::memory_order_release);
+    }
+
     // Store angles
     az_.store(clamped_az, std::memory_order_relaxed);
     el_.store(clamped_el, std::memory_order_relaxed);
@@ -117,6 +122,11 @@ std::optional<GimbalCommand> GimbalController::process_command_with_gap_check(fl
 
     const float clamped_az = std::clamp(limited_az, az_min_, az_max_);
     const float clamped_el = std::clamp(limited_el, el_min_, el_max_);
+
+    // AM7-L3-ACT-003: Flag limit violation when position is clamped
+    if (clamped_az != limited_az || clamped_el != limited_el) {
+        limit_violated_.store(true, std::memory_order_release);
+    }
 
     // Store angles
     az_.store(clamped_az, std::memory_order_relaxed);

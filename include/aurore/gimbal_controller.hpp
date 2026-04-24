@@ -72,6 +72,11 @@ public:
     // Reset sequence gap flag
     void reset_sequence_gap() { sequence_gap_detected_.store(false, std::memory_order_release); }
 
+    // AM7-L3-ACT-003: Check and clear position limit violation flag
+    bool check_and_clear_limit_violation() {
+        return limit_violated_.exchange(false, std::memory_order_acq_rel);
+    }
+
     // Reset rate limiter state (call on mode transitions or after homing)
     void reset_rate_limiter() {
         prev_az_cmd_.store(az_.load(std::memory_order_relaxed), std::memory_order_relaxed);
@@ -102,6 +107,9 @@ private:
     // Sequence number tracking for gap detection (AM7-L3-SEC-004)
     std::optional<uint32_t> last_sequence_num_;
     std::atomic<bool> sequence_gap_detected_{false};
+
+    // AM7-L3-ACT-003: Position limit violation flag (set when command is clamped)
+    std::atomic<bool> limit_violated_{false};
 
     // Rate / acceleration limiter state (AM7-L2-ACT-002)
     // prev_az_cmd_ / prev_el_cmd_ hold the last rate-limited output angle

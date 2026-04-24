@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <pwd.h>
 
 #include <algorithm>
 #include <cerrno>
@@ -112,6 +113,21 @@ void CommandSocket::accept_loop() {
         int client_fd = ::accept(server_fd_,
                                   reinterpret_cast<struct sockaddr*>(&client_addr), &len);
         if (client_fd < 0) continue;
+
+        // SEC: SO_PEERCRED validation — reject unauthorized processes
+        if (cfg_.allowed_uid != 0) {
+            struct ucred peer{};
+            socklen_t peer_len = sizeof(peer);
+            const bool cred_ok = (::getsockopt(client_fd, SOL_SOCKET, SO_PEERCRED,
+                                               &peer, &peer_len) == 0);
+            if (!cred_ok || peer.uid != cfg_.allowed_uid) {
+                std::cerr << "[CommandSocket] rejected connection: UID "
+                          << (cred_ok ? std::to_string(peer.uid) : "unknown")
+                          << " != allowed " << cfg_.allowed_uid << "\n";
+                ::close(client_fd);
+                continue;
+            }
+        }
 
         {
             std::lock_guard<std::mutex> lk(clients_mutex_);
