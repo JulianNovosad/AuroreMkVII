@@ -7,6 +7,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include <fstream>
+
 #include <algorithm>
 #include <cstring>
 #include <iostream>
@@ -68,6 +70,7 @@ bool AuroreLinkServer::start() {
     video_accept_thread_ = std::thread(&AuroreLinkServer::video_accept_loop, this);
     command_accept_thread_ = std::thread(&AuroreLinkServer::command_accept_loop, this);
     heartbeat_monitor_thread_ = std::thread(&AuroreLinkServer::heartbeat_monitor_loop, this);
+    link_monitor_thread_      = std::thread(&AuroreLinkServer::link_monitor_loop, this);
     std::cout << "AuroreLink listening: telemetry=" << cfg_.telemetry_port
               << " video=" << cfg_.video_port << " command=" << cfg_.command_port << "\n";
     return true;
@@ -91,6 +94,7 @@ void AuroreLinkServer::stop() {
     if (video_accept_thread_.joinable()) video_accept_thread_.join();
     if (command_accept_thread_.joinable()) command_accept_thread_.join();
     if (heartbeat_monitor_thread_.joinable()) heartbeat_monitor_thread_.join();
+    if (link_monitor_thread_.joinable()) link_monitor_thread_.join();
     std::lock_guard<std::mutex> lk(clients_mutex_);
     for (int fd : telemetry_clients_) ::close(fd);
     for (int fd : video_clients_) ::close(fd);
@@ -541,6 +545,48 @@ void AuroreLinkServer::heartbeat_monitor_loop() {
         } else {
             heartbeat_timed_out_.store(false, std::memory_order_release);
         }
+    }
+}
+
+/**
+ * AM7-L3-IF-001/005: Ethernet link monitor
+ *
+ * Polls /sys/class/net/<iface>/operstate every 80ms (12.5 Hz ≥ 10 Hz spec).
+ * On link-down, immediately fires the heartbeat timeout callback to trigger
+ * IDLE/SAFE transition within one poll interval (≤ 80ms ≤ 100ms spec).
+ */
+void AuroreLinkServer::link_monitor_loop() {
+    const std::string operstate_path =
+        "/sys/class/net/" + cfg_.ethernet_interface + "/operstate";
+
+    struct timespec sleep_ts{};
+    sleep_ts.tv_nsec = static_cast<long>(kLinkPollIntervalNs);
+
+    bool was_down = false;
+
+    while (running_.load(std::memory_order_acquire)) {
+        clock_nanosleep(CLOCK_MONOTONIC, 0, &sleep_ts, nullptr);
+
+        std::ifstream operstate(operstate_path);
+        if (!operstate.is_open()) {
+            continue;  // File absent (e.g. native build without eth0) — skip silently
+        }
+
+        std::string state;
+        operstate >> state;
+
+        const bool link_down = (state == "down" || state == "lowerlayerdown" ||
+                                state == "notpresent");
+
+        if (link_down && !was_down) {
+            std::cerr << "AuroreLink: Ethernet link " << cfg_.ethernet_interface
+                      << " DOWN — triggering IDLE/SAFE (AM7-L3-IF-001)\n";
+            // Reuse heartbeat timeout callback: link loss = operator disconnected
+            if (on_heartbeat_timeout_) {
+                on_heartbeat_timeout_();
+            }
+        }
+        was_down = link_down;
     }
 }
 

@@ -143,6 +143,8 @@ struct AuroreLinkConfig {
     std::string hmac_key = "";       // HMAC-SHA256 key for command authentication
     // AM7-L2-SEC-005: session timeout for maintenance (command) interfaces
     uint32_t session_timeout_s = 300;
+    // AM7-L3-IF-005: Ethernet interface to monitor for link-down detection
+    std::string ethernet_interface = "eth0";
 };
 
 // Callbacks installed by main.cpp:
@@ -234,6 +236,11 @@ class AuroreLinkServer {
     std::atomic<bool> heartbeat_timed_out_{false};  // edge-detect: fire callback once per event
     std::thread heartbeat_monitor_thread_;
     void heartbeat_monitor_loop();
+
+    // AM7-L3-IF-001/005: Ethernet link monitor (≥10 Hz polling, 100ms transition on link-down)
+    std::thread link_monitor_thread_;
+    void link_monitor_loop();
+    static constexpr uint64_t kLinkPollIntervalNs = 80000000ULL;  // 80ms → 12.5 Hz
 };
 
 }  // namespace aurore
