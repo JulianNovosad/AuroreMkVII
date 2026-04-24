@@ -283,7 +283,7 @@ Compiled issues/bugs found in source code requiring investigation.
 | Camera (color, streaming) | **90%** | WCET verify on hardware |
 | Real-time performance (WCET ≤5ms) | **65%** | PISP dual-stream in place; measure |
 | Safety/security (spec §3-4) | **100%** | Done 2026-04-24 |
-| Detection/tracking (YOLO26, KCF) | **65%** | Confidence gate fixed, freecam rate bug fixed |
+| Detection/tracking (YOLO26, KCF) | **70%** | Confidence gate fixed, lock confirmation complete |
 | Streaming/web interface | **85%** | Working |
 | Hardware (I2C, FusionHAT, LRF) | **75%** | Slow-success bug fixed, 500µs retry backoff added |
 | Error handling (`abort()` removal) | **100%** | Done 2026-04-23 |
@@ -303,6 +303,7 @@ Compiled issues/bugs found in source code requiring investigation.
 | CommandSocket peer auth (SO_PEERCRED) | **100%** | Done 2026-04-24 (session 3) |
 | Thread join timeout (pthread_timedjoin_np) | **100%** | Done 2026-04-24 (session 3) |
 | Target rejection logging (AM7-L3-TGT-001) | **100%** | Done 2026-04-24 (session 3) |
+| Lock confirmation criteria (AM7-L3-TGT-002) | **100%** | Done 2026-04-24 (predicted position Δ ≤ 5px) |
 
 ### Overall Completion
 - **~70% complete** (by functionality)
@@ -322,5 +323,6 @@ Compiled issues/bugs found in source code requiring investigation.
 - Thread join: pthread_timedjoin_np replaces blocking join-in-timeout-loop
 - Invalid input logging: unknown message IDs + out-of-range gimbal rates (AM7-L3-IF-002)
 - Target rejection logging: confidence below threshold now logged (AM7-L3-TGT-001)
-- 42/42 tests pass
+- Lock confirmation: predicted vs measured position validation (Δ ≤ 5px) per AM7-L3-TGT-002
+- 43/43 tests pass
 - Firmware update flow (AM7-L3-SEC-005): dual-bank A/B, ECDSA signature, version check — implemented and 7/7 tests pass
