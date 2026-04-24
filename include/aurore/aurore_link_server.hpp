@@ -140,7 +140,9 @@ struct AuroreLinkConfig {
     uint16_t video_port = 9001;      // Video TCP (MkVII → Link)
     uint16_t command_port = 9002;    // Command TCP (Link → MkVII)
     size_t max_clients = 4;
-    std::string hmac_key = "";  // HMAC-SHA256 key for command authentication
+    std::string hmac_key = "";       // HMAC-SHA256 key for command authentication
+    // AM7-L2-SEC-005: session timeout for maintenance (command) interfaces
+    uint32_t session_timeout_s = 300;
 };
 
 // Callbacks installed by main.cpp:

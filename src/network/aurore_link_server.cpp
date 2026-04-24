@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -225,10 +226,26 @@ void AuroreLinkServer::command_accept_loop() {
 
         // Spawn detached reader thread per command client
         std::thread([this, client]() {
+            // AM7-L2-SEC-005: session timeout — close idle command connections after N seconds
+            if (cfg_.session_timeout_s > 0) {
+                struct timeval tv;
+                tv.tv_sec = static_cast<time_t>(cfg_.session_timeout_s);
+                tv.tv_usec = 0;
+                ::setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+            }
+
             while (running_.load(std::memory_order_acquire)) {
                 LinkInputMessage msg{};
                 ssize_t n = ::recv(client, &msg, sizeof(msg), MSG_WAITALL);
-                if (n <= 0) break;
+                if (n <= 0) {
+                    if (n < 0 && errno == EAGAIN) {
+                        // Session idle timeout — log and disconnect
+                        std::cerr << "AuroreLink: session timeout after " << cfg_.session_timeout_s
+                                  << "s idle — disconnecting client fd=" << client << "\n";
+                        if (on_security_event_) on_security_event_("SESSION_TIMEOUT", 0);
+                    }
+                    break;
+                }
                 if (n != sizeof(msg)) continue;
 
                 if (msg.header.sync_word != 0xA7050005) {  // AURORE05 mnemonic -> 0xA7050005

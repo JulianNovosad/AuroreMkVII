@@ -161,7 +161,8 @@ static void test_security_async_saturation() {
         frame.sequence = static_cast<uint64_t>(i);
         
         // Note: authenticate_frame now ABORTS if busy, so we MUST wait for completion
-        auth.authenticate_frame(pixel_data.data(), pixel_data.size(), header_data, 44, &frame);
+        auth.authenticate_frame(pixel_data.data(), pixel_data.size(), header_data, 44,
+                               frame.frame_hash, frame.hmac);
         
         bool completed = auth.wait_for_completion(std::chrono::milliseconds(100));
         if (!completed) {

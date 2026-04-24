@@ -79,54 +79,43 @@ inline void compute_hmac_sha256_raw(const std::string& key, const void* data, si
  * @param len Length of the data buffer.
  * @param out_hmac Pointer to a buffer where the 32-byte HMAC will be stored.
  */
-inline void compute_hmac_sha256_raw_threadsafe(const std::string& key, const void* data, size_t len, unsigned char* out_hmac) {
+inline bool compute_hmac_sha256_raw_threadsafe(const std::string& key, const void* data, size_t len, unsigned char* out_hmac) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     if (!ctx) {
-        std::fprintf(stderr, "FATAL: EVP_MD_CTX_new failed (out of memory or OpenSSL error)\n");
-        std::abort();
+        std::fprintf(stderr, "[security] EVP_MD_CTX_new failed\n");
+        return false;
     }
 
-    // Create key from raw bytes using EVP_PKEY_new_raw_private_key (correct API for HMAC)
     EVP_PKEY* pkey = EVP_PKEY_new_raw_private_key(
         EVP_PKEY_HMAC, nullptr,
         reinterpret_cast<const unsigned char*>(key.data()), key.size()
     );
     if (!pkey) {
-        std::fprintf(stderr, "FATAL: EVP_PKEY_new_raw_private_key failed (invalid key or OpenSSL error)\n");
+        std::fprintf(stderr, "[security] EVP_PKEY_new_raw_private_key failed\n");
         EVP_MD_CTX_free(ctx);
-        std::abort();
+        return false;
     }
 
-    if (EVP_DigestSignInit(ctx, nullptr, EVP_sha256(), nullptr, pkey) != 1) {
-        std::fprintf(stderr, "FATAL: EVP_DigestSignInit failed\n");
+    if (EVP_DigestSignInit(ctx, nullptr, EVP_sha256(), nullptr, pkey) != 1 ||
+        EVP_DigestSignUpdate(ctx, data, len) != 1) {
+        std::fprintf(stderr, "[security] EVP_DigestSign init/update failed\n");
         EVP_PKEY_free(pkey);
         EVP_MD_CTX_free(ctx);
-        std::abort();
-    }
-    if (EVP_DigestSignUpdate(ctx, data, len) != 1) {
-        std::fprintf(stderr, "FATAL: EVP_DigestSignUpdate failed\n");
-        EVP_PKEY_free(pkey);
-        EVP_MD_CTX_free(ctx);
-        std::abort();
+        return false;
     }
 
-    // Two-phase final: first get required buffer size, then compute HMAC
     size_t hmac_len = 0;
-    if (EVP_DigestSignFinal(ctx, nullptr, &hmac_len) != 1) {
-        std::fprintf(stderr, "FATAL: EVP_DigestSignFinal (get size) failed\n");
+    if (EVP_DigestSignFinal(ctx, nullptr, &hmac_len) != 1 ||
+        EVP_DigestSignFinal(ctx, out_hmac, &hmac_len) != 1) {
+        std::fprintf(stderr, "[security] EVP_DigestSignFinal failed\n");
         EVP_PKEY_free(pkey);
         EVP_MD_CTX_free(ctx);
-        std::abort();
-    }
-    if (EVP_DigestSignFinal(ctx, out_hmac, &hmac_len) != 1) {
-        std::fprintf(stderr, "FATAL: EVP_DigestSignFinal (write) failed\n");
-        EVP_PKEY_free(pkey);
-        EVP_MD_CTX_free(ctx);
-        std::abort();
+        return false;
     }
 
     EVP_PKEY_free(pkey);
     EVP_MD_CTX_free(ctx);
+    return true;
 }
 
 /**
@@ -213,19 +202,20 @@ public:
 
     /**
      * @brief Authenticate frame asynchronously.
-     * 
+     *
      * Computes SHA256 of pixel data, then HMAC-SHA256 over header + hash.
-     * Results are written to the ZeroCopyFrame when complete.
-     * 
+     * Results are written to out_hash (32 bytes) and out_hmac (32 bytes).
+     *
      * @param pixel_data Pointer to pixel data buffer
      * @param pixel_size Size of pixel data in bytes
      * @param header_data Pointer to frame header data (for HMAC)
      * @param header_size Size of header data in bytes
-     * @param out_frame Pointer to frame struct to write hash/hmac
+     * @param out_hash Output buffer for SHA256 hash (32 bytes, e.g. frame.frame_hash)
+     * @param out_hmac Output buffer for HMAC-SHA256 (32 bytes, e.g. frame.hmac)
      */
     void authenticate_frame(const void* pixel_data, size_t pixel_size,
                            const void* header_data, size_t header_size,
-                           void* out_frame);
+                           uint8_t* out_hash, uint8_t* out_hmac);
 
     /**
      * @brief Wait for authentication to complete.
@@ -259,33 +249,31 @@ private:
     mutable std::future<bool> worker_future_;
     bool result_ = false;
 
-    // Working buffers
-    unsigned char pending_hash_[32];
-    unsigned char pending_hmac_[32];
-    void* pending_frame_ = nullptr;
+    uint8_t* pending_out_hash_ = nullptr;
+    uint8_t* pending_out_hmac_ = nullptr;
 };
 
 // Inline implementations for AsyncFrameAuthenticator
 inline void AsyncFrameAuthenticator::authenticate_frame(
     const void* pixel_data, size_t pixel_size,
     const void* header_data, size_t header_size,
-    void* out_frame) {
+    uint8_t* out_hash, uint8_t* out_hmac) {
 
     if (worker_future_.valid() &&
         worker_future_.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout) {
-        std::fprintf(stderr, "FATAL: AsyncFrameAuthenticator is busy. Frame dropped! (backpressure violation)\n");
-        std::abort();
+        std::fprintf(stderr, "[security] AsyncFrameAuthenticator busy — frame dropped (backpressure violation)\n");
+        result_ = false;
+        return;
     }
 
-    pending_frame_ = out_frame;
+    pending_out_hash_ = out_hash;
+    pending_out_hmac_ = out_hmac;
 
     worker_future_ = std::async(std::launch::async,
         [this, pixel_data, pixel_size, header_data, header_size]() -> bool {
-            // Compute SHA256 of pixel data
             unsigned char frame_hash[32];
             compute_sha256_raw_threadsafe(pixel_data, pixel_size, frame_hash);
 
-            // Compute HMAC over header + hash
             std::vector<uint8_t> hmac_input;
             hmac_input.reserve(header_size + 32);
             hmac_input.insert(hmac_input.end(),
@@ -294,40 +282,12 @@ inline void AsyncFrameAuthenticator::authenticate_frame(
             hmac_input.insert(hmac_input.end(), frame_hash, frame_hash + 32);
 
             unsigned char hmac[32];
-            compute_hmac_sha256_raw_threadsafe(hmac_key_, hmac_input.data(), hmac_input.size(), hmac);
-
-            // Write results to ZeroCopyFrame struct
-            // Note: ZeroCopyFrame has frame_hash[32] and hmac[32] as consecutive fields
-            // Offsets: frame_hash at 269, hmac at 301 (on 64-bit platform)
-            struct ZeroCopyFrameAuth {
-                // Fields before frame_hash (must match ZeroCopyFrame layout exactly)
-                uint64_t sequence;         // 0
-                uint64_t timestamp_ns;     // 8
-                uint64_t exposure_us;      // 16
-                float gain;                // 24
-                void* plane_data[4];       // 32
-                size_t plane_size[4];      // 64
-                int stride[4];             // 96
-                int width;                 // 112
-                int height;                // 116
-                uint32_t format;           // 120 (PixelFormat underlying type)
-                void* request_ptr;         // 128
-                uint32_t buffer_id;        // 136
-                bool valid;                // 140
-                char error[128];           // 141
-                // Authentication fields
-                uint8_t frame_hash[32];    // 269
-                uint8_t hmac[32];          // 301
-            };
-
-            ZeroCopyFrameAuth* auth_frame = static_cast<ZeroCopyFrameAuth*>(pending_frame_);
-            if (auth_frame) {
-                std::memcpy(auth_frame->frame_hash, frame_hash, 32);
-                std::memcpy(auth_frame->hmac, hmac, 32);
+            if (!compute_hmac_sha256_raw_threadsafe(hmac_key_, hmac_input.data(), hmac_input.size(), hmac)) {
+                return false;
             }
 
-            std::memcpy(pending_hash_, frame_hash, 32);
-            std::memcpy(pending_hmac_, hmac, 32);
+            if (pending_out_hash_) std::memcpy(pending_out_hash_, frame_hash, 32);
+            if (pending_out_hmac_) std::memcpy(pending_out_hmac_, hmac, 32);
 
             return true;
         });

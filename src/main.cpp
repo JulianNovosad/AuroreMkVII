@@ -631,9 +631,9 @@ aurore::CameraConfig cam_config;
     DetectShared detect_shared;
 
     // Load YOLO26n detector
-    std::unique_ptr<aurore::Yolo26Detector> yolo_detector;
     bool yolo_loaded = false;
 #ifdef AURORE_HAS_ONNXRUNTIME
+    std::unique_ptr<aurore::Yolo26Detector> yolo_detector;
     aurore::Yolo26Detector::Config yolo_cfg;
     yolo_cfg.model_path = config.get_string("vision.yolo_model_path",
                                              "/home/pi/AuroreMkVII/models/yolo26n.onnx");
@@ -683,9 +683,11 @@ aurore::CameraConfig cam_config;
             if (local_frame.empty()) continue;
 
             std::optional<aurore::Detection> det;
+#ifdef AURORE_HAS_ONNXRUNTIME
             if (yolo_loaded && yolo_detector) {
                 det = yolo_detector->detect(local_frame);
             }
+#endif
             if (det.has_value()) {
                 std::lock_guard<std::mutex> lk(detect_shared.result_mtx);
                 detect_shared.latest     = *det;

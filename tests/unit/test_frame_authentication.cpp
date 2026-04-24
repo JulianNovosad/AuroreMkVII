@@ -228,11 +228,11 @@ static void test_async_frame_authenticator() {
     std::memcpy(frame_header + offset, &out_frame.format, sizeof(out_frame.format)); offset += 4;
     std::memcpy(frame_header + offset, &out_frame.buffer_id, sizeof(out_frame.buffer_id)); offset += 4;
 
-    // Submit for async authentication
+    // Submit for async authentication — write directly into frame fields
     auth.authenticate_frame(
         pixel_data.data(), pixel_data.size(),
         frame_header, offset,
-        &out_frame
+        out_frame.frame_hash, out_frame.hmac
     );
 
     // Wait for completion (timeout 100ms)
@@ -261,7 +261,8 @@ static void test_async_authenticator_destructor_safety() {
         out_frame.plane_data[0] = pixel_data.data();
         out_frame.plane_size[0] = pixel_data.size();
 
-        auth.authenticate_frame(pixel_data.data(), pixel_data.size(), header, sizeof(header), &out_frame);
+        auth.authenticate_frame(pixel_data.data(), pixel_data.size(), header, sizeof(header),
+                               out_frame.frame_hash, out_frame.hmac);
         // Deliberately do NOT call wait_for_completion() — destructor must block until done.
     }
     // If we reach here without a crash or sanitizer error, the destructor correctly waited.
@@ -282,7 +283,8 @@ static void test_async_authenticator_timeout_returns_false() {
     out_frame.plane_data[0] = pixel_data.data();
     out_frame.plane_size[0] = pixel_data.size();
 
-    auth.authenticate_frame(pixel_data.data(), pixel_data.size(), header, sizeof(header), &out_frame);
+    auth.authenticate_frame(pixel_data.data(), pixel_data.size(), header, sizeof(header),
+                           out_frame.frame_hash, out_frame.hmac);
 
     // 0ms wait — may already be ready (fast task) or may timeout; both are acceptable.
     bool immediate = auth.wait_for_completion(std::chrono::milliseconds(0));
