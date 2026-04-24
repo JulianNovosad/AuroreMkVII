@@ -147,7 +147,7 @@ struct AuroreLinkConfig {
 
 // Callbacks installed by main.cpp:
 using ModeCallback = std::function<void(LinkMode)>;
-using FreecamCallback = std::function<void(float az_deg, float el_deg, float velocity_dps)>;
+using FreecamCallback = std::function<void(float az_deg, float el_deg, float velocity_dps, uint32_t seq_num)>;
 using ArmCallback = std::function<void(bool authorized)>;
 using HeartbeatTimeoutCallback = std::function<void()>;
 using EmergencyStopCallback = std::function<void()>;

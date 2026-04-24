@@ -649,6 +649,21 @@ aurore::CameraConfig cam_config;
             }
         });
 
+    // AM7-L3-ACT-002: Gimbal command sequence gap detection — reject out-of-order commands
+    link_server.set_freecam_callback([&](float az_dps, float el_dps, float /*vel*/,
+                                         uint32_t seq_num) {
+        auto cmd = gimbal_ctrl.process_command_with_gap_check(az_dps, el_dps,
+                                                               seq_num);
+        if (!cmd.has_value()) {
+            std::cerr << "AuroreLink: gimbal sequence gap detected (seq=" << seq_num
+                      << ") — holding position\n";
+            telemetry.log_event(aurore::TelemetryEventId::SAFETY_FAULT,
+                                aurore::TelemetrySeverity::kCritical,
+                                "Gimbal command sequence gap (AM7-L3-ACT-002)");
+            state_machine.on_fault(aurore::FaultCode::SEQUENCE_GAP);
+        }
+    });
+
     // AM7-L2-LOG-OP-003: Log target selection events
     link_server.set_target_select_callback([&](uint16_t cx, uint16_t cy, uint8_t confidence) {
         telemetry.log_event(aurore::TelemetryEventId::DETECTION_VALID,

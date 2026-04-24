@@ -386,7 +386,7 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
                 // Convert milliradians/sec * 100 to degrees/sec
                 float az_dps = (static_cast<float>(payload.azimuth_rate) / 100.0f) * 0.0572958f;
                 float el_dps = (static_cast<float>(payload.elevation_rate) / 100.0f) * 0.0572958f;
-                on_freecam_(az_dps, el_dps, 0.0f);
+                on_freecam_(az_dps, el_dps, 0.0f, msg.header.sequence);
             }
             break;
         }

@@ -128,7 +128,7 @@ void test_freecam_callback_fires_on_command() {
     AuroreLinkServer server(cfg);
 
     float received_az = 0.f, received_el = 0.f, received_vel = 0.f;
-    server.set_freecam_callback([&](float az, float el, float vel) {
+    server.set_freecam_callback([&](float az, float el, float vel, uint32_t /*seq*/) {
         received_az = az;
         received_el = el;
         received_vel = vel;
