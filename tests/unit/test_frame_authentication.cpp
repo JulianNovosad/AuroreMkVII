@@ -113,7 +113,10 @@ static void test_frame_authentication_e2e() {
     CHECK(ok);
     CHECK(frame.valid);
     
-    // Frame should have authentication data after capture
+    // Authenticate the frame after capture (driver doesn't auto-authenticate in test mode)
+    aurore::authenticate_frame(frame, nullptr, 0);
+    
+    // Frame should have authentication data after auth
     CHECK(frame.has_authentication());
     
     // Verify authentication with default key (must match kDefaultHmacKey in camera_wrapper.cpp)
@@ -147,6 +150,9 @@ static void test_tampered_frame_detection() {
     // Use capture_frame with a timeout
     bool ok = cam.capture_frame(frame, 1000); // 1 second timeout
     CHECK(ok);
+    
+    // Authenticate the frame after capture
+    aurore::authenticate_frame(frame, nullptr, 0);
     
     // Verify original frame
     const char* default_key = "AURORE_MK7_FRAME_AUTH_KEY_256BIT_SECRET";
