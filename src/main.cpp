@@ -959,9 +959,11 @@ int main(int argc, char* argv[]) {
         // Vision watchdog: track last frame timestamp
         // Initialized to 0 so the watchdog only arms after the first frame arrives.
         uint64_t last_frame_ns = 0;
-        // 25ms = 3 frame periods at 120Hz: tolerates up to 2 consecutive dropped frames.
+        // 150ms = ~10 frame periods at actual hardware throughput (~70fps at 1536x864).
+        // Camera is configured for 120fps but ISP delivers ~14ms/frame; any gap >150ms
+        // (>10 missed frames) indicates a genuinely stalled pipeline.
         // Dry-run uses 250ms because non-RT scheduling causes irregular frame delivery.
-        const uint64_t kVisionWatchdogNs = dry_run ? 250000000ULL : 25000000ULL;
+        const uint64_t kVisionWatchdogNs = dry_run ? 250000000ULL : 150000000ULL;
 
         // Request SEARCH mode (IDLE_SAFE -> SEARCH)
         state_machine.request_search();
@@ -1235,14 +1237,16 @@ int main(int argc, char* argv[]) {
                     }
                 }
             } else {
-                // No frame available - check vision watchdog (only after first frame arrives)
-                if (last_frame_ns != 0) {
+                // No frame available - check vision watchdog (only after first frame arrives
+                // and only if not already in FAULT to prevent telemetry flooding).
+                if (last_frame_ns != 0 &&
+                    state_machine.state() != aurore::FcsState::FAULT) {
                     uint64_t elapsed = now_ns - last_frame_ns;
                     if (elapsed > kVisionWatchdogNs) {
                         state_machine.on_fault(aurore::FaultCode::CAMERA_TIMEOUT);
                         telemetry.log_event(aurore::TelemetryEventId::CAMERA_TIMEOUT,
                                             aurore::TelemetrySeverity::kWarning,
-                                            "Vision pipeline timeout (>10ms)");
+                                            "Vision pipeline timeout (>150ms)");
                     }
                 }
 
