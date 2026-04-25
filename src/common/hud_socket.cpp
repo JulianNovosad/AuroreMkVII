@@ -194,9 +194,11 @@ void HudSocket::send_to_clients(const void* data, size_t size) {
     std::vector<int> dead;
 
     for (int fd : client_fds_) {
-        // ICD-006: SOCK_SEQPACKET send() preserves message boundaries
-        ssize_t n = ::send(fd, data, size, MSG_NOSIGNAL);
-        if (n < 0) {
+        // ICD-006: SOCK_SEQPACKET send() preserves message boundaries.
+        // MSG_DONTWAIT: never block the RT actuation thread; EAGAIN = client slow,
+        // skip this frame but keep the connection.
+        ssize_t n = ::send(fd, data, size, MSG_NOSIGNAL | MSG_DONTWAIT);
+        if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
             dead.push_back(fd);
         }
     }

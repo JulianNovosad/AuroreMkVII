@@ -26,8 +26,9 @@ public:
     static constexpr int kStreamWidth  = 1280;
     static constexpr int kStreamHeight = 720;
     static constexpr int kJpegQuality  = 75;
-    // Encode / broadcast interval (~30 fps)
-    static constexpr int kEncodeIntervalMs = 33;
+    // Absolute-timer encode interval: actual FPS = 1000/kEncodeIntervalMs as long as
+    // encode completes within the interval.  16ms → up to 62fps.
+    static constexpr int kEncodeIntervalMs = 16;
 
     // input_width/height: expected resolution of frames passed to push_frame().
     // Staging buffer is pre-allocated at this size so push_frame() never heap-allocates.

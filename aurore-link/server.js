@@ -752,7 +752,10 @@ function broadcastMipiFrame(jpeg) {
   mipiLatestFrame = jpeg;
   const header = `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n`;
   for (const r of mipiClients) {
-    if (!r.writableEnded) { r.write(header); r.write(jpeg); r.write('\r\n'); }
+    // Skip frame if browser TCP buffer has >2 frames queued — keeps stream at live edge.
+    if (!r.writableEnded && r.writableLength < 128 * 1024) {
+      r.write(header); r.write(jpeg); r.write('\r\n');
+    }
   }
   resetMipiWatchdog();
 }

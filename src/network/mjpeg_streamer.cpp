@@ -120,9 +120,9 @@ void MjpegStreamer::accept_loop() {
             }
             break;
         }
-        // Increase send buffer so the encode thread can write several frames ahead
-        // before blocking. Without this the 128KB default fills in <2 frames at 720p.
-        const int kSndbuf = 4 * 1024 * 1024;
+        // 256KB ≈ 4 frames at 60KB/frame — enough to absorb a burst without
+        // accumulating a multi-second backlog of stale frames.
+        const int kSndbuf = 256 * 1024;
         ::setsockopt(client_fd, SOL_SOCKET, SO_SNDBUF, &kSndbuf, sizeof(kSndbuf));
 
         std::lock_guard<std::mutex> lk(clients_mtx_);
@@ -132,14 +132,17 @@ void MjpegStreamer::accept_loop() {
 }
 
 void MjpegStreamer::encode_loop() {
-    // JPEG params: quality 85 (high), default subsampling
-    std::vector<int> jpeg_params = {cv::IMWRITE_JPEG_QUALITY, 85};
+    std::vector<int> jpeg_params = {cv::IMWRITE_JPEG_QUALITY, kJpegQuality};
     std::vector<uchar> jpeg_buf;
-    cv::Mat local_frame;                                         // matches input resolution
-    cv::Mat stream_frame(kStreamHeight, kStreamWidth, CV_8UC3);  // pre-allocated stream size
+    cv::Mat local_frame;
+    cv::Mat stream_frame(kStreamHeight, kStreamWidth, CV_8UC3);
+
+    // Absolute-time wakeup: interval = kEncodeIntervalMs regardless of encode duration.
+    auto next_wake = std::chrono::steady_clock::now();
 
     while (running_.load(std::memory_order_acquire)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(kEncodeIntervalMs));
+        next_wake += std::chrono::milliseconds(kEncodeIntervalMs);
+        std::this_thread::sleep_until(next_wake);
 
         if (!has_clients()) continue;
 
@@ -194,7 +197,10 @@ void MjpegStreamer::broadcast(const std::vector<uchar>& jpeg) {
     {
         std::lock_guard<std::mutex> lk(clients_mtx_);
         for (int fd : clients_) {
-            if (::sendmsg(fd, &msg, MSG_NOSIGNAL | MSG_DONTWAIT) < 0) {
+            ssize_t sent = ::sendmsg(fd, &msg, MSG_NOSIGNAL | MSG_DONTWAIT);
+            if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                // Real error (broken pipe, etc.) — drop client.
+                // EAGAIN means socket buffer full: skip this frame, stay connected.
                 dead.push_back(fd);
             }
         }
