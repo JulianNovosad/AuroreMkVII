@@ -355,3 +355,4 @@ Compiled issues/bugs found in source code requiring investigation.
 - 43/43 tests pass
 - Firmware update flow (AM7-L3-SEC-005): dual-bank A/B, ECDSA signature, version check — implemented and 7/7 tests pass
 - Gimbal constraints in .rodata: Elevation -10° to +45°, Azimuth ±90°, velocity ≤60°/s, accel ≤120°/s² (AM7-L3-ACT-001)
+- Test expansion: added test coverage audit and expansion plan docs, registered regression/safety test directories
