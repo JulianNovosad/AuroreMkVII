@@ -118,7 +118,8 @@
   "network": {
     "aurore_link": {
       "telemetry_port": 9000,
-      "command_port": 9002
+      "command_port": 9002,
+      "ethernet_interface": "wlan0"
     },
     "hud_telemetry": {
       "socket_path": "/run/aurore/hud_telemetry.sock",

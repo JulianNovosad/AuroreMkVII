@@ -373,12 +373,14 @@ int main(int argc, char* argv[]) {
     // Initialize camera (if not dry-run)
     std::unique_ptr<aurore::CameraWrapper> camera;
 
+    // Declare cam_config here so its dimensions are accessible for streamer construction below.
+    aurore::CameraConfig cam_config;
+    cam_config.width  = config.get_int("camera.width",  aurore::DEFAULT_WIDTH);
+    cam_config.height = config.get_int("camera.height", aurore::DEFAULT_HEIGHT);
+    cam_config.fps    = config.get_int("camera.fps",    aurore::DEFAULT_FPS);
+
     // Initialize camera (test pattern in dry-run, real camera otherwise)
     try {
-aurore::CameraConfig cam_config;
-         cam_config.width = config.get_int("camera.width", aurore::DEFAULT_WIDTH);
-         cam_config.height = config.get_int("camera.height", aurore::DEFAULT_HEIGHT);
-         cam_config.fps = config.get_int("camera.fps", aurore::DEFAULT_FPS);
 
         camera = std::make_unique<aurore::CameraWrapper>(cam_config);
         camera->init();
@@ -400,6 +402,9 @@ aurore::CameraConfig cam_config;
         static_cast<uint16_t>(config.get_int("network.aurore_link.command_port", 9002));
     link_cfg.session_timeout_s =
         static_cast<uint32_t>(config.get_int("network.aurore_link.session_timeout_s", 300));
+    // Pi uses wlan0; configure this to match the active operator network interface.
+    link_cfg.ethernet_interface =
+        config.get_string("network.aurore_link.ethernet_interface", "wlan0");
 
     // AM7-L2-SEC-006: Load HMAC key from protected storage (env var or key file)
     {
@@ -443,9 +448,12 @@ aurore::CameraConfig cam_config;
         std::cerr << "Warning: HUD socket failed to start" << std::endl;
     }
 
-    // MJPEG preview streamer: publishes MIPI frames to aurore-link over UNIX socket
+    // MJPEG preview streamer: publishes MIPI frames to aurore-link over UNIX socket.
+    // We push ISP stream 1 (640x360) to avoid a 3.8MB cold-cache DMA copy on the RT path.
+    // The encode thread upscales to kStreamWidth x kStreamHeight (1280x720).
     aurore::MjpegStreamer mjpeg_streamer(
-        config.get_string("network.mjpeg_stream.socket_path", "/run/aurore/mjpeg_stream.sock"));
+        config.get_string("network.mjpeg_stream.socket_path", "/run/aurore/mjpeg_stream.sock"),
+        640, 360);
     if (mjpeg_streamer.start()) {
         std::cout << "MJPEG streamer listening: /run/aurore/mjpeg_stream.sock" << std::endl;
     } else {
@@ -868,7 +876,7 @@ aurore::CameraConfig cam_config;
         }
 
         aurore::ThreadTiming timing(8333333, 0);    // 120Hz target, hardware achieves ~70fps at 1536x864
-        aurore::DeadlineMonitor deadline(15000000);  // 15ms WCET for capture+conversion at this resolution
+        aurore::DeadlineMonitor deadline(25000000);  // 25ms WCET: ISP delivers at ~17ms, headroom for jitter
 
         vision_running.store(true, std::memory_order_release);
 
@@ -993,12 +1001,16 @@ aurore::CameraConfig cam_config;
 
                             std::optional<aurore::Detection> detection;
 
-                            // Feed YOLO detect thread every kDetectEveryN frames
+                            // Feed YOLO detect thread every kDetectEveryN frames.
+                            // Use hardware ISP stream 1 (640x360 BGR888) — zero-copy DMA
+                            // header, then copyTo a CPU buffer so detect_thread owns it
+                            // after release_frame().  No software resize on the RT thread.
                             if (yolo_loaded && (++detect_frame_count % kDetectEveryN == 0)) {
                                 if (detect_shared.frame_mtx.try_lock()) {
-                                    detect_shared.frame = camera->wrap_as_mat(
+                                    cv::Mat yolo_src = camera->wrap_as_mat(
                                         frame, aurore::PixelFormat::BGR888, 1);
-                                    if (!detect_shared.frame.empty()) {
+                                    if (!yolo_src.empty()) {
+                                        yolo_src.copyTo(detect_shared.frame);
                                         detect_shared.frame_ready = true;
                                         detect_shared.frame_cv.notify_one();
                                     }
@@ -1166,9 +1178,16 @@ aurore::CameraConfig cam_config;
                     current_solution.valid = false;
                 }
 
-                // Preview frame for web interface — non-blocking, drops if encode thread busy
+                // Preview frame for web interface — use ISP stream 1 (640x360) to avoid
+                // a 3.8MB DMA cold-cache copy on the RT path.  Encode thread upscales.
                 if (!bgr_frame.empty()) {
-                    mjpeg_streamer.push_frame(bgr_frame);
+                    cv::Mat preview = camera->wrap_as_mat(
+                        frame, aurore::PixelFormat::BGR888, 1);
+                    if (!preview.empty()) {
+                        mjpeg_streamer.push_frame(preview);
+                    } else {
+                        mjpeg_streamer.push_frame(bgr_frame);  // fallback: full-res
+                    }
                 }
 
                 const uint64_t t2_state = aurore::get_timestamp();

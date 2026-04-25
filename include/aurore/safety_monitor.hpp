@@ -741,9 +741,11 @@ class SafetyMonitor {
         const uint64_t current_count = vision_frame_count_.load(std::memory_order_acquire);
         const uint64_t last_count = last_vision_count_.load(std::memory_order_acquire);
 
-        // Check for stall (only if we've received at least one frame AND vision is expected to be running)
-        // Require current_count > 1 to ensure we've seen at least 2 updates before declaring stall
-        if (current_count == last_count && current_count > 1) {
+        // Check for stall: one frame is enough to arm the watchdog.
+        // count==0 means no frames ever delivered (pre-arm); count>0 means we
+        // expect continued delivery.  The stall check fires if count has not
+        // advanced since the last run_cycle() and the last frame is too old.
+        if (current_count == last_count && current_count > 0) {
             // Vision pipeline hasn't advanced
             const TimestampNs last_ts = last_vision_timestamp_ns_.load(std::memory_order_acquire);
             // Use wrap-safe timestamp difference
@@ -754,11 +756,8 @@ class SafetyMonitor {
         }
         last_vision_count_.store(current_count, std::memory_order_release);
 
-        // Check latency only after at least 2 frames have been produced.
-// This ensures we have a meaningful baseline for latency measurement.
-// Also require latency > 2 * frame_period to avoid false positives:
-// at 120Hz, frames come every 8.3ms, but safety runs every 1ms.
-        if (current_count > 1) {
+        // Check latency after first frame arrives.
+        if (current_count > 0) {
             const TimestampNs last_ts = last_vision_timestamp_ns_.load(std::memory_order_acquire);
             const int64_t latency = timestamp_diff_ns(now, last_ts);
             // At 120Hz, frame period is 8.33ms. Allow 2× for jitter headroom.
@@ -776,9 +775,8 @@ class SafetyMonitor {
         const uint64_t current_count = actuation_frame_count_.load(std::memory_order_acquire);
         const uint64_t last_count = last_actuation_count_.load(std::memory_order_acquire);
 
-        // Check for stall (only if we've received at least one frame AND actuation is expected to be running)
-        // Require current_count > 1 to ensure we've seen at least 2 updates before declaring stall
-        if (current_count == last_count && current_count > 1) {
+        // Check for stall: one actuation frame is enough to arm the watchdog.
+        if (current_count == last_count && current_count > 0) {
             const TimestampNs last_ts =
                 last_actuation_timestamp_ns_.load(std::memory_order_acquire);
             const int64_t stall_duration = timestamp_diff_ns(now, last_ts);
@@ -788,9 +786,8 @@ class SafetyMonitor {
         }
         last_actuation_count_.store(current_count, std::memory_order_release);
 
-        // Check latency only after at least 2 actuation frames have been produced.
-// Allow 2× headroom for actuation: at 120Hz frame period is 8.33ms.
-        if (current_count > 1) {
+        // Check latency after first actuation frame arrives.
+        if (current_count > 0) {
             const TimestampNs last_ts =
                 last_actuation_timestamp_ns_.load(std::memory_order_acquire);
             const int64_t latency = timestamp_diff_ns(now, last_ts);

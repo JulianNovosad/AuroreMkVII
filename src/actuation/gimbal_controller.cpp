@@ -92,9 +92,18 @@ GimbalCommand GimbalController::command_absolute(float az_deg, float el_deg, std
     const float clamped_az = std::clamp(limited_az, az_min_, az_max_);
     const float clamped_el = std::clamp(limited_el, el_min_, el_max_);
 
-    // AM7-L3-ACT-003: Flag limit violation when position is clamped
-    if (clamped_az != limited_az || clamped_el != limited_el) {
+    // AM7-L3-ACT-003: Flag limit violation when position is meaningfully clamped.
+    // Epsilon suppresses spurious triggers from floating-point rounding at the boundary.
+    constexpr float kLimitEpsilon = 0.01f;
+    if (std::abs(clamped_az - limited_az) > kLimitEpsilon ||
+        std::abs(clamped_el - limited_el) > kLimitEpsilon) {
         limit_violated_.store(true, std::memory_order_release);
+        // Resync rate limiter to the clamped position so inertia doesn't drive
+        // further out of bounds on subsequent frames.
+        prev_az_cmd_.store(clamped_az, std::memory_order_relaxed);
+        prev_el_cmd_.store(clamped_el, std::memory_order_relaxed);
+        prev_az_vel_.store(0.0f, std::memory_order_relaxed);
+        prev_el_vel_.store(0.0f, std::memory_order_relaxed);
     }
 
     // Store angles
@@ -123,9 +132,15 @@ std::optional<GimbalCommand> GimbalController::process_command_with_gap_check(fl
     const float clamped_az = std::clamp(limited_az, az_min_, az_max_);
     const float clamped_el = std::clamp(limited_el, el_min_, el_max_);
 
-    // AM7-L3-ACT-003: Flag limit violation when position is clamped
-    if (clamped_az != limited_az || clamped_el != limited_el) {
+    // AM7-L3-ACT-003: Flag limit violation when position is meaningfully clamped.
+    constexpr float kLimitEpsilon = 0.01f;
+    if (std::abs(clamped_az - limited_az) > kLimitEpsilon ||
+        std::abs(clamped_el - limited_el) > kLimitEpsilon) {
         limit_violated_.store(true, std::memory_order_release);
+        prev_az_cmd_.store(clamped_az, std::memory_order_relaxed);
+        prev_el_cmd_.store(clamped_el, std::memory_order_relaxed);
+        prev_az_vel_.store(0.0f, std::memory_order_relaxed);
+        prev_el_vel_.store(0.0f, std::memory_order_relaxed);
     }
 
     // Store angles

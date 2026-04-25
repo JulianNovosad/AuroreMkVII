@@ -7,6 +7,7 @@
 
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/uio.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -119,6 +120,11 @@ void MjpegStreamer::accept_loop() {
             }
             break;
         }
+        // Increase send buffer so the encode thread can write several frames ahead
+        // before blocking. Without this the 128KB default fills in <2 frames at 720p.
+        const int kSndbuf = 4 * 1024 * 1024;
+        ::setsockopt(client_fd, SOL_SOCKET, SO_SNDBUF, &kSndbuf, sizeof(kSndbuf));
+
         std::lock_guard<std::mutex> lk(clients_mtx_);
         clients_.push_back(client_fd);
         std::cout << "[MjpegStreamer] Client connected (total: " << clients_.size() << ")\n";
@@ -147,10 +153,12 @@ void MjpegStreamer::encode_loop() {
 
         if (local_frame.empty()) continue;
 
-        // Downscale on the non-RT encode thread — INTER_AREA is high quality but slow
+        // Resize on the non-RT encode thread.
+        // INTER_AREA for downscale (high quality); INTER_LINEAR for upscale.
+        const int interp = (local_frame.cols > kStreamWidth) ? cv::INTER_AREA : cv::INTER_LINEAR;
         cv::resize(local_frame, stream_frame,
                    cv::Size(kStreamWidth, kStreamHeight),
-                   0.0, 0.0, cv::INTER_AREA);
+                   0.0, 0.0, interp);
 
         cv::imencode(".jpg", stream_frame, jpeg_buf, jpeg_params);
         broadcast(jpeg_buf);
@@ -158,7 +166,11 @@ void MjpegStreamer::encode_loop() {
 }
 
 void MjpegStreamer::broadcast(const std::vector<uchar>& jpeg) {
-    // Wire format: 4-byte big-endian length + JPEG bytes
+    // Wire format: 4-byte big-endian length + JPEG bytes.
+    // Use sendmsg(MSG_DONTWAIT) so slow clients never block the encode thread.
+    // If the kernel socket buffer is full, the client is dropped immediately;
+    // Node.js reconnects within 2 s.  The 4MB SO_SNDBUF set on accept gives
+    // enough headroom for ~30 frames before any drop occurs.
     uint32_t len = static_cast<uint32_t>(jpeg.size());
     uint8_t hdr[4] = {
         static_cast<uint8_t>(len >> 24),
@@ -167,13 +179,22 @@ void MjpegStreamer::broadcast(const std::vector<uchar>& jpeg) {
         static_cast<uint8_t>(len),
     };
 
+    struct iovec iov[2];
+    iov[0].iov_base = hdr;
+    iov[0].iov_len  = 4;
+    iov[1].iov_base = const_cast<uint8_t*>(jpeg.data());
+    iov[1].iov_len  = jpeg.size();
+
+    struct msghdr msg{};
+    msg.msg_iov    = iov;
+    msg.msg_iovlen = 2;
+
     std::vector<int> dead;
 
     {
         std::lock_guard<std::mutex> lk(clients_mtx_);
         for (int fd : clients_) {
-            if (::send(fd, hdr,        4,           MSG_NOSIGNAL) < 0 ||
-                ::send(fd, jpeg.data(), jpeg.size(), MSG_NOSIGNAL) < 0) {
+            if (::sendmsg(fd, &msg, MSG_NOSIGNAL | MSG_DONTWAIT) < 0) {
                 dead.push_back(fd);
             }
         }
