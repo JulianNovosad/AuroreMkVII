@@ -1,0 +1,50 @@
+laser-m01-esp32
+
+Integrating a High-Pressure Laser Range Module into an ESP32 Wemos Lolin32 Development Board
+
+Laser Range Module (M01, 6-pin) with ESP32 (LOLIN32)
+
+Integrating a High-Pressure Laser Range Module into an ESP32 Wemos Lolin32 Development Board
+
+Materials: 50m Laser Range Sensor Module from Liancheng Electronics (AliExpress).
+
+Minimal and functional example for reading distances via UART from an M01 laser module (6-pin board) using an ESP32 (Wemos LOLIN32). Keys: Q (measure), L (laser ON), K (laser OFF), R (module reset).
+
+Hardware: • M01 laser module (6-pin board). Liancheng Electronics (Shenzhen) Co., Ltd. Store) AliExpress • ESP32 Wemos LOLIN32 (any ESP32 will work).
+
+• 3.3V power supply (minimum ~150mA recommended).
+
+• Dupont cables / solder.
+
+Module pinout (from top to bottom)
+
+MIN (3.3V) – 3.3V power supply
+
+ENA – enable (active high)
+
+GND – ground
+
+RXD – module UART input
+
+TXD – module UART output
+
+NC
+
+Wiring harness colors (according to manufacturer) • Red = MIN (3.3V) • Black = GND • Green = RXD (of module) • Yellow = TXD (of module)
+
+Note: Module TX → ESP32 RX, module RX ← ESP32 TX (crossed). Recommended Connection (ESP32 LOLIN32)
+
+• Red (MIN) → 3.3V • Black (GND) → GND • Yellow (module TXD) → GPIO33 (ESP32 RX) • Green (module RXD) ← GPIO32 (ESP32 TX) • ENA (if accessible) → GPIO5 HIGH (or directly to 3.3V) If your harness only has 4 wires (red/black/green/yellow), ENA is usually integrated and set to HIGH; you must connect it.
+
+Usage
+
+Load the sketch and open Serial Monitor at 115200.
+Connect the laser to a matte wall (2–4 m) with a dark background.
+
+Press: o L → turns on the laser. o Q → quick read (displays X.XXX). o K → turns off the laser. o R → resets the module (cuts and resets ENA). Note: the emitter is usually infrared; The "dot" is not visible to the naked eye. It can be seen with a mobile phone camera.
+
+Quick Diagnosis (if there is no data on RX) • Crossed wires: Yellow (module TXD) → ESP32 RX; Green (module RXD) ← ESP32 TX. • Common GND between module and ESP32. • ENA high (GPIO5 HIGH or 3.3V). • Echo via cable (express test): Bridge green↔yellow on the module connector; the signal sent by the ESP32 should return identically via RX. If there is no echo → check solder joints/continuity on GPIO33/GPIO32 ↔ connector. • If your unit is set to 115200, change LZR.begin(9600, …) to 115200.
+
+Safety • It is IR (≈905–940 nm). Do not point it at eyes or nearby reflective surfaces.
+
+Acknowledgements We especially thank Liancheng Electronics (Shenzhen) Co., Ltd. Store for their collaboration and support in providing the harness color scheme and helping us resolve RX/TX connection issues. Purchase link: https://www.aliexpress.com/store/1104805174?spm=a2g0o.order_list.order_list_main.8.21ef194dfoSHNu

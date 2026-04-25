@@ -739,8 +739,9 @@ class SafetyMonitor {
         const uint64_t current_count = vision_frame_count_.load(std::memory_order_acquire);
         const uint64_t last_count = last_vision_count_.load(std::memory_order_acquire);
 
-        // Check for stall (only if we've received at least one frame)
-        if (current_count == last_count && current_count > 0) {
+        // Check for stall (only if we've received at least one frame AND vision is expected to be running)
+        // Require current_count > 1 to ensure we've seen at least 2 updates before declaring stall
+        if (current_count == last_count && current_count > 1) {
             // Vision pipeline hasn't advanced
             const TimestampNs last_ts = last_vision_timestamp_ns_.load(std::memory_order_acquire);
             // Use wrap-safe timestamp difference
@@ -769,8 +770,9 @@ class SafetyMonitor {
         const uint64_t current_count = actuation_frame_count_.load(std::memory_order_acquire);
         const uint64_t last_count = last_actuation_count_.load(std::memory_order_acquire);
 
-        // Check for stall (only if we've received at least one frame)
-        if (current_count == last_count && current_count > 0) {
+        // Check for stall (only if we've received at least one frame AND actuation is expected to be running)
+        // Require current_count > 1 to ensure we've seen at least 2 updates before declaring stall
+        if (current_count == last_count && current_count > 1) {
             const TimestampNs last_ts =
                 last_actuation_timestamp_ns_.load(std::memory_order_acquire);
             const int64_t stall_duration = timestamp_diff_ns(now, last_ts);

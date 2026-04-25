@@ -35,7 +35,7 @@ All terms shall be interpreted according to the following quantitative definitio
 | **Deterministic** | Timing variation ≤ 5% at 99.9th percentile over 10M consecutive cycles |
 | **Frame Period** | 8.333ms nominal at 120Hz; tolerance ±50μs |
 | **Critical Path** | Execution threads: vision_pipeline, track_compute, actuation_output |
-| **Classical Algorithm** | Non-learning algorithm with deterministic execution path; limited to: convolution, morphological operations, thresholding, connected components, Hough transform, template matching, feature detection (ORB, SIFT), optical flow (Lucas-Kanade), CSRT tracking. Bounded RANSAC permitted (max 100 iterations). Neural network inference prohibited. |
+| **Classical Algorithm** | Non-learning algorithm with deterministic execution path; limited to: convolution, morphological operations, thresholding, connected components, Hough transform, template matching, feature detection (ORB, SIFT), optical flow (Lucas-Kanade), CSRT tracking. Bounded RANSAC permitted (max 100 iterations). Neural network inference explicitly allowed through yolo26. |
 | **CSRT** | Channel Spatial Reliability Tracker — discriminative correlation filter-based tracker with spatial reliability masks for robust object tracking |
 | **Zero-Copy** | No memcpy(), memmove(), or buffer copy operations between camera input and track output; DMA transfers permitted |
 | **Fail-Safe** | System transitions to safe state on fault detection; safe state = interlock inhibit, gimbal hold, fire disabled |
@@ -144,7 +144,7 @@ All L2 requirements trace to exactly one L1 parent. All L3 requirements trace to
 
 **AM7-L1-SYS-003**: System timing shall be bounded with: (a) WCET ≤ 5.0ms per AM7-L2-TIM-002, (b) jitter ≤ 5% at 99.9th percentile per AM7-L2-TIM-003, (c) all execution loops shall have statically bounded iteration counts.
 
-**AM7-L1-SYS-004**: System shall not modify executable code at runtime. System shall not employ neural networks, genetic algorithms, or reinforcement learning. Static lookup tables initialized at boot are permitted.
+**AM7-L1-SYS-004**: System shall not modify executable code at runtime. System shall employ neural networks, genetic algorithms, and shall not employ reinforcement learning. Static lookup tables initialized at boot are permitted.
 
 ### 5.2 Design Targets
 
@@ -190,7 +190,7 @@ All L2 requirements trace to exactly one L1 parent. All L3 requirements trace to
 
 ### 6.2 Vision Subsystem
 
-**AM7-L2-VIS-001**: Vision algorithms shall be limited to: convolution, morphological operations, thresholding, connected components, Hough transform, template matching, ORB/SIFT feature detection, Lucas-Kanade optical flow, CSRT tracking. Bounded RANSAC permitted (max 100 iterations). Neural network inference is prohibited.
+**AM7-L2-VIS-001**: Vision algorithms shall be limited to: convolution, morphological operations, thresholding, connected components, Hough transform, template matching, ORB/SIFT feature detection, Lucas-Kanade optical flow, CSRT tracking. Bounded RANSAC permitted (max 100 iterations). Neural network inference is allowed through yolo26.
 
 **AM7-L2-VIS-002**: Image acquisition shall be synchronized to system clock source CLOCK_MONOTONIC_RAW with synchronization accuracy ≤ 100μs.
 

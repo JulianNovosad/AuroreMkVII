@@ -8,20 +8,29 @@ Aurore MkVII is a C++17 real-time vision-based turret defense system targeting R
 
 `AuroreMkVI/` is the predecessor implementation (TFLite + Edge TPU inference). It serves as a reference for architecture patterns, not as active source code.
 
+## Autonomous Dev Loop
+
+`scripts/dev-loop.sh` runs an opencode session (model: `opencode/minimax-m2.5-free`) that automatically picks the highest-priority unresolved item from `docs/issue_report.md`, implements it against `spec.md`, builds, tests, commits, and updates the issue report.
+
+```bash
+./scripts/dev-loop.sh            # run one session now
+./scripts/dev-loop.sh install    # install cron job (every 4 hours)
+./scripts/dev-loop.sh uninstall  # remove the cron job
+```
+
+Session logs are written to `agent_logs/dev-loop-<timestamp>.log`. The rolling cron log is `agent_logs/dev-loop.log`. Check these logs to see what the autonomous agent did last, or to diagnose a failed session.
+
 ## Build Commands
 
 ```bash
-# Native build (laptop x86_64, for development and unit tests)
-./scripts/build-native.sh [Debug|Release|RelWithDebInfo]
-
-# Cross-compile for Raspberry Pi 5 (aarch64)
-./scripts/build-rpi.sh [Debug|Release]
+# Build for Raspberry Pi 5 (aarch64) — only supported target
+./scripts/build-rpi.sh [Debug|Release|RelWithDebInfo]
 
 # Deploy to RPi 5 (reads $RPI_USER and $RPI_HOST env vars)
 ./scripts/deploy-to-rpi.sh
 
-# Manual build
-mkdir build-native && cd build-native
+# Manual build on the Pi
+mkdir build-rpi && cd build-rpi
 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . -j$(nproc)
 ```
@@ -29,15 +38,15 @@ cmake --build . -j$(nproc)
 ## Testing
 
 ```bash
-# Run all unit tests (native build)
-cd build-native && ctest --output-on-failure
+# Run all unit tests
+cd build-rpi && ctest --output-on-failure
 
 # Run a single test binary directly
-cd build-native && ./ring_buffer_test
-cd build-native && ./timing_test
-cd build-native && ./safety_monitor_test
+cd build-rpi && ./ring_buffer_test
+cd build-rpi && ./timing_test
+cd build-rpi && ./safety_monitor_test
 
-# WCET measurement (must run on RPi 5 target)
+# WCET measurement (run on RPi 5 target)
 ./scripts/wcet_analysis.sh --samples=1000000
 
 # Jitter monitoring (requires root for SCHED_FIFO)
@@ -51,13 +60,13 @@ sudo ./scripts/jitter_monitor.sh --duration=60
 
 ```bash
 # Run clang-tidy (configured as CMake target)
-cd build-native && cmake --build . --target tidy
+cd build-rpi && cmake --build . --target tidy
 
 # Check formatting
-cd build-native && cmake --build . --target format-check
+cd build-rpi && cmake --build . --target format-check
 
 # Apply formatting
-cd build-native && cmake --build . --target format
+cd build-rpi && cmake --build . --target format
 ```
 
 ## Architecture
@@ -154,9 +163,9 @@ This is an absolute rule with zero exceptions:
 
 If you need to test error conditions, use fault injection on real hardware or document as a hardware limitation.
 
-## Cross-Compilation
+## Build Target
 
-The toolchain file is `cmake/aarch64-rpi5-toolchain.cmake`. Binaries that require hardware (camera, I2C, SCHED_FIFO at high priority) must run on the RPi 5. Unit tests for pure-logic modules (`ring_buffer_test`, `safety_monitor_test`) run on the native build. The `TimingIntegrationTest` is disabled by default in CTest — enable it only on the target.
+The only supported build target is Raspberry Pi 5 (aarch64). The toolchain file is `cmake/aarch64-rpi5-toolchain.cmake` when cross-compiling from a host machine; on the Pi itself use a plain CMake configure. All tests run on the Pi. The `TimingIntegrationTest` is disabled by default in CTest — enable it only when SCHED_FIFO is available.
 
 ## Real-Time Target Configuration
 

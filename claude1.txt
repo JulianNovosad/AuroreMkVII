@@ -1,0 +1,106 @@
+ ▐▛███▜▌   Claude Code v2.1.118
+▝▜█████▛▘  Sonnet 4.6 · Claude Pro
+  ▘▘ ▝▝    ~/AuroreMkVII
+
+✻ Conversation compacted (ctrl+o for history)
+
+  ⎿  Read docs/superpowers/plans/2026-04-23-vision-wcet-and-stream.md (347 lines)
+  ⎿  Read aurore-link/CLAUDE.md (93 lines)
+  ⎿  Read src/latency_measurement.cpp (232 lines)
+  ⎿  Referenced file CMakeLists.txt
+  ⎿  Referenced file session-ses_2445.md
+  ⎿  Skills restored (superpowers:subagent-driven-development, superpowers:writing-plans)
+
+● Let me get the current git state and review prompts before dispatching
+  reviews.
+
+● Bash(git log --oneline -10)
+  ⎿  299ce8f19 perf: zero-copy BGR888 in wrap_as_mat, remove spurious cvtCo
+     lor
+     95c6444df fix: drop browser MJPEG clients on aurore socket close, add
+     … +15 lines (ctrl+o to expand)
+
+  Read 2 files (ctrl+o to expand)
+
+● Dispatching spec compliance reviews for T1 and T4 in parallel.
+
+● 2 background agents launched (↓ to manage)
+   ├ Spec review T1 BGR888 zero-copy
+   └ Spec review T4 stream freeze fix
+
+● Spec reviews running in background. While those run, let me investigate the T1
+   DMA latency issue and understand what PISP dual-stream needs.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Agent "Spec review T1 BGR888 zero-copy" completed
+
+● T1 spec review found the BGR888 path change is correct but there are ~190
+  lines of unexpected GPU/Bayer demosaic shader changes also in that commit. Let
+   me examine those GPU changes quickly.
+
+● Bash(git diff c0c2d1a97 299ce8f19 -- src/drivers/camera_wrapper.cpp | grep
+      "^[+-]" | grep -v "^---\|^+++" | head -60)
+  ⎿  -            precision mediump float;
+     +            precision highp float;
+     +            uniform vec2 u_texelSize;  // 1.0/width, 1.0/height
+     … +53 lines (ctrl+o to expand)
+
+● The extra GPU changes are a legitimate Bayer demosaic shader implementation
+  (stub → real). This is aligned with "use hardware to maximum capacity" goals,
+  just bundled with T1 outside spec scope. I'll proceed to code quality review
+  noting both changes.
+
+  Dispatching code quality review for T1 while waiting for T4's spec result.
+
+● superpowers:code-reviewer(Code quality review T1 + GPU demosaic)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+● Agent "Spec review T4 stream freeze fix" completed
+
+● T4 spec review ✅. All 9 requirements implemented. Dispatching T4 code quality
+   review.
+
+● superpowers:code-reviewer(Code quality review T4 stream freeze fix)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+● While reviews run, let me examine the current camera architecture to plan T2
+  (PISP dual-stream).
+
+  Read 1 file (ctrl+o to expand)
+
+● Let me check the dual camera files that are already modified before planning
+  T2.
+
+  Searched for 2 patterns, read 2 files (ctrl+o to expand)
+● Agent "Code quality review T4 stream freeze fix" completed
+
+● Agent "Code quality review T1 + GPU demosaic" completed
+
+● Both code quality reviews are done. Critical findings:
+
+  T1 GPU path: GL_BGR invalid in GLES2, GLSL pixel-parity math inverted, VAO is
+  GLES3 API, FBO/RBO leaked — GPU demosaic produces wrong output (falls through
+  to NEON silently). The BGR888 stride fix itself is correct.
+
+  T4 server.js: Critical bug — watchdog not cleared on socket close, so it fires
+   3s later against newly reconnected browsers.
+
+  Dispatching fixups for both in parallel.
+
+● 2 background agents launched (↓ to manage)
+   ├ Fix T4 critical watchdog + USB improvements
+   └ Fix T1 GPU demosaic critical bugs
+
+● While fixup agents run, let me plan T2 by understanding the current YOLO path
+  in main.cpp.
+
+  Searched for 3 patterns, read 2 files, listed 1 directory (ctrl+o to expand)
+
+● Agent "Fix T4 critical watchdog + USB improvements" completed
+
+● Agent "Fix T1 GPU demosaic critical bugs" completed
+  ⎿  You've hit your limit · resets 2am (Europe/Amsterdam)
+     /upgrade to increase your usage limit.
+
+✻ Baked for 19m 34s

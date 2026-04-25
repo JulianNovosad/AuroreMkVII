@@ -3,6 +3,7 @@ build/
 build-native/
 build-rpi/
 build-*/
+fusion-hat/build/
 
 # CMake generated
 CMakeCache.txt

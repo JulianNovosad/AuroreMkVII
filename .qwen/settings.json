@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ctest *)",
+      "Bash(grep *)",
+      "Bash(node *)"
+    ]
+  },
+  "$version": 3
+}
