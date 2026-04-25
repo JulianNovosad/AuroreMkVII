@@ -25,7 +25,7 @@
   "camera": {
     "width": 1536,
     "height": 864,
-    "fps": 60,
+    "fps": 120,
     "format": "RAW10",
     "buffer_count": 4,
     "exposure_us": 1000,
