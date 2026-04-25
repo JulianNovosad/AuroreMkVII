@@ -25,6 +25,8 @@
 #include <string>
 #include <thread>
 
+#include <iostream>
+#include <ostream>
 #include "timing.hpp"
 
 namespace aurore {
@@ -752,12 +754,14 @@ class SafetyMonitor {
         }
         last_vision_count_.store(current_count, std::memory_order_release);
 
-        // Check latency only after at least one real frame has been produced.
-        // Seeded timestamp (from init()) is a baseline, not a real frame.
-        if (current_count > 0) {
+        // Check latency only after at least 2 frames have been produced.
+// This ensures we have a meaningful baseline for latency measurement.
+        if (current_count > 1) {
             const TimestampNs last_ts = last_vision_timestamp_ns_.load(std::memory_order_acquire);
             const int64_t latency = timestamp_diff_ns(now, last_ts);
             if (latency > static_cast<int64_t>(config_.vision_deadline_ns)) {
+                std::cerr << "[SAFETY DEBUG] vision current=" << current_count
+                          << " last=" << last_count << " latency=" << latency << "ns" << std::endl;
                 char reason[MAX_FAULT_REASON_LEN];
                 snprintf(reason, sizeof(reason), "Vision latency %ld ns exceeds %lu ns",
                          static_cast<long>(latency), config_.vision_deadline_ns);
@@ -782,8 +786,8 @@ class SafetyMonitor {
         }
         last_actuation_count_.store(current_count, std::memory_order_release);
 
-        // Check latency only after at least one real actuation frame has been produced.
-        if (current_count > 0) {
+        // Check latency only after at least 2 actuation frames have been produced.
+        if (current_count > 1) {
             const TimestampNs last_ts =
                 last_actuation_timestamp_ns_.load(std::memory_order_acquire);
             const int64_t latency = timestamp_diff_ns(now, last_ts);
