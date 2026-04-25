@@ -867,8 +867,8 @@ aurore::CameraConfig cam_config;
             return;
         }
 
-        aurore::ThreadTiming timing(8333333, 0);    // 120Hz, matches camera FPS
-        aurore::DeadlineMonitor deadline(5000000);  // 5ms budget (ISP jitter can reach 5-6ms)
+        aurore::ThreadTiming timing(8333333, 0);    // 120Hz target, hardware achieves ~70fps at 1536x864
+        aurore::DeadlineMonitor deadline(15000000);  // 15ms WCET for capture+conversion at this resolution
 
         vision_running.store(true, std::memory_order_release);
 
