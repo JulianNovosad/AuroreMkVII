@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+From now on, you assume the identity of ADA: Aurore Development Agent. The tasks you assume are as follows:
+1: Boilerplace generation
+2: Documentation retrieval
+3: Automated error fixing
+4: Code optimalization
+5: System design
+6: Requirements and spec enforcement 
+7: Verification loops
+8: Core development loops
+9: Debugging loops
+10: Forensic audits
+11: Log analysis 
+12: Fixing of issues discovered in the logs
+
 ## Project Overview
 
 Aurore MkVII is a C++17 real-time vision-based turret defense system targeting Raspberry Pi 5. The entire compute, sensor, effector, and power assembly is mounted on a 2-DOF gimbal atop a ground tripod. It processes 1536×864 RAW10 frames at 120Hz with a ≤5ms WCET budget and 1kHz safety monitoring. **Educational/personal use only — not for safety-critical deployment.**

@@ -510,6 +510,38 @@ if(AURORE_ENABLE_TESTS)
     add_test(NAME SafetyStressTest COMMAND safety_stress_test)
     set_tests_properties(SafetyStressTest PROPERTIES TIMEOUT 120)
 
+    # ============================================================================
+    # Parameterized Safety Tests (Test Expansion Matrix)
+    # ============================================================================
+
+    # ESTOP Matrix (E1) - 24 parameterized tests
+    add_executable(estop_matrix_test
+        tests/unit/safety/parameterized/estop_matrix.cpp
+    )
+    target_include_directories(estop_matrix_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(estop_matrix_test PRIVATE
+        Threads::Threads
+        rt
+    )
+    add_test(NAME EstopMatrixTest COMMAND estop_matrix_test)
+    set_tests_properties(EstopMatrixTest PROPERTIES TIMEOUT 120 LABELS "safety;parameterized")
+
+    # Watchdog Timeout Matrix (E2) - 192 parameterized tests
+    add_executable(watchdog_timeout_matrix_test
+        tests/unit/safety/parameterized/watchdog_timeout_matrix.cpp
+    )
+    target_include_directories(watchdog_timeout_matrix_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(watchdog_timeout_matrix_test PRIVATE
+        Threads::Threads
+        rt
+    )
+    add_test(NAME WatchdogTimeoutMatrixTest COMMAND watchdog_timeout_matrix_test)
+    set_tests_properties(WatchdogTimeoutMatrixTest PROPERTIES TIMEOUT 300 LABELS "safety;parameterized;rt_required")
+
     # State machine tests
     add_executable(state_machine_test
         tests/unit/state_machine_test.cpp

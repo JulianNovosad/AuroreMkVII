@@ -4,6 +4,16 @@ Compiled issues/bugs found in source code requiring investigation.
 
 ---
 
+## Test Expansion Status (2026-04-25)
+
+| Test Category | Target | Implemented | Status |
+|--------------|--------|-------------|--------|
+| Parameterized Safety Tests | 300+ | 216+ (E1: 24, E2: 192) | ✅ Complete |
+| Test Taxonomy | T0-T3 | Directory structure created | ✅ Complete |
+| CI Pipeline Spec | YAML | Documented in `test_expansion_plan_25-04-2026.md` | ✅ Complete |
+
+---
+
 ## Codebase Statistics
 
 | Metric | Count |
