@@ -179,9 +179,9 @@ void test_heartbeat_timeout_callback_fires() {
     server.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
-    // Wait for heartbeat timeout (500ms + margin for detection latency)
-    // The monitor checks every 100ms, so timeout should fire within 600ms
-    std::this_thread::sleep_for(std::chrono::milliseconds(700));
+    // Wait for heartbeat timeout (1000ms threshold + 200ms margin for detection latency)
+    // The monitor checks every 100ms, so timeout should fire within 1100ms total
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
 
     assert(timeout_fired.load(std::memory_order_acquire));
 
