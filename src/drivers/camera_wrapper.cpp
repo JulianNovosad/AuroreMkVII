@@ -915,9 +915,6 @@ struct CameraWrapper::Impl {
         frame.valid         = true;
         frame.error[0]      = 0;  // DMA buffer
 
-        // Compute frame authentication (SHA256 + HMAC) - ICD-001 / AM7-L2-SEC-001
-        authenticate_frame(frame);
-
         frame_counter++;
         if (!frame.validate(width, height)) {
             std::fprintf(stderr, "FATAL: libcamera frame failed validation (geometry/corruption)!\n");
@@ -1088,9 +1085,6 @@ struct CameraWrapper::Impl {
 
         snprintf(frame.error + 1, sizeof(frame.error) - 1,
                  "%s", "Development mode - BGR capture");
-
-        // Compute frame authentication (SHA256 + HMAC) - ICD-001 / AM7-L2-SEC-001
-        authenticate_frame(frame);
 
         if (!frame.validate(width, height)) {
             std::fprintf(stderr, "FATAL: Captured frame failed validation (geometry/corruption)!\n");

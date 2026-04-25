@@ -959,11 +959,10 @@ int main(int argc, char* argv[]) {
         // Vision watchdog: track last frame timestamp
         // Initialized to 0 so the watchdog only arms after the first frame arrives.
         uint64_t last_frame_ns = 0;
-        // 150ms = ~10 frame periods at actual hardware throughput (~70fps at 1536x864).
-        // Camera is configured for 120fps but ISP delivers ~14ms/frame; any gap >150ms
-        // (>10 missed frames) indicates a genuinely stalled pipeline.
+        // 33ms = 4 frame periods at 120fps (8.333ms each). Any gap longer than 4 missed
+        // frames indicates a genuinely stalled pipeline, not routine scheduling variance.
         // Dry-run uses 250ms because non-RT scheduling causes irregular frame delivery.
-        const uint64_t kVisionWatchdogNs = dry_run ? 250000000ULL : 150000000ULL;
+        const uint64_t kVisionWatchdogNs = dry_run ? 250000000ULL : 33000000ULL;
 
         // Request SEARCH mode (IDLE_SAFE -> SEARCH)
         state_machine.request_search();
