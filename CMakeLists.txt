@@ -511,6 +511,26 @@ if(AURORE_ENABLE_TESTS)
     set_tests_properties(SafetyStressTest PROPERTIES TIMEOUT 120)
 
     # ============================================================================
+    # Full Test Suite - 237 tests unified
+    # ============================================================================
+
+    add_executable(aurore_full_test_suite
+        tests/unit/safety/aurore_full_test_suite.cpp
+        src/actuation/gimbal_controller.cpp
+        src/common/security.cpp
+    )
+    target_include_directories(aurore_full_test_suite PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(aurore_full_test_suite PRIVATE
+        Threads::Threads
+        rt
+        OpenSSL::Crypto
+    )
+    add_test(NAME AuroreFullTestSuite COMMAND aurore_full_test_suite)
+    set_tests_properties(AuroreFullTestSuite PROPERTIES TIMEOUT 300 LABELS "full_suite")
+
+    # ============================================================================
     # Parameterized Safety Tests (Test Expansion Matrix)
     # ============================================================================
 
