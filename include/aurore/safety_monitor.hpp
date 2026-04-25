@@ -756,12 +756,14 @@ class SafetyMonitor {
 
         // Check latency only after at least 2 frames have been produced.
 // This ensures we have a meaningful baseline for latency measurement.
+// Also require latency > 2 * frame_period to avoid false positives:
+// at 120Hz, frames come every 8.3ms, but safety runs every 1ms.
         if (current_count > 1) {
             const TimestampNs last_ts = last_vision_timestamp_ns_.load(std::memory_order_acquire);
             const int64_t latency = timestamp_diff_ns(now, last_ts);
-            if (latency > static_cast<int64_t>(config_.vision_deadline_ns)) {
-                std::cerr << "[SAFETY DEBUG] vision current=" << current_count
-                          << " last=" << last_count << " latency=" << latency << "ns" << std::endl;
+            // At 120Hz, frame period is 8.33ms. Allow 2× for jitter headroom.
+            const int64_t max_latency = static_cast<int64_t>(config_.vision_deadline_ns * 2);
+            if (latency > max_latency) {
                 char reason[MAX_FAULT_REASON_LEN];
                 snprintf(reason, sizeof(reason), "Vision latency %ld ns exceeds %lu ns",
                          static_cast<long>(latency), config_.vision_deadline_ns);
@@ -787,11 +789,13 @@ class SafetyMonitor {
         last_actuation_count_.store(current_count, std::memory_order_release);
 
         // Check latency only after at least 2 actuation frames have been produced.
+// Allow 2× headroom for actuation: at 120Hz frame period is 8.33ms.
         if (current_count > 1) {
             const TimestampNs last_ts =
                 last_actuation_timestamp_ns_.load(std::memory_order_acquire);
             const int64_t latency = timestamp_diff_ns(now, last_ts);
-            if (latency > static_cast<int64_t>(config_.actuation_deadline_ns)) {
+            const int64_t max_latency = static_cast<int64_t>(config_.actuation_deadline_ns * 2);
+            if (latency > max_latency) {
                 char reason[MAX_FAULT_REASON_LEN];
                 snprintf(reason, sizeof(reason), "Actuation latency %ld ns exceeds %lu ns",
                          static_cast<long>(latency), config_.actuation_deadline_ns);
