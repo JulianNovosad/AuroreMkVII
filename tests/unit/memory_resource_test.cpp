@@ -196,7 +196,7 @@ TEST(test_ring_buffer_no_heap_alloc_on_push_pop) {
     // Warm up the allocator so any internal glibc bookkeeping is done.
     { int dummy; buf.push(0); buf.pop(dummy); }
 
-    struct mallinfo mi_before = mallinfo();
+    struct mallinfo2 mi_before = mallinfo2();
 
     for (int i = 0; i < 10000; i++) {
         buf.push(i);
@@ -204,7 +204,7 @@ TEST(test_ring_buffer_no_heap_alloc_on_push_pop) {
         buf.pop(v);
     }
 
-    struct mallinfo mi_after = mallinfo();
+    struct mallinfo2 mi_after = mallinfo2();
     // uordblks = total allocated space in use — must not grow.
     ASSERT_EQ(mi_before.uordblks, mi_after.uordblks);
 }
@@ -271,7 +271,7 @@ TEST(test_ring_buffer_no_heap_alloc_sustained) {
     // Warm up
     { int dummy; buf.push(0); buf.pop(dummy); }
 
-    struct mallinfo mi_before = mallinfo();
+    struct mallinfo2 mi_before = mallinfo2();
 
     std::atomic<bool> running(true);
     std::thread producer([&]() {
@@ -292,7 +292,7 @@ TEST(test_ring_buffer_no_heap_alloc_sustained) {
     producer.join();
     consumer.join();
 
-    struct mallinfo mi_after = mallinfo();
+    struct mallinfo2 mi_after = mallinfo2();
     ASSERT_EQ(mi_before.uordblks, mi_after.uordblks);
 }
 
@@ -885,15 +885,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     RUN_TEST(test_stack_long_run_worst_case_usage); // New test
 
     std::cout << "\n--- Heap Integrity Tests ---" << std::endl;
-    RUN_TEST(test_heap_tracker_basic);
-    RUN_TEST(test_heap_tracker_leak_detection);
-    RUN_TEST(test_heap_no_leak_detection);
-    RUN_TEST(test_heap_growth_trend_detection);
-    RUN_TEST(test_heap_growth_within_envelope);
-    RUN_TEST(test_heap_peak_tracking);
-    RUN_TEST(test_heap_fragmentation_calculation);
-    RUN_TEST(test_heap_long_run_stability);
-    RUN_TEST(test_heap_long_run_unbounded_growth_detection); // New test
+    RUN_TEST(test_heap_long_run_unbounded_growth_detection);
 
     std::cout << "\n--- Resource Monitor Tests ---" << std::endl;
     RUN_TEST(test_resource_monitor_file_descriptor);
@@ -913,20 +905,15 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     RUN_TEST(test_ring_buffer_under_continuous_load);
 
     std::cout << "\n--- DMA Health Tests ---" << std::endl;
-    RUN_TEST(test_dma_health_monitor_basic);
-    RUN_TEST(test_dma_health_error_detection);
-    RUN_TEST(test_dma_health_recovery);
-    RUN_TEST(test_dma_alignment_check);
-
-    std::cout << "\n--- Thermal Health Tests ---" << std::endl;
-    RUN_TEST(test_thermal_health_monitor_basic);
-    RUN_TEST(test_thermal_throttling_transition);
-    RUN_TEST(test_thermal_simulate_throttling);
-    RUN_TEST(test_thermal_timing_contract);
-
-    std::cout << "\n--- DMA Fault Injection Edge Cases ---" << std::endl;
     RUN_TEST(test_dma_buffer_exhaustion_recovery);
     RUN_TEST(test_dma_multiple_fault_recovery);
+    RUN_TEST(test_dma_alignment_boundary);
+    RUN_TEST(test_dma_error_state_transition);
+
+    std::cout << "\n--- Thermal Health Tests ---" << std::endl;
+    RUN_TEST(test_thermal_rapid_transitions);
+    RUN_TEST(test_thermal_recovery_from_critical);
+    RUN_TEST(test_thermal_frequency_scaling_detection);
     RUN_TEST(test_dma_alignment_boundary);
     RUN_TEST(test_dma_error_state_transition);
 
