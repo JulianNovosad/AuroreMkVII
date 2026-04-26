@@ -324,7 +324,7 @@ Compiled issues/bugs found in source code requiring investigation.
 ### Overall Completion
 - **~98% complete** (by functionality)
 - Hardware-measured WCET: max 3030µs (SCHED_OTHER), passes ≤5ms spec
-- 43/43 tests pass
+- 55/55 tests pass (excluding TimingIntegrationTest which requires SCHED_FIFO)
 
 ### Critical Blockers to "Done"
 (none — all known spec items implemented)
@@ -336,6 +336,9 @@ Compiled issues/bugs found in source code requiring investigation.
 - Jitter: P99.9 ≤ 417µs (≤5% spec)
 - All critical blockers resolved
 - All TODO items complete - zero remaining
+
+---
+- LogTester thread-safety fix: added mutex to protect std::deque in multi-threaded tests; test_stress_timestamp_ordering now passes without segfault (2026-04-26)
 
 ---
 - HeapTracker::reset() missing peak_allocated_bytes_ reset (caused false positive leak in long-run test): fixed 2026-04-26
@@ -357,7 +360,7 @@ Compiled issues/bugs found in source code requiring investigation.
 - Invalid input logging: unknown message IDs + out-of-range gimbal rates (AM7-L3-IF-002)
 - Target rejection logging: confidence below threshold now logged (AM7-L3-TGT-001)
 - Lock confirmation: predicted vs measured position validation (Δ ≤ 5px) per AM7-L3-TGT-002
-- 43/43 tests pass
+- 55/55 tests pass (excluding TimingIntegrationTest which requires SCHED_FIFO)
 - Firmware update flow (AM7-L3-SEC-005): dual-bank A/B, ECDSA signature, version check — implemented and 7/7 tests pass
 - Gimbal constraints in .rodata: Elevation -10° to +45°, Azimuth ±90°, velocity ≤60°/s, accel ≤120°/s² (AM7-L3-ACT-001)
 - Test expansion: added test coverage audit and expansion plan docs, registered regression/safety test directories
