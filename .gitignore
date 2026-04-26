@@ -12,6 +12,7 @@ cmake_install.cmake
 Makefile
 *.cmake
 !cmake/aarch64-rpi5-toolchain.cmake
+!cmake/AuroreTestHelpers.cmake
 
 # Compiled binaries
 *.o
