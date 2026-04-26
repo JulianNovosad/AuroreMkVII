@@ -20,11 +20,13 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <thread>
 #include <vector>
 #include <chrono>
+#include <malloc.h>
 
 #include "aurore/ring_buffer.hpp"
 #include "aurore/test_utils.hpp"
@@ -172,105 +174,142 @@ TEST(test_stack_alignment_check) {
 }
 
 // ============================================================================
-// Heap Integrity Tests
+// Ring Buffer No-Allocation Tests
+// Tests that LockFreeRingBuffer push/pop don't call the heap allocator.
 // ============================================================================
 
-TEST(test_heap_tracker_basic) {
-    aurore::test::HeapTracker& tracker = aurore::test::TestEnvironment::get_heap_tracker();
+TEST(test_ring_buffer_static_size) {
+    // The buffer storage is a fixed-size std::array embedded in the struct.
+    // sizeof() must be the same before and after construction — no lazy heap init.
+    constexpr size_t kSize = sizeof(aurore::LockFreeRingBuffer<int, 8>);
+    static_assert(kSize > 0, "buffer has zero size");
 
-    tracker.record_allocation(1024);
-    tracker.record_deallocation(512);
-
-    auto stats = tracker.get_stats();
-    ASSERT_EQ(stats.allocation_count, 1);
-    ASSERT_EQ(stats.deallocation_count, 1);
+    aurore::LockFreeRingBuffer<int, 8> buf1;
+    aurore::LockFreeRingBuffer<int, 8> buf2;
+    // Both instances have identical size — no heap pointer inflation.
+    ASSERT_EQ(sizeof(buf1), sizeof(buf2));
 }
 
-TEST(test_heap_tracker_leak_detection) {
-    aurore::test::HeapTracker& tracker = aurore::test::TestEnvironment::get_heap_tracker();
+TEST(test_ring_buffer_no_heap_alloc_on_push_pop) {
+    aurore::LockFreeRingBuffer<int, 16> buf;
 
-    tracker.record_allocation(1024);
-    tracker.record_allocation(2048);
+    // Warm up the allocator so any internal glibc bookkeeping is done.
+    { int dummy; buf.push(0); buf.pop(dummy); }
 
-    auto stats = tracker.get_stats();
-    ASSERT_TRUE(stats.current_allocated_bytes > 0);
-}
+    struct mallinfo mi_before = mallinfo();
 
-TEST(test_heap_no_leak_detection) {
-    aurore::test::HeapTracker& tracker = aurore::test::TestEnvironment::get_heap_tracker();
-
-    tracker.record_allocation(1024);
-    tracker.record_deallocation(1024);
-
-    auto stats = tracker.get_stats();
-    ASSERT_FALSE(stats.has_leak);
-    ASSERT_EQ(stats.current_allocated_bytes, 0);
-}
-
-TEST(test_heap_growth_trend_detection) {
-    aurore::test::HeapTracker& tracker = aurore::test::TestEnvironment::get_heap_tracker();
-    tracker.set_baseline_envelope(256);
-
-    for (size_t i = 0; i < 20; i++) {
-        tracker.record_allocation(100);
-        tracker.record_deallocation(50);
+    for (int i = 0; i < 10000; i++) {
+        buf.push(i);
+        int v;
+        buf.pop(v);
     }
 
-    auto stats = tracker.get_stats();
-    ASSERT_TRUE(stats.growth_trend_exceeds_baseline);
+    struct mallinfo mi_after = mallinfo();
+    // uordblks = total allocated space in use — must not grow.
+    ASSERT_EQ(mi_before.uordblks, mi_after.uordblks);
 }
 
-TEST(test_heap_growth_within_envelope) {
-    aurore::test::HeapTracker& tracker = aurore::test::TestEnvironment::get_heap_tracker();
-    tracker.set_baseline_envelope(1024 * 1024);
+TEST(test_ring_buffer_cache_line_aligned) {
+    // AM7-L3-RT-001: buffers must be cache-line aligned to avoid false sharing.
+    ASSERT_GE(alignof(aurore::LockFreeRingBuffer<int, 4>), 64u);
+}
 
-    for (size_t i = 0; i < 100; i++) {
-        tracker.record_allocation(1000);
-        tracker.record_deallocation(1000);
+TEST(test_ring_buffer_capacity_is_n_minus_one) {
+    // LockFreeRingBuffer<T, N> holds N-1 items (one slot reserved to distinguish full/empty).
+    aurore::LockFreeRingBuffer<int, 4> buf;
+
+    ASSERT_TRUE(buf.push(1));
+    ASSERT_TRUE(buf.push(2));
+    ASSERT_TRUE(buf.push(3));
+    ASSERT_FALSE(buf.push(4));  // 4th push fails — full at N-1 = 3
+
+    ASSERT_TRUE(buf.full());
+}
+
+TEST(test_ring_buffer_empty_after_full_drain) {
+    aurore::LockFreeRingBuffer<int, 8> buf;
+
+    for (int i = 0; i < 7; i++) buf.push(i);
+
+    int v;
+    for (int i = 0; i < 7; i++) buf.pop(v);
+
+    ASSERT_TRUE(buf.empty());
+}
+
+TEST(test_ring_buffer_spsc_ordering_preserved) {
+    // Producer/consumer thread — FIFO ordering must hold.
+    aurore::LockFreeRingBuffer<int, 32> buf;
+    std::atomic<bool> done(false);
+    std::atomic<int>  errors(0);
+
+    std::thread producer([&]() {
+        for (int i = 0; i < 1000; i++) {
+            while (!buf.push(i)) { std::this_thread::yield(); }
+        }
+    });
+
+    std::thread consumer([&]() {
+        int expected = 0;
+        while (expected < 1000) {
+            int v;
+            if (buf.pop(v)) {
+                if (v != expected) errors.fetch_add(1, std::memory_order_relaxed);
+                expected++;
+            }
+        }
+    });
+
+    producer.join();
+    consumer.join();
+    ASSERT_EQ(errors.load(), 0);
+}
+
+TEST(test_ring_buffer_no_heap_alloc_sustained) {
+    aurore::LockFreeRingBuffer<int, 8> buf;
+
+    // Warm up
+    { int dummy; buf.push(0); buf.pop(dummy); }
+
+    struct mallinfo mi_before = mallinfo();
+
+    std::atomic<bool> running(true);
+    std::thread producer([&]() {
+        int i = 0;
+        while (running.load(std::memory_order_acquire)) {
+            buf.push(i++);
+        }
+    });
+    std::thread consumer([&]() {
+        int v;
+        while (running.load(std::memory_order_acquire)) {
+            buf.pop(v);
+        }
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    running.store(false, std::memory_order_release);
+    producer.join();
+    consumer.join();
+
+    struct mallinfo mi_after = mallinfo();
+    ASSERT_EQ(mi_before.uordblks, mi_after.uordblks);
+}
+
+TEST(test_ring_buffer_push_returns_false_when_full) {
+    aurore::LockFreeRingBuffer<int, 4> buf;
+
+    bool first_fail = false;
+    for (int i = 0; i < 10; i++) {
+        if (!buf.push(i)) { first_fail = true; break; }
     }
-
-    ASSERT_TRUE(tracker.check_growth_envelope());
+    ASSERT_TRUE(first_fail);
 }
 
-TEST(test_heap_peak_tracking) {
-    aurore::test::HeapTracker& tracker = aurore::test::TestEnvironment::get_heap_tracker();
-
-    tracker.record_allocation(1024);
-    auto stats1 = tracker.get_stats();
-    size_t peak1 = stats1.peak_allocated_bytes;
-
-    tracker.record_allocation(2048);
-    auto stats2 = tracker.get_stats();
-    size_t peak2 = stats2.peak_allocated_bytes;
-
-    ASSERT_GE(peak2, peak1);
-}
-
-TEST(test_heap_fragmentation_calculation) {
-    aurore::test::HeapTracker& tracker = aurore::test::TestEnvironment::get_heap_tracker();
-
-    tracker.record_allocation(1000);
-    tracker.record_allocation(500);
-    tracker.record_deallocation(300);
-
-    auto stats = tracker.get_stats();
-    ASSERT_GE(stats.fragmentation_ratio, 0.0);
-    ASSERT_LE(stats.fragmentation_ratio, 1.0);
-}
-
-TEST(test_heap_long_run_stability) {
-    aurore::test::HeapTracker& tracker = aurore::test::TestEnvironment::get_heap_tracker();
-    tracker.set_baseline_envelope(4096);
-
-    constexpr size_t kIterations = 1000;
-    for (size_t i = 0; i < kIterations; i++) {
-        tracker.record_allocation(64);
-        tracker.record_deallocation(64);
-    }
-
-    auto stats = tracker.get_stats();
-    ASSERT_EQ(stats.allocation_count, kIterations);
-    ASSERT_FALSE(stats.has_leak);
+TEST(test_ring_buffer_pop_returns_false_when_empty) {
+    aurore::LockFreeRingBuffer<int, 4> buf;
+    int v;
+    ASSERT_FALSE(buf.pop(v));
 }
 
 // New long-run stack test
@@ -578,87 +617,133 @@ TEST(test_ring_buffer_under_continuous_load) {
 }
 
 // ============================================================================
-// DMA Health Tests
+// Ring Buffer Zero-Copy / Transfer Tests
+// The ring buffer is Aurore's zero-copy transfer mechanism between threads.
+// These tests verify the inline-storage property (no pointer indirection).
 // ============================================================================
 
-TEST(test_dma_health_monitor_basic) {
-    aurore::test::DmaHealthMonitor monitor;
-    
-    monitor.record_transfer(4096, 1000);
-    auto stats = monitor.get_stats();
-    
-    ASSERT_EQ(stats.transfer_count, 1);
-    ASSERT_EQ(stats.state, aurore::test::DmaState::Active);
+TEST(test_ring_buffer_data_stored_inline) {
+    // Verify payload is retrieved by value — no pointer aliasing needed.
+    aurore::LockFreeRingBuffer<uint64_t, 4> buf;
+    const uint64_t kSentinel = 0xDEADBEEFCAFEBABEULL;
+
+    buf.push(kSentinel);
+    uint64_t result = 0;
+    ASSERT_TRUE(buf.pop(result));
+    ASSERT_EQ(result, kSentinel);
 }
 
-TEST(test_dma_health_error_detection) {
-    aurore::test::DmaHealthMonitor monitor;
-    
-    monitor.record_transfer(4096, 1000);
-    monitor.record_error();
-    
-    auto stats = monitor.get_stats();
-    ASSERT_EQ(stats.error_count, 1);
-    ASSERT_EQ(stats.state, aurore::test::DmaState::Error);
+TEST(test_ring_buffer_large_struct_transfer) {
+    struct Frame {
+        uint32_t id;
+        uint64_t timestamp_ns;
+        uint8_t  payload[64];
+    };
+
+    aurore::LockFreeRingBuffer<Frame, 4> buf;
+    Frame f{};
+    f.id           = 42;
+    f.timestamp_ns = 123456789ULL;
+    memset(f.payload, 0xAA, sizeof(f.payload));
+
+    buf.push(f);
+
+    Frame out{};
+    ASSERT_TRUE(buf.pop(out));
+    ASSERT_EQ(out.id, 42u);
+    ASSERT_EQ(out.timestamp_ns, 123456789ULL);
+    ASSERT_EQ(out.payload[0], 0xAA);
+    ASSERT_EQ(out.payload[63], 0xAA);
 }
 
-TEST(test_dma_health_recovery) {
-    aurore::test::DmaHealthMonitor monitor;
-    
-    monitor.record_transfer(4096, 1000);
-    monitor.simulate_fault();
-    
-    bool recovered = monitor.recover();
-    ASSERT_TRUE(recovered);
-    
-    auto stats = monitor.get_stats();
-    ASSERT_EQ(stats.state, aurore::test::DmaState::Idle);
+TEST(test_ring_buffer_sequence_integrity_under_wrap) {
+    // Push and pop through multiple wrap-arounds to catch index overflow bugs.
+    aurore::LockFreeRingBuffer<int, 4> buf;
+
+    for (int round = 0; round < 1000; round++) {
+        buf.push(round);
+        int v;
+        ASSERT_TRUE(buf.pop(v));
+        ASSERT_EQ(v, round);
+    }
+
+    ASSERT_TRUE(buf.empty());
 }
 
-TEST(test_dma_alignment_check) {
-    aurore::test::DmaHealthMonitor monitor;
-    
-    bool aligned = monitor.check_alignment(4096);
-    ASSERT_TRUE(aligned);
+TEST(test_ring_buffer_throughput_spsc) {
+    // Verify meaningful throughput — at least 100k ops/s on any hardware.
+    aurore::LockFreeRingBuffer<int, 16> buf;
+    constexpr int kOps = 100000;
+    std::atomic<int> consumed(0);
+
+    auto t0 = std::chrono::steady_clock::now();
+
+    std::thread producer([&]() {
+        for (int i = 0; i < kOps; i++) {
+            while (!buf.push(i)) { std::this_thread::yield(); }
+        }
+    });
+
+    std::thread consumer([&]() {
+        int v;
+        while (consumed.load(std::memory_order_acquire) < kOps) {
+            if (buf.pop(v)) consumed.fetch_add(1, std::memory_order_release);
+        }
+    });
+
+    producer.join();
+    consumer.join();
+
+    auto t1 = std::chrono::steady_clock::now();
+    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+
+    ASSERT_EQ(consumed.load(), kOps);
+    ASSERT_LT(elapsed_ms, 5000);  // 100k ops must complete in < 5s
 }
 
 // ============================================================================
-// Thermal Health Tests
+// System Thermal Pre-flight Tests
+// Read real Pi temperature from sysfs — failure means hardware is unhealthy.
+// Throttle threshold: 80°C (RPi5 default). RT tests are unreliable above this.
 // ============================================================================
 
-TEST(test_thermal_health_monitor_basic) {
-    aurore::test::ThermalHealthMonitor monitor(80.0);
-    
-    monitor.update_temperature(50.0);
-    auto stats = monitor.get_stats();
-    
-    ASSERT_EQ(stats.throttle_state, aurore::test::ThrottleState::Nominal);
+static int read_sysfs_temp_millidegrees() {
+    std::ifstream f("/sys/class/thermal/thermal_zone0/temp");
+    if (!f.is_open()) throw std::runtime_error("Cannot open /sys/class/thermal/thermal_zone0/temp — no thermal sensor");
+    int millidegrees;
+    f >> millidegrees;
+    if (!f) throw std::runtime_error("Failed to read thermal zone temperature");
+    return millidegrees;
 }
 
-TEST(test_thermal_throttling_transition) {
-    aurore::test::ThermalHealthMonitor monitor(80.0);
-    
-    monitor.update_temperature(85.0);
-    auto state = monitor.check_throttle_state();
-    
-    ASSERT_EQ(state, aurore::test::ThrottleState::Critical);
+TEST(test_system_temperature_readable) {
+    // Verify the sysfs thermal node is accessible.
+    int temp_mc = read_sysfs_temp_millidegrees();
+    // Any value between 0°C and 150°C is a plausible sensor reading.
+    ASSERT_GT(temp_mc, 0);
+    ASSERT_LT(temp_mc, 150000);
 }
 
-TEST(test_thermal_simulate_throttling) {
-    aurore::test::ThermalHealthMonitor monitor(80.0);
-    
-    bool transitioned = monitor.simulate_throttling_transition();
-    ASSERT_TRUE(transitioned);
-    
-    auto stats = monitor.get_stats();
-    ASSERT_EQ(stats.throttle_state, aurore::test::ThrottleState::Throttling);
+TEST(test_system_not_critically_overheated) {
+    // 80°C in millidegrees = 80000. RT tests are invalid above this threshold.
+    int temp_mc = read_sysfs_temp_millidegrees();
+    ASSERT_LT(temp_mc, 80000);
 }
 
-TEST(test_thermal_timing_contract) {
-    aurore::test::ThermalHealthMonitor monitor(80.0);
-    
-    bool contract_ok = monitor.verify_timing_contract();
-    ASSERT_TRUE(contract_ok);
+TEST(test_system_above_freezing) {
+    // Sanity check: sensor isn't stuck at 0 or returning garbage.
+    int temp_mc = read_sysfs_temp_millidegrees();
+    ASSERT_GT(temp_mc, 5000);   // > 5°C
+}
+
+TEST(test_system_temperature_stable) {
+    // Two reads 100ms apart should not differ by more than 5°C (5000mc).
+    int t1 = read_sysfs_temp_millidegrees();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    int t2 = read_sysfs_temp_millidegrees();
+
+    int delta = t1 > t2 ? t1 - t2 : t2 - t1;
+    ASSERT_LT(delta, 5000);
 }
 
 // ============================================================================

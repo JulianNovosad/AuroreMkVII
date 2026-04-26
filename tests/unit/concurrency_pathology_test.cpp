@@ -276,13 +276,14 @@ TEST(test_priority_inversion_mitigation) {
     std::mutex m;
     std::atomic<int> medium_priority_waiters(0);
     std::atomic<bool> high_priority_done(false);
+    std::atomic<bool> medium_ready(false);
 
-    std::thread low([&]() {
-        std::lock_guard<std::mutex> l(m);
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    });
+    // Acquire the mutex here so low thread doesn't race high thread to release it.
+    // This guarantees: medium spins at least once before high acquires the mutex.
+    m.lock();
 
     std::thread medium([&]() {
+        medium_ready.store(true, std::memory_order_release);
         while (!high_priority_done.load(std::memory_order_acquire)) {
             medium_priority_waiters.fetch_add(1, std::memory_order_relaxed);
             std::this_thread::yield();
@@ -294,7 +295,13 @@ TEST(test_priority_inversion_mitigation) {
         high_priority_done.store(true, std::memory_order_release);
     });
 
-    low.join();
+    // Wait until medium is spinning, then give it a few ms before releasing.
+    while (!medium_ready.load(std::memory_order_acquire)) {
+        std::this_thread::yield();
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    m.unlock();
+
     medium.join();
     high.join();
 

@@ -2,12 +2,12 @@
  * @file numeric_robustness_test.cpp
  * @brief Part 6: Numeric and Algorithmic Robustness Tests
  *
- * Validates:
- * - Overflow and underflow handling
- * - NaN and Inf propagation rules
- * - Precision decay in long-running calculations
- * - Angle and range wrapping
- * - Boundary behavior at sensor and actuator limits
+ * Tests BallisticSolver's handling of:
+ * - Invalid inputs (NaN, Inf, negative/zero range, zero velocity)
+ * - Output validity (finite, p_hit ∈ [0,1], tof > 0)
+ * - G1 drag model correctness across Mach regimes
+ * - BallisticProfile parameter validation
+ * - solve() idempotency (no state mutation)
  *
  * @copyright Aurore MkVII Project - Educational/Personal Use Only
  */
@@ -15,13 +15,10 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <iostream>
-#include <thread>
-#include <vector>
 #include <limits>
+#include <optional>
 
-#include "aurore/test_infrastructure.hpp"
 #include "aurore/ballistic_solver.hpp"
 
 namespace {
@@ -46,315 +43,282 @@ std::atomic<size_t> g_tests_failed(0);
 #define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
 #define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_GT(a, b) do { if ((a) <= (b)) throw std::runtime_error("Assertion failed: " #a " > " #b); } while(0)
-#define ASSERT_LT(a, b) do { if ((a) >= (b)) throw std::runtime_error("Assertion failed: " #a " < " #b); } while(0)
-#define ASSERT_GE(a, b) do { if ((a) < (b)) throw std::runtime_error("Assertion failed: " #a " >= " #b); } while(0)
-#define ASSERT_LE(a, b) do { if ((a) > (b)) throw std::runtime_error("Assertion failed: " #a " <= " #b); } while(0)
+#define ASSERT_GT(a, b) do { if (!((a) > (b))) throw std::runtime_error("Assertion failed: " #a " > " #b); } while(0)
+#define ASSERT_LT(a, b) do { if (!((a) < (b))) throw std::runtime_error("Assertion failed: " #a " < " #b); } while(0)
+#define ASSERT_GE(a, b) do { if (!((a) >= (b))) throw std::runtime_error("Assertion failed: " #a " >= " #b); } while(0)
+#define ASSERT_LE(a, b) do { if (!((a) <= (b))) throw std::runtime_error("Assertion failed: " #a " <= " #b); } while(0)
 
 }  // anonymous namespace
 
 // ============================================================================
-// NaN/Inf Detection Tests
+// BallisticSolver Input Validation
 // ============================================================================
 
-TEST(test_nan_detection) {
-    using aurore::test::NumericRobustnessTester;
-
-    ASSERT_TRUE(NumericRobustnessTester::is_nan(std::nanf("")));
-    ASSERT_FALSE(NumericRobustnessTester::is_nan(1.0f));
-    ASSERT_FALSE(NumericRobustnessTester::is_nan(0.0f));
-}
-
-TEST(test_inf_detection) {
-    using aurore::test::NumericRobustnessTester;
-
-    ASSERT_TRUE(NumericRobustnessTester::is_inf(std::numeric_limits<float>::infinity()));
-    ASSERT_FALSE(NumericRobustnessTester::is_inf(1.0f));
-    ASSERT_TRUE(NumericRobustnessTester::is_inf(-std::numeric_limits<float>::infinity()));
-}
-
-TEST(test_finite_detection) {
-    using aurore::test::NumericRobustnessTester;
-
-    ASSERT_TRUE(NumericRobustnessTester::is_finite(1.0f));
-    ASSERT_TRUE(NumericRobustnessTester::is_finite(0.0f));
-    ASSERT_FALSE(NumericRobustnessTester::is_finite(std::nanf("")));
-    ASSERT_FALSE(NumericRobustnessTester::is_finite(std::numeric_limits<float>::infinity()));
-}
-
-// ============================================================================
-// Overflow Handling Tests
-// ============================================================================
-
-TEST(test_saturating_conversion_positive_overflow) {
-    using aurore::test::NumericRobustnessTester;
-
-    float large = 1e10f;
-    int32_t result = NumericRobustnessTester::float_to_int32_saturating(large);
-
-    ASSERT_EQ(result, std::numeric_limits<int32_t>::max());
-}
-
-TEST(test_saturating_conversion_negative_overflow) {
-    using aurore::test::NumericRobustnessTester;
-
-    float small = -1e10f;
-    int32_t result = NumericRobustnessTester::float_to_int32_saturating(small);
-
-    ASSERT_EQ(result, std::numeric_limits<int32_t>::min());
-}
-
-TEST(test_saturating_conversion_normal) {
-    using aurore::test::NumericRobustnessTester;
-
-    float normal = 123.456f;
-    int32_t result = NumericRobustnessTester::float_to_int32_saturating(normal);
-
-    ASSERT_EQ(result, 123);
-}
-
-TEST(test_uint_saturating_conversion) {
-    using aurore::test::NumericRobustnessTester;
-
-    float large = 1e10f;
-    uint32_t result = NumericRobustnessTester::float_to_uint32_saturating(large);
-
-    ASSERT_EQ(result, std::numeric_limits<uint32_t>::max());
-}
-
-// ============================================================================
-// Operation Robustness Tests
-// ============================================================================
-
-TEST(test_basic_operations_no_overflow) {
-    using aurore::test::NumericRobustnessTester;
-
-    auto result = NumericRobustnessTester::test_operations(1.0f, 1.0f, 100);
-
-    ASSERT_FALSE(result.overflow_detected);
-    ASSERT_FALSE(result.nan_propagated);
-    ASSERT_FALSE(result.inf_propagated);
-}
-
-TEST(test_basic_operations_with_overflow) {
-    using aurore::test::NumericRobustnessTester;
-
-    auto result = NumericRobustnessTester::test_operations(
-        std::numeric_limits<float>::max() / 2.0f,
-        10.0f,
-        100);
-
-    ASSERT_FALSE(result.nan_propagated);
-}
-
-TEST(test_division_by_zero_safe) {
-    using aurore::test::NumericRobustnessTester;
-
-    auto result = NumericRobustnessTester::test_operations(1.0f, 0.0f, 10);
-
-    ASSERT_FALSE(result.inf_propagated);
-}
-
-TEST(test_trigonometric_nan_propagation) {
-    using aurore::test::NumericRobustnessTester;
-
-    auto result = NumericRobustnessTester::test_trig(std::nanf(""), 10);
-
-    ASSERT_TRUE(result.nan_propagated);
-}
-
-TEST(test_trigonometric_normal_values) {
-    using aurore::test::NumericRobustnessTester;
-
-    auto result = NumericRobustnessTester::test_trig(0.5f, 100);
-
-    ASSERT_FALSE(result.nan_propagated);
-    ASSERT_FALSE(result.inf_propagated);
-}
-
-// ============================================================================
-// Precision Decay Tests
-// ============================================================================
-
-TEST(test_angle_wrapping_normal) {
-    using aurore::test::NumericRobustnessTester;
-
-    auto result = NumericRobustnessTester::test_angle_wrapping(0.0f, 100);
-
-    ASSERT_FALSE(result.precision_decay_excessive);
-    ASSERT_GE(result.min_value, 0.0f);
-}
-
-TEST(test_angle_wrapping_around_2pi) {
-    using aurore::test::NumericRobustnessTester;
-
-    auto result = NumericRobustnessTester::test_angle_wrapping(6.0f, 100);
-
-    ASSERT_GE(result.max_value, 6.0f);
-}
-
-TEST(test_float_precision_accumulation) {
-    float sum = 0.0f;
-    float small = 0.00001f;
-
-    for (int i = 0; i < 100000; i++) {
-        sum += small;
-    }
-
-    float expected = 1.0f;
-    float diff = std::abs(sum - expected);
-
-    ASSERT_LT(diff, 0.01f);
-}
-
-// ============================================================================
-// Range Boundary Tests
-// ============================================================================
-
-TEST(test_range_min_boundary) {
-    constexpr float kRangeMinM = 0.5f;
-
-    float range = kRangeMinM - 0.1f;
-    ASSERT_LT(range, kRangeMinM);
-}
-
-TEST(test_range_max_boundary) {
-    constexpr float kRangeMaxM = 5000.0f;
-
-    float range = kRangeMaxM + 100.0f;
-    ASSERT_GT(range, kRangeMaxM);
-}
-
-TEST(test_range_valid_check) {
-    constexpr float kRangeMinM = 0.5f;
-    constexpr float kRangeMaxM = 5000.0f;
-
-    bool valid_1 = (1.0f >= kRangeMinM && 1.0f <= kRangeMaxM);
-    bool valid_2 = (0.1f >= kRangeMinM && 0.1f <= kRangeMaxM);
-    bool valid_3 = (10000.0f >= kRangeMinM && 10000.0f <= kRangeMaxM);
-
-    ASSERT_TRUE(valid_1);
-    ASSERT_FALSE(valid_2);
-    ASSERT_FALSE(valid_3);
-}
-
-// ============================================================================
-// Angle Boundary Tests
-// ============================================================================
-
-TEST(test_angle_azimuth_wrap) {
-    float angle = 370.0f;
-    while (angle > 360.0f) {
-        angle -= 360.0f;
-    }
-
-    ASSERT_GE(angle, 0.0f);
-    ASSERT_LT(angle, 360.0f);
-}
-
-TEST(test_angle_elevation_clamp) {
-    float min_elevation = -90.0f;
-    float max_elevation = 90.0f;
-
-    float elevated = 100.0f;
-    if (elevated > max_elevation) elevated = max_elevation;
-    if (elevated < min_elevation) elevated = min_elevation;
-
-    ASSERT_GE(elevated, min_elevation);
-    ASSERT_LE(elevated, max_elevation);
-}
-
-TEST(test_angle_zero_normalization) {
-    float angle = 360.0f;
-    while (angle >= 360.0f) angle -= 360.0f;
-
-    ASSERT_LT(angle, 360.0f);
-}
-
-// ============================================================================
-// Ballistic Solver Numeric Tests
-// ============================================================================
-
-TEST(test_ballistic_solver_normal_range) {
+TEST(test_solver_rejects_nan_range) {
     aurore::BallisticSolver solver;
     solver.initialize_lookup_table();
 
-    auto solution = solver.solve(100.0f, 0.0f, 0.0f, 340.0f, 0.0f);
-
-    ASSERT_TRUE(solution.has_value());
-    ASSERT_FALSE(std::isnan(solution->az_lead_deg));
-    ASSERT_FALSE(std::isnan(solution->el_lead_deg));
+    auto result = solver.solve(std::nanf(""), 0.0f, 0.0f, 340.0f, 0.0f);
+    ASSERT_FALSE(result.has_value());
 }
 
-TEST(test_ballistic_solver_zero_range) {
+TEST(test_solver_rejects_inf_range) {
     aurore::BallisticSolver solver;
     solver.initialize_lookup_table();
 
-    auto solution = solver.solve(0.0f, 0.0f, 0.0f, 340.0f, 0.0f);
-
-    if (solution.has_value()) {
-        ASSERT_FALSE(std::isnan(solution->az_lead_deg) || std::isinf(solution->az_lead_deg));
-    }
+    auto result = solver.solve(std::numeric_limits<float>::infinity(), 0.0f, 0.0f, 340.0f, 0.0f);
+    ASSERT_FALSE(result.has_value());
 }
 
-TEST(test_ballistic_solver_large_range) {
+TEST(test_solver_rejects_negative_range) {
     aurore::BallisticSolver solver;
     solver.initialize_lookup_table();
 
-    auto solution = solver.solve(5000.0f, 0.0f, 0.0f, 340.0f, 0.0f);
+    auto result = solver.solve(-1.0f, 0.0f, 0.0f, 340.0f, 0.0f);
+    ASSERT_FALSE(result.has_value());
+}
 
-    if (solution.has_value()) {
-        ASSERT_FALSE(std::isnan(solution->az_lead_deg) || std::isinf(solution->az_lead_deg));
-        ASSERT_FALSE(std::isnan(solution->el_lead_deg) || std::isinf(solution->el_lead_deg));
-    }
+TEST(test_solver_rejects_zero_range) {
+    aurore::BallisticSolver solver;
+    solver.initialize_lookup_table();
+
+    auto result = solver.solve(0.0f, 0.0f, 0.0f, 340.0f, 0.0f);
+    ASSERT_FALSE(result.has_value());
+}
+
+TEST(test_solver_rejects_nan_velocity) {
+    aurore::BallisticSolver solver;
+    solver.initialize_lookup_table();
+
+    auto result = solver.solve(100.0f, 0.0f, 0.0f, std::nanf(""), 0.0f);
+    ASSERT_FALSE(result.has_value());
+}
+
+TEST(test_solver_rejects_nan_elevation) {
+    aurore::BallisticSolver solver;
+    solver.initialize_lookup_table();
+
+    auto result = solver.solve(100.0f, std::nanf(""), 0.0f, 340.0f, 0.0f);
+    ASSERT_FALSE(result.has_value());
 }
 
 // ============================================================================
-// Main
+// BallisticSolver Output Validity
 // ============================================================================
+
+TEST(test_solver_result_all_finite) {
+    aurore::BallisticSolver solver;
+    solver.initialize_lookup_table();
+
+    auto result = solver.solve(5.0f, 0.0f, 0.0f, 340.0f, 0.0f);
+    ASSERT_TRUE(result.has_value());
+    ASSERT_TRUE(std::isfinite(result->az_lead_deg));
+    ASSERT_TRUE(std::isfinite(result->el_lead_deg));
+    ASSERT_TRUE(std::isfinite(result->p_hit));
+    ASSERT_TRUE(std::isfinite(result->range_m));
+}
+
+TEST(test_solver_p_hit_bounded) {
+    aurore::BallisticSolver solver;
+    solver.initialize_lookup_table();
+
+    for (float range : {0.5f, 1.0f, 3.0f, 5.0f, 8.0f, 10.0f}) {
+        auto result = solver.solve(range, 0.0f, 0.0f, 340.0f, 0.0f);
+        if (result.has_value()) {
+            ASSERT_GE(result->p_hit, 0.0f);
+            ASSERT_LE(result->p_hit, 1.0f);
+        }
+    }
+}
+
+TEST(test_solver_range_preserved_in_result) {
+    aurore::BallisticSolver solver;
+    solver.initialize_lookup_table();
+
+    const float input_range = 5.0f;
+    auto result = solver.solve(input_range, 0.0f, 0.0f, 340.0f, 0.0f);
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result->range_m, input_range);
+}
+
+TEST(test_solver_idempotent) {
+    aurore::BallisticSolver solver;
+    solver.initialize_lookup_table();
+
+    auto r1 = solver.solve(5.0f, 0.0f, 0.0f, 340.0f, 0.0f);
+    auto r2 = solver.solve(5.0f, 0.0f, 0.0f, 340.0f, 0.0f);
+
+    ASSERT_TRUE(r1.has_value());
+    ASSERT_TRUE(r2.has_value());
+    ASSERT_EQ(r1->az_lead_deg, r2->az_lead_deg);
+    ASSERT_EQ(r1->el_lead_deg, r2->el_lead_deg);
+    ASSERT_EQ(r1->p_hit, r2->p_hit);
+}
+
+// ============================================================================
+// solve_kinetic() Direct Tests
+// ============================================================================
+
+TEST(test_kinetic_tof_positive) {
+    aurore::BallisticSolver solver;
+    solver.initialize_lookup_table();
+
+    auto result = solver.solve_kinetic(5.0f, 0.0f, 340.0f, 0.0f);
+    ASSERT_TRUE(result.has_value());
+    ASSERT_GT(result->tof_s, 0.0f);
+}
+
+TEST(test_kinetic_rejects_negative_range) {
+    aurore::BallisticSolver solver;
+    solver.initialize_lookup_table();
+
+    auto result = solver.solve_kinetic(-1.0f, 0.0f, 340.0f, 0.0f);
+    ASSERT_FALSE(result.has_value());
+}
+
+TEST(test_kinetic_rejects_zero_velocity) {
+    aurore::BallisticSolver solver;
+    solver.initialize_lookup_table();
+
+    auto result = solver.solve_kinetic(5.0f, 0.0f, 0.0f, 0.0f);
+    ASSERT_FALSE(result.has_value());
+}
+
+TEST(test_kinetic_rejects_nan_inputs) {
+    aurore::BallisticSolver solver;
+    solver.initialize_lookup_table();
+
+    auto result = solver.solve_kinetic(std::nanf(""), 0.0f, 340.0f, 0.0f);
+    ASSERT_FALSE(result.has_value());
+}
+
+TEST(test_kinetic_lead_angles_finite) {
+    aurore::BallisticSolver solver;
+    solver.initialize_lookup_table();
+
+    auto result = solver.solve_kinetic(5.0f, 0.0f, 340.0f, 10.0f);
+    ASSERT_TRUE(result.has_value());
+    ASSERT_TRUE(std::isfinite(result->az_lead_deg));
+    ASSERT_TRUE(std::isfinite(result->el_lead_deg));
+}
+
+// ============================================================================
+// G1 Drag Model Correctness (public for testing per header comment)
+// ============================================================================
+
+TEST(test_drag_coefficient_subsonic) {
+    aurore::BallisticSolver solver;
+
+    // Mach 0.5 is subsonic (< 0.8) → Cd = 0.2
+    float cd = solver.get_drag_coefficient(0.5f);
+    ASSERT_EQ(cd, aurore::kCdSubsonic);
+}
+
+TEST(test_drag_coefficient_transonic) {
+    aurore::BallisticSolver solver;
+
+    // Mach 1.0 is transonic (0.8 < M < 1.2) → Cd = 0.4
+    float cd = solver.get_drag_coefficient(1.0f);
+    ASSERT_EQ(cd, aurore::kCdTransonic);
+}
+
+TEST(test_drag_coefficient_supersonic) {
+    aurore::BallisticSolver solver;
+
+    // Mach 1.5 is supersonic (1.2 < M < 2.5) → Cd = 0.25
+    float cd = solver.get_drag_coefficient(1.5f);
+    ASSERT_EQ(cd, aurore::kCdSupersonic);
+}
+
+TEST(test_drag_coefficient_hypersonic) {
+    aurore::BallisticSolver solver;
+
+    // Mach 3.0 is hypersonic (> 2.5) → Cd = 0.18
+    float cd = solver.get_drag_coefficient(3.0f);
+    ASSERT_EQ(cd, aurore::kCdHypersonic);
+}
+
+// ============================================================================
+// BallisticProfile Validation
+// ============================================================================
+
+TEST(test_profile_valid_params_pass) {
+    aurore::BallisticProfile profile;
+    profile.muzzle_velocity_m_s  = 340.0f;
+    profile.ballistic_coefficient = 0.3f;
+    profile.sight_height_mm      = 50.0f;
+    profile.zero_range_m         = 100.0f;
+
+    ASSERT_TRUE(profile.validate());
+}
+
+TEST(test_profile_zero_muzzle_velocity_fails) {
+    aurore::BallisticProfile profile;
+    profile.muzzle_velocity_m_s  = 0.0f;
+    profile.ballistic_coefficient = 0.3f;
+    profile.sight_height_mm      = 50.0f;
+    profile.zero_range_m         = 100.0f;
+
+    ASSERT_FALSE(profile.validate());
+}
+
+TEST(test_profile_negative_bc_fails) {
+    aurore::BallisticProfile profile;
+    profile.muzzle_velocity_m_s  = 340.0f;
+    profile.ballistic_coefficient = -0.1f;
+    profile.sight_height_mm      = 50.0f;
+    profile.zero_range_m         = 100.0f;
+
+    ASSERT_FALSE(profile.validate());
+}
+
+TEST(test_profile_extreme_sight_height_fails) {
+    aurore::BallisticProfile profile;
+    profile.muzzle_velocity_m_s  = 340.0f;
+    profile.ballistic_coefficient = 0.3f;
+    profile.sight_height_mm      = 500.0f;  // > 200mm limit
+    profile.zero_range_m         = 100.0f;
+
+    ASSERT_FALSE(profile.validate());
+}
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     std::cout << "=== Part 6: Numeric and Algorithmic Robustness Tests ===" << std::endl;
-    std::cout << "Running numeric robustness tests..." << std::endl;
+    std::cout << "Running ballistic solver robustness tests..." << std::endl;
     std::cout << "=====================================" << std::endl;
 
-    std::cout << "\n--- NaN/Inf Detection ---" << std::endl;
-    RUN_TEST(test_nan_detection);
-    RUN_TEST(test_inf_detection);
-    RUN_TEST(test_finite_detection);
+    std::cout << "\n--- Input Validation ---" << std::endl;
+    RUN_TEST(test_solver_rejects_nan_range);
+    RUN_TEST(test_solver_rejects_inf_range);
+    RUN_TEST(test_solver_rejects_negative_range);
+    RUN_TEST(test_solver_rejects_zero_range);
+    RUN_TEST(test_solver_rejects_nan_velocity);
+    RUN_TEST(test_solver_rejects_nan_elevation);
 
-    std::cout << "\n--- Overflow Handling ---" << std::endl;
-    RUN_TEST(test_saturating_conversion_positive_overflow);
-    RUN_TEST(test_saturating_conversion_negative_overflow);
-    RUN_TEST(test_saturating_conversion_normal);
-    RUN_TEST(test_uint_saturating_conversion);
+    std::cout << "\n--- Output Validity ---" << std::endl;
+    RUN_TEST(test_solver_result_all_finite);
+    RUN_TEST(test_solver_p_hit_bounded);
+    RUN_TEST(test_solver_range_preserved_in_result);
+    RUN_TEST(test_solver_idempotent);
 
-    std::cout << "\n--- Operation Robustness ---" << std::endl;
-    RUN_TEST(test_basic_operations_no_overflow);
-    RUN_TEST(test_basic_operations_with_overflow);
-    RUN_TEST(test_division_by_zero_safe);
-    RUN_TEST(test_trigonometric_nan_propagation);
-    RUN_TEST(test_trigonometric_normal_values);
+    std::cout << "\n--- solve_kinetic() ---" << std::endl;
+    RUN_TEST(test_kinetic_tof_positive);
+    RUN_TEST(test_kinetic_rejects_negative_range);
+    RUN_TEST(test_kinetic_rejects_zero_velocity);
+    RUN_TEST(test_kinetic_rejects_nan_inputs);
+    RUN_TEST(test_kinetic_lead_angles_finite);
 
-    std::cout << "\n--- Precision Decay ---" << std::endl;
-    RUN_TEST(test_angle_wrapping_normal);
-    RUN_TEST(test_angle_wrapping_around_2pi);
-    RUN_TEST(test_float_precision_accumulation);
+    std::cout << "\n--- G1 Drag Model ---" << std::endl;
+    RUN_TEST(test_drag_coefficient_subsonic);
+    RUN_TEST(test_drag_coefficient_transonic);
+    RUN_TEST(test_drag_coefficient_supersonic);
+    RUN_TEST(test_drag_coefficient_hypersonic);
 
-    std::cout << "\n--- Range Boundary ---" << std::endl;
-    RUN_TEST(test_range_min_boundary);
-    RUN_TEST(test_range_max_boundary);
-    RUN_TEST(test_range_valid_check);
-
-    std::cout << "\n--- Angle Boundary ---" << std::endl;
-    RUN_TEST(test_angle_azimuth_wrap);
-    RUN_TEST(test_angle_elevation_clamp);
-    RUN_TEST(test_angle_zero_normalization);
-
-    std::cout << "\n--- Ballistic Solver Numeric ---" << std::endl;
-    RUN_TEST(test_ballistic_solver_normal_range);
-    RUN_TEST(test_ballistic_solver_zero_range);
-    RUN_TEST(test_ballistic_solver_large_range);
+    std::cout << "\n--- BallisticProfile Validation ---" << std::endl;
+    RUN_TEST(test_profile_valid_params_pass);
+    RUN_TEST(test_profile_zero_muzzle_velocity_fails);
+    RUN_TEST(test_profile_negative_bc_fails);
+    RUN_TEST(test_profile_extreme_sight_height_fails);
 
     std::cout << "\n=====================================" << std::endl;
     std::cout << "Tests run:     " << g_tests_run.load() << std::endl;

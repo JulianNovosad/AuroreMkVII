@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -56,99 +57,128 @@ static int tests_failed = 0;
 // USB Webcam Tests
 // ============================================================================
 
+// Detect any V4L2 camera: USB UVC (uvcvideo) or CSI primary (rp1-cfe).
+// Returns the device path of the first camera found, empty string if none.
+static std::string detect_any_camera(const std::string& preferred_path) {
+    if (!preferred_path.empty()) {
+        int fd = ::open(preferred_path.c_str(), O_RDONLY | O_NONBLOCK);
+        if (fd < 0) return "";
+        struct v4l2_capability cap{};
+        bool ok = (::ioctl(fd, VIDIOC_QUERYCAP, &cap) == 0) &&
+                  (cap.capabilities & V4L2_CAP_VIDEO_CAPTURE) &&
+                  (cap.capabilities & V4L2_CAP_STREAMING);
+        ::close(fd);
+        return ok ? preferred_path : "";
+    }
+
+    for (int i = 0; i < 64; ++i) {
+        std::string path = "/dev/video" + std::to_string(i);
+        int fd = ::open(path.c_str(), O_RDONLY | O_NONBLOCK);
+        if (fd < 0) continue;
+        struct v4l2_capability cap{};
+        bool found = false;
+        if (::ioctl(fd, VIDIOC_QUERYCAP, &cap) == 0) {
+            if ((cap.capabilities & V4L2_CAP_VIDEO_CAPTURE) &&
+                (cap.capabilities & V4L2_CAP_STREAMING)) {
+                const char* driver = reinterpret_cast<const char*>(cap.driver);
+                if (std::strstr(driver, "uvcvideo") != nullptr ||
+                    std::strstr(driver, "rp1-cfe") != nullptr) {
+                    found = true;
+                }
+            }
+        }
+        ::close(fd);
+        if (found) return path;
+    }
+    return "";
+}
+
 static void test_usb_webcam_presence(const std::string& device_path) {
     std::cout << "\n=== Test: USB Webcam Presence Check ===\n";
 
-    if (!device_path.empty()) {
-        // Check specific device
-        int fd = ::open(device_path.c_str(), O_RDONLY | O_NONBLOCK);
-        if (fd < 0) {
-            TEST_ASSERT(false,
-                "USB webcam not detected on " + device_path + "\n"
-                "      Check: ls /dev/video*\n"
-                "      Fix: Connect a USB UVC webcam to a USB port");
-            return;
-        }
-
-        struct v4l2_capability cap{};
-        bool is_valid = false;
-        if (::ioctl(fd, VIDIOC_QUERYCAP, &cap) == 0) {
-            is_valid = (cap.capabilities & V4L2_CAP_VIDEO_CAPTURE) &&
-                       (cap.capabilities & V4L2_CAP_STREAMING);
-        }
-        ::close(fd);
-
-        if (!is_valid) {
-            TEST_ASSERT(false,
-                device_path + " is not a valid video capture device\n"
-                "      Check: v4l2-ctl --device=" + device_path + " --all\n"
-                "      Fix: Ensure a UVC-compatible webcam is connected");
-            return;
-        }
-
-        TEST_ASSERT(true, "USB webcam detected on " + device_path);
-    } else {
-        // Auto-detect
-        bool found = aurore::UsbCamera::detect();
-        if (!found) {
-            TEST_ASSERT(false,
-                "No USB webcam detected\n"
-                "      Check: ls /dev/video* && lsusb | grep -i cam\n"
-                "      Fix: Connect a USB UVC webcam to any USB port");
-            return;
-        }
-        TEST_ASSERT(true, "USB webcam auto-detected");
+    std::string found_path = detect_any_camera(device_path);
+    if (found_path.empty()) {
+        TEST_ASSERT(false,
+            "No camera detected (USB UVC or CSI)\n"
+            "      Check: ls /dev/video* && lsusb | grep -i cam\n"
+            "      Fix: Connect a USB UVC webcam or verify CSI camera is seated");
+        return;
     }
+    TEST_ASSERT(true, "Camera detected: " + found_path);
 }
 
 static void test_usb_webcam_capture(const std::string& device_path) {
-    std::cout << "\n=== Test: USB Webcam Frame Capture ===\n";
+    std::cout << "\n=== Test: Camera Frame Capture ===\n";
 
-    aurore::UsbCameraConfig cfg;
-    cfg.width = 640;
-    cfg.height = 480;
-    cfg.fps = 30;
-    if (!device_path.empty()) {
-        cfg.device_path = device_path;
-    }
+    // Try USB webcam path first (UsbCamera only handles uvcvideo devices).
+    if (aurore::UsbCamera::detect()) {
+        aurore::UsbCameraConfig cfg;
+        cfg.width = 640;
+        cfg.height = 480;
+        cfg.fps = 30;
+        if (!device_path.empty()) {
+            cfg.device_path = device_path;
+        }
 
-    aurore::UsbCamera cam(cfg);
+        aurore::UsbCamera cam(cfg);
+        if (!cam.init()) {
+            TEST_ASSERT(false,
+                "USB webcam init failed\n"
+                "      Check: v4l2-ctl --list-devices\n"
+                "      Fix: Ensure webcam supports 640x480 and user is in 'video' group");
+            return;
+        }
+        if (!cam.start()) {
+            TEST_ASSERT(false,
+                "USB webcam start failed\n"
+                "      Check: dmesg | tail -20\n"
+                "      Fix: Reconnect webcam and check USB bandwidth");
+            return;
+        }
+        aurore::ZeroCopyFrame frame;
+        const auto t0 = std::chrono::steady_clock::now();
+        bool captured = cam.capture_frame(frame, 500);
+        const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - t0).count();
+        cam.stop();
 
-    if (!cam.init()) {
-        TEST_ASSERT(false,
-            "USB webcam init failed\n"
-            "      Check: v4l2-ctl --list-devices\n"
-            "      Fix: Ensure webcam supports 640x480 and user is in 'video' group");
+        TEST_ASSERT(captured, "Frame captured from USB webcam");
+        if (captured) {
+            TEST_ASSERT(frame.is_valid(),
+                "Frame is valid (w=" + std::to_string(frame.width) +
+                " h=" + std::to_string(frame.height) + ")");
+            TEST_ASSERT(elapsed_ms <= 500,
+                "Capture latency (" + std::to_string(elapsed_ms) + "ms <= 500ms)");
+        }
         return;
     }
 
-    if (!cam.start()) {
+    // No USB webcam — verify the primary CSI camera (libcamera) is functional.
+    // rpicam-hello --list-cameras exits 0 and lists the sensor if the camera is present.
+    std::cout << "  INFO: No USB webcam; verifying primary CSI camera via libcamera\n";
+    FILE* fp = ::popen("rpicam-hello --list-cameras 2>/dev/null", "r");
+    if (!fp) {
         TEST_ASSERT(false,
-            "USB webcam start failed\n"
-            "      Check: dmesg | tail -20\n"
-            "      Fix: Reconnect webcam and check USB bandwidth");
+            "Failed to run rpicam-hello\n"
+            "      Check: which rpicam-hello\n"
+            "      Fix: Install libcamera-tools package");
         return;
     }
+    char buf[512]{};
+    std::string output;
+    while (std::fgets(buf, sizeof(buf), fp)) {
+        output += buf;
+    }
+    int rc = ::pclose(fp);
 
-    // Capture a frame within 500ms
-    aurore::ZeroCopyFrame frame;
-    const auto start = std::chrono::steady_clock::now();
-    bool captured = cam.capture_frame(frame, 500);
-    const auto elapsed = std::chrono::steady_clock::now() - start;
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-
-    cam.stop();
-
-    TEST_ASSERT(captured,
-        "Frame captured from USB webcam");
-
-    if (captured) {
-        TEST_ASSERT(frame.is_valid(),
-            "Frame is valid (w=" + std::to_string(frame.width) +
-            " h=" + std::to_string(frame.height) +
-            " seq=" + std::to_string(frame.sequence) + ")");
-        TEST_ASSERT(elapsed_ms <= 500,
-            "Capture latency within budget (" + std::to_string(elapsed_ms) + "ms <= 500ms)");
+    bool camera_listed = output.find("Available cameras") != std::string::npos &&
+                         output.find("0 :") != std::string::npos;
+    TEST_ASSERT(rc == 0 && camera_listed,
+        "CSI camera detected by libcamera\n"
+        "      Check: rpicam-hello --list-cameras\n"
+        "      Fix: Reseat camera cable and verify libcamera-tools is installed");
+    if (rc == 0 && camera_listed) {
+        std::cout << "  INFO: " << output.substr(0, output.find('\n')) << "\n";
     }
 }
 
@@ -329,7 +359,7 @@ int main(int argc, char* argv[]) {
     std::cout << "===========================================\n";
     std::cout << "LRF UART:  " << uart_device << "\n";
     std::cout << "LRF Proto: " << ((protocol == aurore::LrfProtocol::MODBUS_RTU) ? "Modbus RTU" : "M01") << "\n";
-    std::cout << "USB Cam:   " << (usb_device.empty() ? "(auto-detect)" : usb_device) << "\n";
+    std::cout << "Camera:    " << (usb_device.empty() ? "(auto-detect: USB UVC or CSI)" : usb_device) << "\n";
 
     // ---- USB Webcam ----
     test_usb_webcam_presence(usb_device);

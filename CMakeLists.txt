@@ -1253,7 +1253,7 @@ if(AURORE_ENABLE_TESTS)
     target_include_directories(laser_rangefinder_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(laser_rangefinder_test PRIVATE Threads::Threads rt)
     add_test(NAME LaserRangefinderTest COMMAND laser_rangefinder_test)
-    set_tests_properties(LaserRangefinderTest PROPERTIES TIMEOUT 60)
+    set_tests_properties(LaserRangefinderTest PROPERTIES TIMEOUT 60 RESOURCE_LOCK uart_ttyAMA0)
 
     # 20-sample distance measurement test
     add_executable(lrf_20_samples_test
@@ -1277,7 +1277,7 @@ if(AURORE_ENABLE_TESTS)
     target_include_directories(laser_validation_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(laser_validation_test PRIVATE Threads::Threads rt OpenSSL::Crypto)
     add_test(NAME LaserValidationTest COMMAND laser_validation_test)
-    set_tests_properties(LaserValidationTest PROPERTIES TIMEOUT 60 LABELS "IntegrationTest")
+    set_tests_properties(LaserValidationTest PROPERTIES TIMEOUT 60 LABELS "IntegrationTest" RESOURCE_LOCK uart_ttyAMA0)
 
     # ========================================================================
     # Hardware Integration Check
@@ -1294,7 +1294,7 @@ if(AURORE_ENABLE_TESTS)
     )
     target_link_libraries(integration_check PRIVATE Threads::Threads rt ${OPENCV_LIBRARIES})
     add_test(NAME IntegrationCheck COMMAND integration_check)
-    set_tests_properties(IntegrationCheck PROPERTIES TIMEOUT 60)
+    set_tests_properties(IntegrationCheck PROPERTIES TIMEOUT 60 RESOURCE_LOCK uart_ttyAMA0)
 
     # ========================================================================
     # Integration Test Runner (runs all integration tests)

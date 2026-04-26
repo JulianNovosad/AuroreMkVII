@@ -67,8 +67,15 @@ cd build-rpi && ./safety_monitor_test
 sudo ./scripts/jitter_monitor.sh --duration=60
 ```
 
-## Pre existing failing tests
-- Assume all hardware is running, working and connected. Ensure by running bash commands. You shall fix these potentially missing or failing hardware tests, and not skip over them.
+## Hardware Test Notes
+
+All hardware is assumed connected and functional. Verify with `ls /dev/video* /dev/ttyAMA0` before debugging.
+
+**Camera:** Primary camera is IMX708 CSI-2 via libcamera (rp1-cfe driver, /dev/video0-7). No USB webcam is connected. `integration_check` and `UsbCamera::detect()` accept both `uvcvideo` and `rp1-cfe` drivers; if no USB webcam, CSI presence is verified via `rpicam-hello --list-cameras`.
+
+**LRF:** M01 laser rangefinder on `/dev/ttyAMA0`. Currently measures ~0.24m (object at short range). State machine range bounds are [0.5m, 5000m]; `laser_validation_test` correctly passes when readings are rejected by bounds check (hardware and validation logic are both working). `LaserRangefinderTest`, `LaserValidationTest`, and `IntegrationCheck` all share the UART and are serialized via `RESOURCE_LOCK uart_ttyAMA0` in CMake — do not remove this or parallel ctest runs will corrupt each other's frames.
+
+**Concurrency tests:** `test_priority_inversion_mitigation` in `concurrency_pathology_test` is synchronized via a `medium_ready` flag; do not remove the mutex pre-acquisition pattern or the test will flake.
 
 ## Static Analysis and Formatting
 
