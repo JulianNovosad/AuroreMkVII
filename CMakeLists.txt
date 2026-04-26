@@ -427,890 +427,576 @@ target_compile_definitions(aurore PRIVATE
 
 if(AURORE_ENABLE_TESTS)
     enable_testing()
+    include(cmake/AuroreTestHelpers.cmake)
 
-    # Ring buffer tests (standalone executable)
-    add_executable(ring_buffer_test
-        tests/unit/ring_buffer_test.cpp
-    )
+if(AURORE_ENABLE_TESTS)
 
-    target_include_directories(ring_buffer_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
+    # -----------------------------------------------------------------------
+    # Tier 0 — Fast unit tests (pure logic, no hardware, <30s each)
+    # -----------------------------------------------------------------------
 
-    target_link_libraries(ring_buffer_test PRIVATE
-        Threads::Threads
-    )
-
-    add_test(NAME RingBufferTest COMMAND ring_buffer_test)
-    set_tests_properties(RingBufferTest PROPERTIES TIMEOUT 60)
-
-    # Timing tests (standalone executable)
-    add_executable(timing_test
-        tests/unit/timing_test.cpp
+    aurore_add_test(NAME ring_buffer_test
+        SOURCES tests/unit/ring_buffer_test.cpp
+        LABELS  "tier0;fast"
+        TIMEOUT 60
     )
 
-    target_include_directories(timing_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
+    aurore_add_test(NAME timing_test
+        SOURCES tests/unit/timing_test.cpp
+        LIBS    rt
+        LABELS  "tier0;fast"
+        TIMEOUT 60
     )
 
-    target_link_libraries(timing_test PRIVATE
-        Threads::Threads
-        rt
+    aurore_add_test(NAME numeric_robustness_test
+        SOURCES tests/unit/numeric_robustness_test.cpp
+                src/actuation/ballistic_solver.cpp
+                src/test_infrastructure.cpp
+        LABELS  "tier0;fast"
+        TIMEOUT 60
     )
 
-    add_test(NAME TimingTest COMMAND timing_test)
-    set_tests_properties(TimingTest PROPERTIES TIMEOUT 60)
-
-    # Core Utility Stress tests
-    add_executable(core_stress_test
-        tests/unit/core_stress_test.cpp
-        src/test_infrastructure.cpp
-    )
-    target_include_directories(core_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(core_stress_test PRIVATE Threads::Threads rt)
-    add_test(NAME CoreStressTest COMMAND core_stress_test)
-    set_tests_properties(CoreStressTest PROPERTIES TIMEOUT 120)
-
-    # Safety monitor tests (standalone executable)
-    add_executable(safety_monitor_test
-        tests/unit/safety_monitor_test.cpp
+    aurore_add_test(NAME memory_resource_test
+        SOURCES tests/unit/memory_resource_test.cpp
+                src/test_infrastructure.cpp
+        LIBS    rt
+        LABELS  "tier0;fast"
+        TIMEOUT 120
     )
 
-    target_include_directories(safety_monitor_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
+    # -----------------------------------------------------------------------
+    # Tier 1 — Safety-critical unit tests
+    # -----------------------------------------------------------------------
+
+    aurore_add_test(NAME safety_monitor_test
+        SOURCES tests/unit/safety_monitor_test.cpp
+        LIBS    rt
+        LABELS  "tier1;safety"
+        TIMEOUT 60
     )
 
-    target_link_libraries(safety_monitor_test PRIVATE
-        Threads::Threads
-        rt
+    aurore_add_test(NAME safety_monitor_fault_codes_test
+        SOURCES tests/unit/test_safety_monitor_fault_codes.cpp
+        LIBS    rt
+        LABELS  "tier1;safety"
+        TIMEOUT 60
     )
 
-    add_test(NAME SafetyMonitorTest COMMAND safety_monitor_test)
-    set_tests_properties(SafetyMonitorTest PROPERTIES TIMEOUT 60)
+    aurore_add_test(NAME safety_stress_test
+        SOURCES tests/unit/safety_stress_test.cpp
+        LIBS    rt
+        LABELS  "tier1;safety"
+        TIMEOUT 120
+    )
 
-    # Safety monitor fault codes tests (comprehensive 24 fault code coverage)
-    add_executable(safety_monitor_fault_codes_test
-        tests/unit/test_safety_monitor_fault_codes.cpp
+    aurore_add_test(NAME state_machine_test
+        SOURCES tests/unit/state_machine_test.cpp
+                src/state_machine/state_machine.cpp
+        LABELS  "tier1;safety"
+        TIMEOUT 30
     )
-    target_include_directories(safety_monitor_fault_codes_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(safety_monitor_fault_codes_test PRIVATE
-        Threads::Threads
-        rt
-    )
-    add_test(NAME SafetyMonitorFaultCodesTest COMMAND safety_monitor_fault_codes_test)
-    set_tests_properties(SafetyMonitorFaultCodesTest PROPERTIES TIMEOUT 60)
 
-    # Safety Stress tests
-    add_executable(safety_stress_test
-        tests/unit/safety_stress_test.cpp
+    aurore_add_test(NAME state_machine_transitions_test
+        SOURCES tests/unit/test_state_machine_transitions.cpp
+                src/state_machine/state_machine.cpp
+        LABELS  "tier1;safety"
+        TIMEOUT 60
     )
-    target_include_directories(safety_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(safety_stress_test PRIVATE Threads::Threads rt)
-    add_test(NAME SafetyStressTest COMMAND safety_stress_test)
-    set_tests_properties(SafetyStressTest PROPERTIES TIMEOUT 120)
 
-    # ============================================================================
-    # Full Test Suite - 237 tests unified
-    # ============================================================================
+    aurore_add_test(NAME state_machine_stress_test
+        SOURCES tests/unit/state_machine_stress_test.cpp
+                src/state_machine/state_machine.cpp
+        LABELS  "tier1;safety"
+        TIMEOUT 60
+    )
 
-    add_executable(aurore_full_test_suite
-        tests/unit/safety/aurore_full_test_suite.cpp
-        src/actuation/gimbal_controller.cpp
-        src/common/security.cpp
+    aurore_add_test(NAME interlock_controller_test
+        SOURCES tests/unit/interlock_controller_test.cpp
+                src/safety/interlock_controller.cpp
+                src/drivers/fusion_hat.cpp
+                src/common/security.cpp
+        LIBS    rt
+        LABELS  "tier1;safety"
+        TIMEOUT 15
     )
-    target_include_directories(aurore_full_test_suite PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(aurore_full_test_suite PRIVATE
-        Threads::Threads
-        rt
-        OpenSSL::Crypto
-    )
-    add_test(NAME AuroreFullTestSuite COMMAND aurore_full_test_suite)
-    set_tests_properties(AuroreFullTestSuite PROPERTIES TIMEOUT 300 LABELS "full_suite")
 
-    # ============================================================================
-    # Parameterized Safety Tests (Test Expansion Matrix)
-    # ============================================================================
+    aurore_add_test(NAME fault_containment_test
+        SOURCES tests/unit/fault_containment_test.cpp
+                src/state_machine/state_machine.cpp
+                src/test_infrastructure.cpp
+        LIBS    rt
+        LABELS  "tier1;safety"
+        TIMEOUT 120
+    )
 
-    # ESTOP Matrix (E1) - 24 parameterized tests
-    add_executable(estop_matrix_test
-        tests/unit/safety/parameterized/estop_matrix.cpp
+    aurore_add_test(NAME state_mode_integrity_test
+        SOURCES tests/unit/state_mode_integrity_test.cpp
+                src/state_machine/state_machine.cpp
+                src/test_infrastructure.cpp
+        LABELS  "tier1;safety;state"
+        TIMEOUT 120
     )
-    target_include_directories(estop_matrix_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(estop_matrix_test PRIVATE
-        Threads::Threads
-        rt
-    )
-    add_test(NAME EstopMatrixTest COMMAND estop_matrix_test)
-    set_tests_properties(EstopMatrixTest PROPERTIES TIMEOUT 120 LABELS "safety;parameterized")
 
-    # Watchdog Timeout Matrix (E2) - 192 parameterized tests
-    add_executable(watchdog_timeout_matrix_test
-        tests/unit/safety/parameterized/watchdog_timeout_matrix.cpp
+    aurore_add_test(NAME hostile_input_test
+        SOURCES tests/unit/hostile_input_test.cpp
+                src/state_machine/state_machine.cpp
+                src/test_infrastructure.cpp
+        LABELS  "tier1;safety"
+        TIMEOUT 60
     )
-    target_include_directories(watchdog_timeout_matrix_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(watchdog_timeout_matrix_test PRIVATE
-        Threads::Threads
-        rt
-    )
-    add_test(NAME WatchdogTimeoutMatrixTest COMMAND watchdog_timeout_matrix_test)
-    set_tests_properties(WatchdogTimeoutMatrixTest PROPERTIES TIMEOUT 300 LABELS "safety;parameterized;rt_required")
 
-    # State machine tests
-    add_executable(state_machine_test
-        tests/unit/state_machine_test.cpp
-        src/state_machine/state_machine.cpp
+    aurore_add_test(NAME reset_recovery_test
+        SOURCES tests/unit/reset_recovery_test.cpp
+                src/state_machine/state_machine.cpp
+                src/test_infrastructure.cpp
+        LABELS  "tier1;safety"
+        TIMEOUT 60
     )
-    target_include_directories(state_machine_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(state_machine_test PRIVATE Threads::Threads)
-    add_test(NAME StateMachineTest COMMAND state_machine_test)
-    set_tests_properties(StateMachineTest PROPERTIES TIMEOUT 30)
 
-    # State machine transitions tests (comprehensive transition coverage)
-    add_executable(state_machine_transitions_test
-        tests/unit/test_state_machine_transitions.cpp
-        src/state_machine/state_machine.cpp
+    aurore_add_test(NAME concurrency_pathology_test
+        SOURCES tests/unit/concurrency_pathology_test.cpp
+                src/test_infrastructure.cpp
+        LABELS  "tier1"
+        TIMEOUT 120
     )
-    target_include_directories(state_machine_transitions_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(state_machine_transitions_test PRIVATE
-        Threads::Threads
-    )
-    add_test(NAME StateMachineTransitionsTest COMMAND state_machine_transitions_test)
-    set_tests_properties(StateMachineTransitionsTest PROPERTIES TIMEOUT 60)
 
-    # State Machine Stress tests
-    add_executable(state_machine_stress_test
-        tests/unit/state_machine_stress_test.cpp
-        src/state_machine/state_machine.cpp
+    aurore_add_test(NAME resource_exhaustion_test
+        SOURCES tests/unit/resource_exhaustion_test.cpp
+                src/test_infrastructure.cpp
+        LABELS  "tier1"
+        TIMEOUT 120
     )
-    target_include_directories(state_machine_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(state_machine_stress_test PRIVATE Threads::Threads)
-    add_test(NAME StateMachineStressTest COMMAND state_machine_stress_test)
-    set_tests_properties(StateMachineStressTest PROPERTIES TIMEOUT 60)
 
-    # Main thread orchestration tests
-    add_executable(main_thread_orchestration_test
-        tests/unit/test_main_thread_orchestration.cpp
+    # -----------------------------------------------------------------------
+    # Tier 1 — Pure logic unit tests (no hardware)
+    # -----------------------------------------------------------------------
+
+    aurore_add_test(NAME ballistics_test
+        SOURCES tests/unit/ballistics_test.cpp
+                src/actuation/ballistic_solver.cpp
+        LABELS  "tier1"
+        TIMEOUT 60
     )
-    target_include_directories(main_thread_orchestration_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
+
+    aurore_add_test(NAME ballistics_stress_test
+        SOURCES tests/unit/ballistics_stress_test.cpp
+                src/actuation/ballistic_solver.cpp
+        LABELS  "tier1"
+        TIMEOUT 60
     )
-    target_link_libraries(main_thread_orchestration_test PRIVATE
-        Threads::Threads
-        rt
+
+    aurore_add_test(NAME firmware_updater_test
+        SOURCES tests/unit/firmware_updater_test.cpp
+                src/common/security.cpp
+        LIBS    OpenSSL::Crypto
+        LABELS  "tier1"
+        TIMEOUT 30
     )
-    add_test(NAME MainThreadOrchestrationTest COMMAND main_thread_orchestration_test)
-    set_tests_properties(MainThreadOrchestrationTest PROPERTIES TIMEOUT 60)
 
-    # AprilTag detector tests
-    add_executable(detector_test
-        tests/unit/detector_test.cpp
-        src/vision/apriltag_detector.cpp
+    aurore_add_test(NAME gimbal_controller_test
+        SOURCES tests/unit/gimbal_controller_test.cpp
+                src/actuation/gimbal_controller.cpp
+                src/common/security.cpp
+        LABELS  "tier1"
+        TIMEOUT 30
     )
-    target_include_directories(detector_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(detector_test PRIVATE Threads::Threads ${OPENCV_LIBRARIES} rt OpenSSL::Crypto)
-    add_test(NAME DetectorTest COMMAND detector_test)
-    set_tests_properties(DetectorTest PROPERTIES TIMEOUT 60)
 
-    # KCF tracker tests
-    add_executable(tracker_test
-        tests/unit/tracker_test.cpp
-        src/tracking/kcf_tracker.cpp
-        ${CAMERA_WRAPPER_SRC}
-        ${CAMERA_AUTH_SRC}
+    aurore_add_test(NAME geometry_test
+        SOURCES tests/unit/geometry_test.cpp
+                src/actuation/gimbal_controller.cpp
+                src/common/security.cpp
+        LIBS    OpenSSL::Crypto
+        LABELS  "tier1"
+        TIMEOUT 30
     )
-    target_include_directories(tracker_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(tracker_test PRIVATE Threads::Threads ${OPENCV_LIBRARIES} ${LIBCAMERA_LIBRARIES} rt OpenSSL::Crypto)
-    add_test(NAME TrackerTest COMMAND tracker_test)
-    set_tests_properties(TrackerTest PROPERTIES TIMEOUT 60)
 
-    # Ballistics solver tests
-    add_executable(ballistics_test
-        tests/unit/ballistics_test.cpp
-        src/actuation/ballistic_solver.cpp
+    aurore_add_test(NAME main_thread_orchestration_test
+        SOURCES tests/unit/test_main_thread_orchestration.cpp
+        LIBS    rt
+        LABELS  "tier1"
+        TIMEOUT 60
     )
-    target_include_directories(ballistics_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(ballistics_test PRIVATE Threads::Threads)
-    add_test(NAME BallisticsTest COMMAND ballistics_test)
-    set_tests_properties(BallisticsTest PROPERTIES TIMEOUT 60)
 
-    # Ballistics Stress tests
-    add_executable(ballistics_stress_test
-        tests/unit/ballistics_stress_test.cpp
-        src/actuation/ballistic_solver.cpp
+    aurore_add_test(NAME raw10_test
+        SOURCES tests/unit/raw10_test.cpp
+        LABELS  "tier1"
+        TIMEOUT 60
     )
-    target_include_directories(ballistics_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(ballistics_stress_test PRIVATE Threads::Threads)
-    add_test(NAME BallisticsStressTest COMMAND ballistics_stress_test)
-    set_tests_properties(BallisticsStressTest PROPERTIES TIMEOUT 60)
 
-
-    # Firmware updater tests (AM7-L3-SEC-005)
-    add_executable(firmware_updater_test
-        tests/unit/firmware_updater_test.cpp
-        src/common/security.cpp
+    aurore_add_test(NAME telemetry_writer_test
+        SOURCES tests/unit/telemetry_writer_test.cpp
+                src/common/telemetry_writer.cpp
+        LIBS    OpenSSL::Crypto
+        LABELS  "tier1"
+        TIMEOUT 30
     )
-    target_include_directories(firmware_updater_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(firmware_updater_test PRIVATE Threads::Threads OpenSSL::Crypto)
-    add_test(NAME FirmwareUpdaterTest COMMAND firmware_updater_test)
-    set_tests_properties(FirmwareUpdaterTest PROPERTIES TIMEOUT 30)
 
-    # Gimbal controller tests
-    add_executable(gimbal_controller_test
-        tests/unit/gimbal_controller_test.cpp
-        src/actuation/gimbal_controller.cpp
-        src/common/security.cpp
+    aurore_add_test(NAME hud_socket_test
+        SOURCES tests/unit/hud_socket_test.cpp
+                src/common/hud_socket.cpp
+                src/state_machine/state_machine.cpp
+        LIBS    OpenSSL::Crypto
+        LABELS  "tier1"
+        TIMEOUT 60
     )
-    target_include_directories(gimbal_controller_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(gimbal_controller_test PRIVATE Threads::Threads)
-    add_test(NAME GimbalControllerTest COMMAND gimbal_controller_test)
-    set_tests_properties(GimbalControllerTest PROPERTIES TIMEOUT 30)
 
-    # Geometry tests
-    add_executable(geometry_test
-        tests/unit/geometry_test.cpp
-        src/actuation/gimbal_controller.cpp
-        src/common/security.cpp
+    aurore_add_test(NAME hud_socket_stress_test
+        SOURCES tests/unit/hud_socket_stress_test.cpp
+                src/common/hud_socket.cpp
+                src/common/security.cpp
+                src/state_machine/state_machine.cpp
+        LIBS    crypto ssl
+        LABELS  "tier1"
+        TIMEOUT 60
     )
-    target_include_directories(geometry_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(geometry_test PRIVATE Threads::Threads OpenSSL::Crypto)
-    add_test(NAME GeometryTest COMMAND geometry_test)
-    set_tests_properties(GeometryTest PROPERTIES TIMEOUT 30)
 
-    # Fusion HAT+ I2C driver tests
-    add_executable(fusion_hat_test
-        tests/unit/fusion_hat_test.cpp
-        ${FUSION_HAT_SRC}
+    aurore_add_test(NAME sequence_validation_test
+        SOURCES tests/unit/sequence_validation_test.cpp
+                src/common/security.cpp
+        LIBS    OpenSSL::Crypto
+        LABELS  "tier1"
+        TIMEOUT 30
     )
-    target_include_directories(fusion_hat_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(fusion_hat_test PRIVATE Threads::Threads)
-    add_test(NAME FusionHatTest COMMAND fusion_hat_test)
-    set_tests_properties(FusionHatTest PROPERTIES TIMEOUT 60)
 
-    # Gimbal Actuation HIL test
-    add_executable(gimbal_actuation_test
-        tests/hardware/gimbal_actuation_test.cpp
-        src/drivers/fusion_hat.cpp
+    aurore_add_test(NAME config_loader_test
+        SOURCES tests/unit/config_loader_test.cpp
+                src/common/config_loader.cpp
+        LIBS    nlohmann_json::nlohmann_json
+        LABELS  "tier1"
+        TIMEOUT 15
     )
-    target_include_directories(gimbal_actuation_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(gimbal_actuation_test PRIVATE Threads::Threads rt)
-    add_test(NAME GimbalActuationTest COMMAND gimbal_actuation_test)
-    set_tests_properties(GimbalActuationTest PROPERTIES TIMEOUT 120)
 
-    # Boresight Convergence Test (hardware required)
-    add_executable(boresight_convergence_test
-        tests/hardware/boresight_convergence_test.cpp
-        src/drivers/laser_rangefinder.cpp
+    aurore_add_test(NAME aurore_link_test
+        SOURCES tests/unit/aurore_link_test.cpp
+                src/network/aurore_link_server.cpp
+                src/common/security.cpp
+                ${PROTO_SRCS}
+        LIBS    ${Protobuf_LIBRARIES} OpenSSL::Crypto
+        LABELS  "tier1"
+        TIMEOUT 30
     )
-    target_include_directories(boresight_convergence_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(boresight_convergence_test PRIVATE Threads::Threads rt)
-    add_test(NAME BoresightConvergenceTest COMMAND boresight_convergence_test)
-    set_tests_properties(BoresightConvergenceTest PROPERTIES TIMEOUT 120)
 
+    target_include_directories(aurore_link_test PRIVATE
+        ${CMAKE_CURRENT_BINARY_DIR} ${Protobuf_INCLUDE_DIRS})
 
-    # Coupling Control-Actuation tests
-    add_executable(coupling_control_actuation_test
-        tests/unit/test_coupling_control_actuation.cpp
-        src/drivers/fusion_hat.cpp # Use real Fusion HAT
-        src/safety/interlock_controller.cpp
-        src/common/security.cpp
+    aurore_add_test(NAME emergency_inhibit_test
+        SOURCES tests/unit/test_emergency_inhibit.cpp
+                src/network/aurore_link_server.cpp
+                src/common/security.cpp
+                ${PROTO_SRCS}
+        LIBS    ${Protobuf_LIBRARIES} OpenSSL::Crypto
+        LABELS  "tier1"
+        TIMEOUT 30
     )
-    target_include_directories(coupling_control_actuation_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(coupling_control_actuation_test PRIVATE Threads::Threads rt OpenSSL::Crypto)
-    add_test(NAME CouplingControlActuationTest COMMAND coupling_control_actuation_test)
-    set_tests_properties(CouplingControlActuationTest PROPERTIES TIMEOUT 30)
 
-    # Gimbal command rate test (AM7-L2-ACT-001)
-    add_executable(gimbal_command_rate_test
-        tests/unit/test_gimbal_command_rate.cpp
+    target_include_directories(emergency_inhibit_test PRIVATE
+        ${CMAKE_CURRENT_BINARY_DIR} ${Protobuf_INCLUDE_DIRS})
+
+    # -----------------------------------------------------------------------
+    # Tier 2 — Real-time / temporal tests
+    # -----------------------------------------------------------------------
+
+    aurore_add_test(NAME temporal_consistency_test
+        SOURCES tests/unit/temporal_consistency_test.cpp
+                src/test_infrastructure.cpp
+        LIBS    rt
+        LABELS  "tier2;rt"
+        TIMEOUT 120
     )
-    target_include_directories(gimbal_command_rate_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(gimbal_command_rate_test PRIVATE Threads::Threads rt)
-    add_test(NAME GimbalCommandRateTest COMMAND gimbal_command_rate_test)
-    set_tests_properties(GimbalCommandRateTest PROPERTIES TIMEOUT 30)
 
-    # Grant CAP_SYS_NICE capability to allow setting SCHED_FIFO priority without sudo
+    aurore_add_test(NAME observability_test
+        SOURCES tests/unit/observability_test.cpp
+                src/test_infrastructure.cpp
+        LIBS    rt
+        LABELS  "tier2;rt"
+        TIMEOUT 120
+    )
+
+    # -----------------------------------------------------------------------
+    # Stress / full suite
+    # -----------------------------------------------------------------------
+
+    aurore_add_test(NAME core_stress_test
+        SOURCES tests/unit/core_stress_test.cpp
+                src/test_infrastructure.cpp
+        LIBS    rt
+        LABELS  "stress"
+        TIMEOUT 120
+    )
+
+    aurore_add_test(NAME aurore_full_test_suite
+        SOURCES tests/unit/safety/aurore_full_test_suite.cpp
+                src/actuation/gimbal_controller.cpp
+                src/common/security.cpp
+        LIBS    rt OpenSSL::Crypto
+        LABELS  "full_suite"
+        TIMEOUT 300
+    )
+
+    # -----------------------------------------------------------------------
+    # Parameterised safety matrix
+    # -----------------------------------------------------------------------
+
+    aurore_add_test(NAME estop_matrix_test
+        SOURCES tests/unit/safety/parameterized/estop_matrix.cpp
+        LIBS    rt
+        LABELS  "safety;parameterized"
+        TIMEOUT 120
+    )
+
+    aurore_add_test(NAME watchdog_timeout_matrix_test
+        SOURCES tests/unit/safety/parameterized/watchdog_timeout_matrix.cpp
+        LIBS    rt
+        LABELS  "safety;parameterized;rt_required"
+        TIMEOUT 300
+    )
+
+    # -----------------------------------------------------------------------
+    # Tier 1 — Security / coupling
+    # -----------------------------------------------------------------------
+
+    aurore_add_test(NAME security_stress_test
+        SOURCES tests/unit/test_security_stress.cpp
+                ${CAMERA_WRAPPER_SRC}
+                ${CAMERA_AUTH_SRC}
+        LIBS    rt OpenSSL::Crypto ${OPENCV_LIBRARIES} ${LIBCAMERA_LIBRARIES}
+        LABELS  "tier1;safety"
+        TIMEOUT 120
+        HARDWARE
+    )
+
+    target_include_directories(security_stress_test PRIVATE
+        ${OPENCV_INCLUDE_DIRS} ${LIBCAMERA_INCLUDE_DIRS})
+
+    aurore_add_test(NAME coupling_control_actuation_test
+        SOURCES tests/unit/test_coupling_control_actuation.cpp
+                src/drivers/fusion_hat.cpp
+                src/safety/interlock_controller.cpp
+                src/common/security.cpp
+        LIBS    rt OpenSSL::Crypto
+        LABELS  "tier1;safety"
+        TIMEOUT 30
+        HARDWARE
+        RESOURCE_LOCK I2C_BUS_1
+    )
+
+    aurore_add_test(NAME gimbal_command_rate_test
+        SOURCES tests/unit/test_gimbal_command_rate.cpp
+        LIBS    rt
+        LABELS  "tier1"
+        TIMEOUT 30
+    )
+
     add_custom_command(TARGET gimbal_command_rate_test POST_BUILD
         COMMAND sudo /usr/sbin/setcap 'cap_sys_nice=+ep' $<TARGET_FILE:gimbal_command_rate_test>
-        COMMENT "Setting CAP_SYS_NICE on gimbal_command_rate_test executable"
+        COMMENT "Setting CAP_SYS_NICE on gimbal_command_rate_test"
     )
 
-    # Detection rate test framework (AM7-L2-VIS-004)
-    add_executable(detection_rate_test
-        tests/unit/test_detection_rate.cpp
-    )
-    target_include_directories(detection_rate_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(detection_rate_test PRIVATE Threads::Threads rt)
-    add_test(NAME DetectionRateTest COMMAND detection_rate_test)
-    set_tests_properties(DetectionRateTest PROPERTIES TIMEOUT 60)
-
-    # HUD UNIX domain socket tests
-    add_executable(hud_socket_test
-        tests/unit/hud_socket_test.cpp
-        src/common/hud_socket.cpp
-        src/state_machine/state_machine.cpp
-    )
-    target_include_directories(hud_socket_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(hud_socket_test PRIVATE Threads::Threads OpenSSL::Crypto)
-    add_test(NAME HudSocketTest COMMAND hud_socket_test)
-    set_tests_properties(HudSocketTest PROPERTIES TIMEOUT 60)
-
-    # HUD Socket Stress tests
-    add_executable(hud_socket_stress_test
-        tests/unit/hud_socket_stress_test.cpp
-        src/common/hud_socket.cpp
-        src/common/security.cpp
-        src/state_machine/state_machine.cpp
-    )
-    target_include_directories(hud_socket_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(hud_socket_stress_test PRIVATE Threads::Threads crypto ssl)
-    add_test(NAME HudSocketStressTest COMMAND hud_socket_stress_test)
-    set_tests_properties(HudSocketStressTest PROPERTIES TIMEOUT 60)
-
-    add_executable(raw10_test
-        tests/unit/raw10_test.cpp
-    )
-    target_include_directories(raw10_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(raw10_test PRIVATE Threads::Threads)
-    add_test(NAME Raw10Test COMMAND raw10_test)
-    set_tests_properties(Raw10Test PROPERTIES TIMEOUT 60)
-
-endif()
-
-if(AURORE_ENABLE_TESTS)
-    add_executable(telemetry_writer_test
-        tests/unit/telemetry_writer_test.cpp
-        src/common/telemetry_writer.cpp
-    )
-    target_include_directories(telemetry_writer_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(telemetry_writer_test PRIVATE Threads::Threads OpenSSL::Crypto)
-    add_test(NAME TelemetryWriterTest COMMAND telemetry_writer_test)
-    set_tests_properties(TelemetryWriterTest PROPERTIES TIMEOUT 30)
-endif()
-
-if(AURORE_ENABLE_TESTS)
-    add_executable(interlock_controller_test
-        tests/unit/interlock_controller_test.cpp
-        src/safety/interlock_controller.cpp
-        src/drivers/fusion_hat.cpp # Use real Fusion HAT
-        src/common/security.cpp
-    )
-    target_include_directories(interlock_controller_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(interlock_controller_test PRIVATE Threads::Threads rt)
-    add_test(NAME InterlockControllerTest COMMAND interlock_controller_test)
-    set_tests_properties(InterlockControllerTest PROPERTIES TIMEOUT 15)
-endif()
-
-if(AURORE_ENABLE_TESTS)
-    add_executable(camera_wrapper_test
-        tests/unit/camera_wrapper_test.cpp
-        ${CAMERA_WRAPPER_SRC}
-        ${CAMERA_AUTH_SRC}
-    )
-    target_include_directories(camera_wrapper_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-        ${OPENCV_INCLUDE_DIRS}
-        ${LIBCAMERA_INCLUDE_DIRS}
-    )
-    target_link_libraries(camera_wrapper_test PRIVATE
-        Threads::Threads
-        ${OPENCV_LIBRARIES}
-        ${LIBCAMERA_LIBRARIES}
-        rt
-        OpenSSL::Crypto
-    )
-    add_test(NAME CameraWrapperTest COMMAND camera_wrapper_test)
-    set_tests_properties(CameraWrapperTest PROPERTIES TIMEOUT 30)
-endif()
-
-if(AURORE_ENABLE_TESTS)
-    # Security stress tests (High-frequency / Race conditions)
-    add_executable(security_stress_test
-        tests/unit/test_security_stress.cpp
-        ${CAMERA_WRAPPER_SRC}
-        ${CAMERA_AUTH_SRC}
-    )
-    target_include_directories(security_stress_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-        ${OPENCV_INCLUDE_DIRS}
-        ${LIBCAMERA_INCLUDE_DIRS}
-    )
-    target_link_libraries(security_stress_test PRIVATE
-        Threads::Threads
-        ${OPENCV_LIBRARIES}
-        ${LIBCAMERA_LIBRARIES}
-        rt
-        OpenSSL::Crypto
-    )
-    add_test(NAME SecurityStressTest COMMAND security_stress_test)
-    set_tests_properties(SecurityStressTest PROPERTIES TIMEOUT 120 LABELS "tier1;safety")
-endif()
-
-# ============================================================================
-# Part 1: Memory and Resource Integrity Tests
-# ============================================================================
-if(AURORE_ENABLE_TESTS)
-    add_executable(memory_resource_test
-        tests/unit/memory_resource_test.cpp
-        src/test_infrastructure.cpp
-    )
-    target_include_directories(memory_resource_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(memory_resource_test PRIVATE
-        Threads::Threads
-        rt
-    )
-    add_test(NAME MemoryResourceTest COMMAND memory_resource_test)
-    set_tests_properties(MemoryResourceTest PROPERTIES TIMEOUT 120 LABELS "tier0;fast")
-endif()
-
-# ============================================================================
-# Part 2: State and Mode Integrity Tests
-# ============================================================================
-if(AURORE_ENABLE_TESTS)
-    add_executable(state_mode_integrity_test
-        tests/unit/state_mode_integrity_test.cpp
-        src/state_machine/state_machine.cpp
-        src/test_infrastructure.cpp
-    )
-    target_include_directories(state_mode_integrity_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(state_mode_integrity_test PRIVATE
-        Threads::Threads
-    )
-    add_test(NAME StateModeIntegrityTest COMMAND state_mode_integrity_test)
-    set_tests_properties(StateModeIntegrityTest PROPERTIES TIMEOUT 120 LABELS "tier1;safety;state")
-endif()
-
-# ============================================================================
-# Part 3: Fault Containment Tests
-# ============================================================================
-if(AURORE_ENABLE_TESTS)
-    add_executable(fault_containment_test
-        tests/unit/fault_containment_test.cpp
-        src/state_machine/state_machine.cpp
-        src/test_infrastructure.cpp
-    )
-    target_include_directories(fault_containment_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(fault_containment_test PRIVATE
-        Threads::Threads
-        rt
-    )
-    add_test(NAME FaultContainmentTest COMMAND fault_containment_test)
-    set_tests_properties(FaultContainmentTest PROPERTIES TIMEOUT 120 LABELS "tier1;safety")
-endif()
-
-# ============================================================================
-# Part 4: Concurrency Pathology Tests
-# ============================================================================
-if(AURORE_ENABLE_TESTS)
-    add_executable(concurrency_pathology_test
-        tests/unit/concurrency_pathology_test.cpp
-        src/test_infrastructure.cpp
-    )
-    target_include_directories(concurrency_pathology_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(concurrency_pathology_test PRIVATE
-        Threads::Threads
-    )
-    add_test(NAME ConcurrencyPathologyTest COMMAND concurrency_pathology_test)
-    set_tests_properties(ConcurrencyPathologyTest PROPERTIES TIMEOUT 120 LABELS "tier1")
-endif()
-
-# ============================================================================
-# Part 5: Temporal Consistency Tests
-# ============================================================================
-if(AURORE_ENABLE_TESTS)
-    add_executable(temporal_consistency_test
-        tests/unit/temporal_consistency_test.cpp
-        src/test_infrastructure.cpp
-    )
-    target_include_directories(temporal_consistency_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(temporal_consistency_test PRIVATE
-        Threads::Threads
-        rt
-    )
-    add_test(NAME TemporalConsistencyTest COMMAND temporal_consistency_test)
-    set_tests_properties(TemporalConsistencyTest PROPERTIES TIMEOUT 120 LABELS "tier2;rt")
-endif()
-
-# ============================================================================
-# Part 6: Numeric Robustness Tests
-# ============================================================================
-if(AURORE_ENABLE_TESTS)
-    add_executable(numeric_robustness_test
-        tests/unit/numeric_robustness_test.cpp
-        src/actuation/ballistic_solver.cpp
-        src/test_infrastructure.cpp
-    )
-    target_include_directories(numeric_robustness_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(numeric_robustness_test PRIVATE
-        Threads::Threads
-    )
-    add_test(NAME NumericRobustnessTest COMMAND numeric_robustness_test)
-    set_tests_properties(NumericRobustnessTest PROPERTIES TIMEOUT 60 LABELS "tier0;fast")
-endif()
-
-# ============================================================================
-# Part 7: Hostile Input Tests
-# ============================================================================
-if(AURORE_ENABLE_TESTS)
-    add_executable(hostile_input_test
-        tests/unit/hostile_input_test.cpp
-        src/state_machine/state_machine.cpp
-        src/test_infrastructure.cpp
-    )
-    target_include_directories(hostile_input_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(hostile_input_test PRIVATE
-        Threads::Threads
-    )
-    add_test(NAME HostileInputTest COMMAND hostile_input_test)
-    set_tests_properties(HostileInputTest PROPERTIES TIMEOUT 60 LABELS "tier1;safety")
-endif()
-
-# ============================================================================
-# Part 8: Resource Exhaustion Tests
-# ============================================================================
-if(AURORE_ENABLE_TESTS)
-    add_executable(resource_exhaustion_test
-        tests/unit/resource_exhaustion_test.cpp
-        src/test_infrastructure.cpp
-    )
-    target_include_directories(resource_exhaustion_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(resource_exhaustion_test PRIVATE
-        Threads::Threads
-    )
-    add_test(NAME ResourceExhaustionTest COMMAND resource_exhaustion_test)
-    set_tests_properties(ResourceExhaustionTest PROPERTIES TIMEOUT 120 LABELS "tier1")
-endif()
-
-# ============================================================================
-# Part 9: Reset/Recovery Tests
-# ============================================================================
-if(AURORE_ENABLE_TESTS)
-    add_executable(reset_recovery_test
-        tests/unit/reset_recovery_test.cpp
-        src/state_machine/state_machine.cpp
-        src/test_infrastructure.cpp
-    )
-    target_include_directories(reset_recovery_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(reset_recovery_test PRIVATE
-        Threads::Threads
-    )
-    add_test(NAME ResetRecoveryTest COMMAND reset_recovery_test)
-    set_tests_properties(ResetRecoveryTest PROPERTIES TIMEOUT 60 LABELS "tier1;safety")
-endif()
-
-# ============================================================================
-# Part 10: Observability Tests
-# ============================================================================
-if(AURORE_ENABLE_TESTS)
-    add_executable(observability_test
-        tests/unit/observability_test.cpp
-        src/test_infrastructure.cpp
-    )
-    target_include_directories(observability_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(observability_test PRIVATE
-        Threads::Threads
-        rt
-    )
-    add_test(NAME ObservabilityTest COMMAND observability_test)
-    set_tests_properties(ObservabilityTest PROPERTIES TIMEOUT 120 LABELS "tier2;rt")
-endif()
-
-if(AURORE_ENABLE_TESTS)
-    # Vision pipeline latency tests (AM7-L2-VIS-003)
-    add_executable(vision_pipeline_latency_test
-        tests/unit/test_vision_pipeline_latency.cpp
-        ${CAMERA_WRAPPER_SRC}
-        ${CAMERA_AUTH_SRC}
-    )
-    target_include_directories(vision_pipeline_latency_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-        ${OPENCV_INCLUDE_DIRS}
-        ${LIBCAMERA_INCLUDE_DIRS}
-    )
-    target_link_libraries(vision_pipeline_latency_test PRIVATE
-        Threads::Threads
-        ${OPENCV_LIBRARIES}
-        ${LIBCAMERA_LIBRARIES}
-        rt
-        OpenSSL::Crypto
-    )
-    add_test(NAME VisionPipelineLatencyTest COMMAND vision_pipeline_latency_test)
-    set_tests_properties(VisionPipelineLatencyTest PROPERTIES TIMEOUT 60)
-endif()
-
-if(AURORE_ENABLE_TESTS)
-    # GPU acceleration tests (VideoCore VII)
-    add_executable(gpu_acceleration_test
-        tests/unit/test_gpu_acceleration.cpp
-        ${CAMERA_WRAPPER_SRC}
-        ${CAMERA_AUTH_SRC}
-    )
-    target_include_directories(gpu_acceleration_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-        ${OPENCV_INCLUDE_DIRS}
-        ${LIBCAMERA_INCLUDE_DIRS}
-    )
-    target_link_libraries(gpu_acceleration_test PRIVATE
-        Threads::Threads
-        ${OPENCV_LIBRARIES}
-        ${LIBCAMERA_LIBRARIES}
-        rt
-        OpenSSL::Crypto
-    )
-    # GPU test is optional - skip if hardware unavailable
-    add_test(NAME GPUAccelerationTest COMMAND gpu_acceleration_test)
-    set_tests_properties(GPUAccelerationTest
-        PROPERTIES
+    aurore_add_test(NAME detection_rate_test
+        SOURCES tests/unit/test_detection_rate.cpp
+        LIBS    rt
+        LABELS  "tier1"
         TIMEOUT 60
-        LABELS "Optional"
-    )
-endif()
-
-if(AURORE_ENABLE_TESTS)
-    # AuroreLink TCP server tests
-    add_executable(aurore_link_test
-        tests/unit/aurore_link_test.cpp
-        src/network/aurore_link_server.cpp
-        src/common/security.cpp
-        ${PROTO_SRCS}
-    )
-    target_include_directories(aurore_link_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_BINARY_DIR}
-        ${Protobuf_INCLUDE_DIRS}
-    )
-    target_link_libraries(aurore_link_test PRIVATE
-        Threads::Threads ${Protobuf_LIBRARIES} OpenSSL::Crypto
-    )
-    add_test(NAME AuroreLinkTest COMMAND aurore_link_test)
-    set_tests_properties(AuroreLinkTest PROPERTIES TIMEOUT 30)
-
-    # EMERGENCY_INHIBIT handler tests
-    add_executable(emergency_inhibit_test
-        tests/unit/test_emergency_inhibit.cpp
-        src/network/aurore_link_server.cpp
-        src/common/security.cpp
-        ${PROTO_SRCS}
-    )
-    target_include_directories(emergency_inhibit_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_BINARY_DIR}
-        ${Protobuf_INCLUDE_DIRS}
-    )
-    target_link_libraries(emergency_inhibit_test PRIVATE
-        Threads::Threads ${Protobuf_LIBRARIES} OpenSSL::Crypto
-    )
-    add_test(NAME EmergencyInhibitTest COMMAND emergency_inhibit_test)
-    set_tests_properties(EmergencyInhibitTest PROPERTIES TIMEOUT 30)
-endif()
-
-if(AURORE_ENABLE_TESTS)
-    # ConfigLoader tests
-    add_executable(config_loader_test
-        tests/unit/config_loader_test.cpp
-        src/common/config_loader.cpp
-    )
-    target_include_directories(config_loader_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(config_loader_test PRIVATE Threads::Threads nlohmann_json::nlohmann_json)
-    add_test(NAME ConfigLoaderTest COMMAND config_loader_test)
-    set_tests_properties(ConfigLoaderTest PROPERTIES TIMEOUT 15)
-endif()
-
-if(AURORE_ENABLE_TESTS)
-    # Sequence validation tests (RFC 1982)
-    add_executable(sequence_validation_test
-        tests/unit/sequence_validation_test.cpp
-        src/common/security.cpp
-    )
-    target_include_directories(sequence_validation_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(sequence_validation_test PRIVATE Threads::Threads OpenSSL::Crypto)
-    add_test(NAME SequenceValidationTest COMMAND sequence_validation_test)
-    set_tests_properties(SequenceValidationTest PROPERTIES TIMEOUT 30)
-endif()
-
-# ============================================================================
-# Integration Tests
-# ============================================================================
-
-if(AURORE_ENABLE_TESTS)
-    # Timing/integration tests (require real-time kernel)
-    add_executable(aurore_timing_tests
-        tests/timing/wcet_measurement.cpp
-        tests/timing/jitter_analysis.cpp      # AM7-L2-TIM-003: jitter analysis at 120Hz
-        # tests/timing/thread_sync_test.cpp   # TODO: Implement
     )
 
-    target_include_directories(aurore_timing_tests PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-        ${CMAKE_SOURCE_DIR}/tests
+    # -----------------------------------------------------------------------
+    # Hardware tests (HARDWARE flag → SKIP_RETURN_CODE 77 if rig absent)
+    # -----------------------------------------------------------------------
+
+    aurore_add_test(NAME fusion_hat_test
+        SOURCES tests/unit/fusion_hat_test.cpp
+                ${FUSION_HAT_SRC}
+        LABELS  "hardware"
+        TIMEOUT 60
+        HARDWARE
+        RESOURCE_LOCK I2C_BUS_1
     )
 
-    target_link_libraries(aurore_timing_tests PRIVATE
-        Threads::Threads
-        rt
-    )
-
-    # Mark as optional (requires hardware)
-    add_test(NAME TimingIntegrationTest COMMAND aurore_timing_tests)
-    set_tests_properties(TimingIntegrationTest
-        PROPERTIES
-        TIMEOUT 300
-        LABELS "hardware"
-    )
-
-    # Ballistics real-time stress bench: 10s at 1kHz, checks WCET ≤5ms
-    add_executable(rt_bench
-        tests/rt_bench.cpp
-        src/actuation/ballistic_solver.cpp
-    )
-    target_include_directories(rt_bench PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(rt_bench PRIVATE Threads::Threads)
-    add_test(NAME BallisticsRTBench COMMAND rt_bench)
-    set_tests_properties(BallisticsRTBench PROPERTIES TIMEOUT 30 LABELS "stress")
-
-    # ========================================================================
-    # Integration Test Suite - End-to-End Data Flow Tests
-    # ========================================================================
-
-    # Safety Fault Injection FMEA Test
-    # Tests: Fault detection, response, and FMEA coverage
-    add_executable(safety_fault_injection_test
-        tests/integration/safety_fault_injection_test.cpp
-        src/state_machine/state_machine.cpp
-    )
-
-    target_include_directories(safety_fault_injection_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-        ${CMAKE_SOURCE_DIR}/tests
-    )
-
-    target_link_libraries(safety_fault_injection_test PRIVATE
-        Threads::Threads
-        rt
-    )
-
-    add_test(NAME SafetyFaultInjectionTest COMMAND safety_fault_injection_test)
-    set_tests_properties(SafetyFaultInjectionTest
-        PROPERTIES
+    aurore_add_test(NAME gimbal_actuation_test
+        SOURCES tests/hardware/gimbal_actuation_test.cpp
+                src/drivers/fusion_hat.cpp
+        LIBS    rt
+        LABELS  "hardware"
         TIMEOUT 120
-        LABELS "IntegrationTest"
+        HARDWARE
+        RESOURCE_LOCK I2C_BUS_1
     )
 
-    # ========================================================================
-    # Thermal and DMA Health Integration Test
-    # ========================================================================
-    add_executable(thermal_dma_health_test
-        tests/integration/thermal_dma_health_test.cpp
-        src/test_infrastructure.cpp # Link with test infrastructure
+    aurore_add_test(NAME boresight_convergence_test
+        SOURCES tests/hardware/boresight_convergence_test.cpp
+                src/drivers/laser_rangefinder.cpp
+        LIBS    rt
+        LABELS  "hardware"
+        TIMEOUT 120
+        HARDWARE
+        RESOURCE_LOCK uart_ttyAMA0
     )
-    target_include_directories(thermal_dma_health_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-    )
-    target_link_libraries(thermal_dma_health_test PRIVATE
-        Threads::Threads
-        rt
-    )
-    add_test(NAME ThermalDmaHealthTest COMMAND thermal_dma_health_test)
-    set_tests_properties(ThermalDmaHealthTest PROPERTIES TIMEOUT 120 LABELS "tier4;hil;hardware")
 
-    # ========================================================================
-    # Laser Rangefinder Unit Test
-    # ========================================================================
-
-    add_executable(laser_rangefinder_test
-        tests/unit/laser_rangefinder_test.cpp
-        src/drivers/laser_rangefinder.cpp
+    aurore_add_test(NAME laser_rangefinder_test
+        SOURCES tests/unit/laser_rangefinder_test.cpp
+                src/drivers/laser_rangefinder.cpp
+        LIBS    rt
+        LABELS  "hardware"
+        TIMEOUT 60
+        HARDWARE
+        RESOURCE_LOCK uart_ttyAMA0
     )
-    target_include_directories(laser_rangefinder_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(laser_rangefinder_test PRIVATE Threads::Threads rt)
-    add_test(NAME LaserRangefinderTest COMMAND laser_rangefinder_test)
-    set_tests_properties(LaserRangefinderTest PROPERTIES TIMEOUT 60 RESOURCE_LOCK uart_ttyAMA0)
 
-    # 20-sample distance measurement test
+    # lrf_20_samples_test: built but not registered with CTest
+    # (used for manual interactive measurement sessions, not automated CI)
     add_executable(lrf_20_samples_test
         tests/unit/lrf_20_samples_test.cpp
         src/drivers/laser_rangefinder.cpp
     )
     target_include_directories(lrf_20_samples_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(lrf_20_samples_test PRIVATE Threads::Threads rt)
+    target_link_libraries(lrf_20_samples_test PRIVATE
+        Threads::Threads Boost::unit_test_framework rt)
 
-    # ========================================================================
-    # Laser Validation Integration Test
-    # ========================================================================
-
-    add_executable(laser_validation_test
-        tests/integration/laser_validation_test.cpp
-        src/drivers/laser_rangefinder.cpp
-        src/state_machine/state_machine.cpp
-        src/safety/interlock_controller.cpp
-        src/drivers/fusion_hat.cpp
+    aurore_add_test(NAME camera_wrapper_test
+        SOURCES tests/unit/camera_wrapper_test.cpp
+                ${CAMERA_WRAPPER_SRC}
+                ${CAMERA_AUTH_SRC}
+        LIBS    rt OpenSSL::Crypto ${OPENCV_LIBRARIES} ${LIBCAMERA_LIBRARIES}
+        LABELS  "hardware"
+        TIMEOUT 30
+        HARDWARE
+        RESOURCE_LOCK CSI_CAMERA_0
     )
-    target_include_directories(laser_validation_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(laser_validation_test PRIVATE Threads::Threads rt OpenSSL::Crypto)
-    add_test(NAME LaserValidationTest COMMAND laser_validation_test)
-    set_tests_properties(LaserValidationTest PROPERTIES TIMEOUT 60 LABELS "IntegrationTest" RESOURCE_LOCK uart_ttyAMA0)
 
-    # ========================================================================
-    # Hardware Integration Check
-    # ========================================================================
+    target_include_directories(camera_wrapper_test PRIVATE
+        ${OPENCV_INCLUDE_DIRS} ${LIBCAMERA_INCLUDE_DIRS})
 
-    add_executable(integration_check
-        tests/hardware/integration_check.cpp
-        src/drivers/laser_rangefinder.cpp
-        src/drivers/usb_camera.cpp
+    aurore_add_test(NAME tracker_test
+        SOURCES tests/unit/tracker_test.cpp
+                src/tracking/kcf_tracker.cpp
+                ${CAMERA_WRAPPER_SRC}
+                ${CAMERA_AUTH_SRC}
+        LIBS    rt OpenSSL::Crypto ${OPENCV_LIBRARIES} ${LIBCAMERA_LIBRARIES}
+        LABELS  "hardware"
+        TIMEOUT 60
+        HARDWARE
+        RESOURCE_LOCK CSI_CAMERA_0
     )
-    target_include_directories(integration_check PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-        ${OPENCV_INCLUDE_DIRS}
+
+    target_include_directories(tracker_test PRIVATE
+        ${OPENCV_INCLUDE_DIRS} ${LIBCAMERA_INCLUDE_DIRS})
+
+    aurore_add_test(NAME detector_test
+        SOURCES tests/unit/detector_test.cpp
+                src/vision/apriltag_detector.cpp
+        LIBS    rt OpenSSL::Crypto ${OPENCV_LIBRARIES}
+        LABELS  "hardware"
+        TIMEOUT 60
+        HARDWARE
+        RESOURCE_LOCK CSI_CAMERA_0
     )
-    target_link_libraries(integration_check PRIVATE Threads::Threads rt ${OPENCV_LIBRARIES})
-    add_test(NAME IntegrationCheck COMMAND integration_check)
-    set_tests_properties(IntegrationCheck PROPERTIES TIMEOUT 60 RESOURCE_LOCK uart_ttyAMA0)
 
-    # ========================================================================
-    # Integration Test Runner (runs all integration tests)
-    # ========================================================================
+    target_include_directories(detector_test PRIVATE ${OPENCV_INCLUDE_DIRS})
 
-    # Add a convenience target to run all integration tests
+    aurore_add_test(NAME vision_pipeline_latency_test
+        SOURCES tests/unit/test_vision_pipeline_latency.cpp
+                ${CAMERA_WRAPPER_SRC}
+                ${CAMERA_AUTH_SRC}
+        LIBS    rt OpenSSL::Crypto ${OPENCV_LIBRARIES} ${LIBCAMERA_LIBRARIES}
+        LABELS  "hardware"
+        TIMEOUT 60
+        HARDWARE
+        RESOURCE_LOCK CSI_CAMERA_0
+    )
+
+    target_include_directories(vision_pipeline_latency_test PRIVATE
+        ${OPENCV_INCLUDE_DIRS} ${LIBCAMERA_INCLUDE_DIRS})
+
+    aurore_add_test(NAME gpu_acceleration_test
+        SOURCES tests/unit/test_gpu_acceleration.cpp
+                ${CAMERA_WRAPPER_SRC}
+                ${CAMERA_AUTH_SRC}
+        LIBS    rt OpenSSL::Crypto ${OPENCV_LIBRARIES} ${LIBCAMERA_LIBRARIES}
+        LABELS  "Optional;hardware"
+        TIMEOUT 60
+        HARDWARE
+        RESOURCE_LOCK CSI_CAMERA_0
+    )
+
+    target_include_directories(gpu_acceleration_test PRIVATE
+        ${OPENCV_INCLUDE_DIRS} ${LIBCAMERA_INCLUDE_DIRS})
+
+    # -----------------------------------------------------------------------
+    # Integration tests
+    # -----------------------------------------------------------------------
+
+    aurore_add_test(NAME safety_fault_injection_test
+        SOURCES tests/integration/safety_fault_injection_test.cpp
+                src/state_machine/state_machine.cpp
+        LIBS    rt
+        LABELS  "IntegrationTest"
+        TIMEOUT 120
+    )
+
+    aurore_add_test(NAME thermal_dma_health_test
+        SOURCES tests/integration/thermal_dma_health_test.cpp
+                src/test_infrastructure.cpp
+        LIBS    rt
+        LABELS  "tier4;hil;hardware"
+        TIMEOUT 120
+        HARDWARE
+    )
+
+    aurore_add_test(NAME laser_validation_test
+        SOURCES tests/integration/laser_validation_test.cpp
+                src/drivers/laser_rangefinder.cpp
+                src/state_machine/state_machine.cpp
+                src/safety/interlock_controller.cpp
+                src/drivers/fusion_hat.cpp
+        LIBS    rt OpenSSL::Crypto
+        LABELS  "IntegrationTest;hardware"
+        TIMEOUT 60
+        HARDWARE
+        RESOURCE_LOCK uart_ttyAMA0
+    )
+
+    aurore_add_test(NAME integration_check
+        SOURCES tests/hardware/integration_check.cpp
+                src/drivers/laser_rangefinder.cpp
+                src/drivers/usb_camera.cpp
+        LIBS    rt ${OPENCV_LIBRARIES}
+        LABELS  "hardware"
+        TIMEOUT 60
+        HARDWARE
+        RESOURCE_LOCK uart_ttyAMA0
+    )
+
+    target_include_directories(integration_check PRIVATE ${OPENCV_INCLUDE_DIRS})
+
+    # -----------------------------------------------------------------------
+    # Timing / RT bench
+    # -----------------------------------------------------------------------
+
+    aurore_add_test(NAME aurore_timing_tests
+        SOURCES tests/timing/wcet_measurement.cpp
+                tests/timing/jitter_analysis.cpp
+        LIBS    rt
+        LABELS  "hardware"
+        TIMEOUT 300
+        HARDWARE
+    )
+
+    aurore_add_test(NAME rt_bench
+        SOURCES tests/rt_bench.cpp
+                src/actuation/ballistic_solver.cpp
+        LABELS  "stress"
+        TIMEOUT 30
+    )
+
+    # Convenience target: run all integration tests
     add_custom_target(run_integration_tests
-        COMMAND ${CMAKE_CTEST_COMMAND} -R IntegrationTest --output-on-failure
-        DEPENDS
-            vision_pipeline_integration_test
-            actuation_timing_integration_test
-            safety_fault_injection_test
+        COMMAND ${CMAKE_CTEST_COMMAND} -L IntegrationTest --output-on-failure
+        DEPENDS safety_fault_injection_test laser_validation_test
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Running all integration tests"
     )
-endif()
+
+endif() # AURORE_ENABLE_TESTS
 
 # ============================================================================
 # Installation
@@ -1397,6 +1083,22 @@ add_executable(lrf_analyzer
     tools/lrf_analyzer.cpp
 )
 target_link_libraries(lrf_analyzer PRIVATE Threads::Threads)
+
+add_executable(hardware_verify
+    src/drivers/fusion_hat/hardware_verify.cpp
+)
+target_include_directories(hardware_verify PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(hardware_verify PRIVATE Threads::Threads)
+
+add_executable(laser_verify
+    src/drivers/laser_verify.cpp
+)
+target_include_directories(laser_verify PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(laser_verify PRIVATE Threads::Threads rt)
 
 # End-to-end latency measurement (requires camera + tracker hardware)
 add_executable(aurore_latency_measurement
