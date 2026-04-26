@@ -180,6 +180,8 @@ class StateMachine {
     void set_state_change_callback(StateChangeCb cb);
     void force_state_for_test(FcsState s);
     void clear_fault_latch_for_test() { fault_latched_ = false; }
+    // Test helper: set timing_stable_ to true for unit testing ARMED state transitions
+    void set_timing_stable_for_test() { timing_stable_ = true; }
 
     // AM7-L3-SAFE-002: Public CRC-16 computation for checksum generation
     static uint16_t compute_crc16(float range_m, uint64_t timestamp_ns) noexcept;

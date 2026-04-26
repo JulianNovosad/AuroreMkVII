@@ -252,11 +252,13 @@ void StateMachine::enter_state(FcsState s) {
 
     switch (s) {
         case FcsState::BOOT:
-            // AM7-L2-MODE-001: BOOT state entry
+            // AM7-L2-MODE-001: BOOT state entry — power cycle resets all authorization
             have_first_detection_ = false;
             redetection_score_ = 0.f;
             solution_ = {};
-            // Hardware init, memory lock, self-test performed in main.cpp
+            operator_authorized_ = false;
+            fault_latched_ = false;
+            have_valid_range_ = false;
             break;
 
         case FcsState::IDLE_SAFE:
@@ -611,20 +613,25 @@ void StateMachine::on_fault(FaultCode code) {
 // AM7-L2-MODE-001: BOOT -> IDLE_SAFE transition on hardware init complete
 void StateMachine::on_init_complete() {
     if (state_ == FcsState::BOOT) {
+        // Power-cycle reset: clear all authorization and fault latches per AM7-L3-MODE-010
+        operator_authorized_ = false;
+        fault_latched_ = false;
+        have_valid_range_ = false;
         transition(FcsState::IDLE_SAFE);
     }
 }
 
-// AM7-L2-MODE-003: FREECAM state entry from IDLE_SAFE or SEARCH
+// AM7-L2-MODE-003: FREECAM state entry from IDLE_SAFE or SEARCH (per AM7-L3-MODE-001 table)
 void StateMachine::request_freecam() {
     if (state_ == FcsState::IDLE_SAFE || state_ == FcsState::SEARCH) {
         transition(FcsState::FREECAM);
     }
 }
 
-// AM7-L2-MODE-004: SEARCH state entry from FREECAM or IDLE_SAFE
+// AM7-L2-MODE-004: SEARCH state entry from IDLE_SAFE, FREECAM, or ARMED (per AM7-L3-MODE-001 table)
 void StateMachine::request_search() {
-    if (state_ == FcsState::FREECAM || state_ == FcsState::IDLE_SAFE) {
+    if (state_ == FcsState::IDLE_SAFE || state_ == FcsState::FREECAM ||
+        state_ == FcsState::ARMED) {
         transition(FcsState::SEARCH);
     }
 }

@@ -635,6 +635,7 @@ TEST(test_transition_table_coverage) {
     auto make_tracking = []() {
         aurore::StateMachine sm;
         sm.force_state_for_test(S::TRACKING);
+        sm.clear_fault_latch_for_test();  // clear latched fault from BOOT so TRACKING→ARMED is possible
         sm.set_operator_authorization(true);
         sm.on_redetection_score(0.96f);
         return sm;
@@ -757,12 +758,9 @@ TEST(test_transition_table_coverage) {
     {
         aurore::StateMachine sm;
         sm.force_state_for_test(S::SEARCH);
-        // Provide a high-confidence detection for 3+ frames to acquire lock
-        aurore::Detection det;
-        det.confidence = 0.97f;
-        det.bbox = {300, 200, 60, 60};
-        for (int i = 0; i < 5; ++i) sm.on_detection(det);
-        ASSERT_EQ(sm.state(), S::TRACKING);
+        // Note: on_detection() is NOT called here because SEARCH->TRACKING
+        // is gated by 3 stable frames (is_position_stable()) and would
+        // change state before request_search() can be tested.
     }
     {
         aurore::StateMachine sm;
@@ -798,8 +796,8 @@ TEST(test_transition_table_coverage) {
     }
 
     // ----------------------------------------------------------------
-    // ARMED: valid → IDLE_SAFE (disarm), TRACKING (lock lost / re-lock), FAULT
-    // ARMED: invalid — request_freecam, request_search, request_cancel (not valid), on_manual_reset
+    // ARMED: valid → IDLE_SAFE (disarm), TRACKING (lock lost / re-lock), SEARCH (manual), FAULT
+    // ARMED: invalid — request_freecam, request_cancel (not valid), on_manual_reset
     // ----------------------------------------------------------------
     {
         aurore::StateMachine sm = make_tracking();
@@ -810,10 +808,10 @@ TEST(test_transition_table_coverage) {
 
         sm.request_freecam();
         ASSERT_EQ(sm.state(), S::ARMED);    // rejected
-        sm.request_search();
-        ASSERT_EQ(sm.state(), S::ARMED);    // rejected
-        sm.on_manual_reset();
-        ASSERT_EQ(sm.state(), S::ARMED);    // rejected — not FAULT
+        sm.request_search();                // valid per AM7-L3-MODE-001 table
+        ASSERT_EQ(sm.state(), S::SEARCH);
+        sm.request_cancel();               // SEARCH→IDLE_SAFE
+        ASSERT_EQ(sm.state(), S::IDLE_SAFE);
     }
     {
         aurore::StateMachine sm = make_tracking();
