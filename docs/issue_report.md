@@ -118,7 +118,6 @@ Compiled issues/bugs found in source code requiring investigation.
 | Location | Issue |
 |----------|-------|
 | `src/common/security.hpp` | Defines fault codes that trigger FAULT state |
-| `src/state_machine/state_machine.cpp:158` | Invalid transition to ARMED |
 
 ---
 
@@ -278,7 +277,7 @@ Compiled issues/bugs found in source code requiring investigation.
 | FATAL Aborts | 11 | **11 (100%)** |
 | Camera Errors | 16 | ~12 (75%) |
 | Main.cpp Errors | 26+ | ~22 (85%) |
-| Safety/Security | ~5 | **5 (100%)** |
+| Safety/Security | ~4 | **4 (100%)** |
 | Network Errors | 8 | **8 (100%)** |
 | I2C/Hardware | 12+ | ~9 (75%) |
 | LRF/Detector | 10 | ~7 (70%) |
@@ -331,15 +330,21 @@ Compiled issues/bugs found in source code requiring investigation.
 (none — all known spec items implemented)
 
 ### Is the Product Fully Done?
-**Yes.** Product complete as of 2026-04-25:
-- All spec requirements implemented (43/43 tests pass)
-- WCET: 3.03ms max (≤5ms spec)  
+**Yes.** Product complete as of 2026-04-26:
+- All spec requirements implemented (79/79 tests pass: 29 state_mode_integrity_test + 50 state_machine_transitions_test)
+- WCET: 3.03ms max (≤5ms spec)
 - Jitter: P99.9 ≤ 417µs (≤5% spec)
 - All critical blockers resolved
 - All TODO items complete - zero remaining
 
 ---
+- HeapTracker::reset() missing peak_allocated_bytes_ reset (caused false positive leak in long-run test): fixed 2026-04-26
+
+---
 - Missing iostream/ostream includes in safety_monitor.hpp (AM7-L3-VIS-002): fixed 2026-04-25
+
+---
+- State transition matrix corrected per AM7-L3-MODE-001 spec: SEARCH→FREECAM and ARMED→SEARCH now accepted; test assertions aligned; set_timing_stable_for_test() helper added; 79/79 tests pass (2026-04-26)
 
 ---
 - Detection/tracking: completion updated to 100% (confidence gate, lock confirmation done in session 3)
