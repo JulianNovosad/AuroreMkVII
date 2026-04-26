@@ -2,7 +2,15 @@
 # Provides aurore_add_test() — single registration point for all CTest targets.
 # See docs/superpowers/specs/2026-04-26-boost-test-migration-design.md
 
-find_package(Boost 1.83 REQUIRED COMPONENTS unit_test_framework)
+# Requires CMake >= 3.16 (SKIP_RETURN_CODE property)
+
+if(NOT TARGET Boost::unit_test_framework)
+    find_package(Boost 1.83 REQUIRED COMPONENTS unit_test_framework)
+endif()
+
+if(NOT TARGET Threads::Threads)
+    find_package(Threads REQUIRED)
+endif()
 
 # ---------------------------------------------------------------------------
 # aurore_add_test(
@@ -19,7 +27,11 @@ function(aurore_add_test)
     set(options  HARDWARE)
     set(one      NAME TIMEOUT)
     set(multi    SOURCES LIBS LABELS RESOURCE_LOCK)
-    cmake_parse_arguments(A "${options}" "${one}" "${multi}" ${ARGN})
+    cmake_parse_arguments(A "${options}" "${one}" "${multi}" "${ARGN}")
+
+    if(A_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR "aurore_add_test(${A_NAME}): unrecognised arguments: ${A_UNPARSED_ARGUMENTS}")
+    endif()
 
     if(NOT A_NAME)
         message(FATAL_ERROR "aurore_add_test: NAME is required")
@@ -47,12 +59,12 @@ function(aurore_add_test)
 
     add_test(
         NAME    ${A_NAME}
-        COMMAND ${A_NAME} --log_level=test_suite --report_level=detailed
+        COMMAND $<TARGET_FILE:${A_NAME}> --log_level=test_suite --report_level=detailed
     )
 
     set(_props TIMEOUT ${A_TIMEOUT})
     if(A_LABELS)        list(APPEND _props LABELS        "${A_LABELS}")        endif()
-    if(A_RESOURCE_LOCK) list(APPEND _props RESOURCE_LOCK "${A_RESOURCE_LOCK}") endif()
+    if(A_RESOURCE_LOCK) list(APPEND _props RESOURCE_LOCK ${A_RESOURCE_LOCK}) endif()
     # HARDWARE tests exit with code 77 on absent hardware; CTest marks them SKIP,
     # not FAIL — distinguishing "rig not attached" from a logic regression.
     if(A_HARDWARE)      list(APPEND _props SKIP_RETURN_CODE 77)               endif()
