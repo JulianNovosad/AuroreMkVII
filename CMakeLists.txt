@@ -429,15 +429,13 @@ if(AURORE_ENABLE_TESTS)
     enable_testing()
     include(cmake/AuroreTestHelpers.cmake)
 
-if(AURORE_ENABLE_TESTS)
-
     # -----------------------------------------------------------------------
     # Tier 0 — Fast unit tests (pure logic, no hardware, <30s each)
     # -----------------------------------------------------------------------
 
     aurore_add_test(NAME ring_buffer_test
         SOURCES tests/unit/ring_buffer_test.cpp
-        LABELS  "tier0;fast"
+        LABELS  "tier0;fast;safety"
         TIMEOUT 60
     )
 
@@ -763,6 +761,7 @@ if(AURORE_ENABLE_TESTS)
         LABELS  "tier1;safety"
         TIMEOUT 120
         HARDWARE
+        RESOURCE_LOCK CSI_CAMERA_0
     )
 
     target_include_directories(security_stress_test PRIVATE
@@ -842,15 +841,15 @@ if(AURORE_ENABLE_TESTS)
         RESOURCE_LOCK uart_ttyAMA0
     )
 
-    # lrf_20_samples_test: built but not registered with CTest
-    # (used for manual interactive measurement sessions, not automated CI)
-    add_executable(lrf_20_samples_test
-        tests/unit/lrf_20_samples_test.cpp
-        src/drivers/laser_rangefinder.cpp
+    aurore_add_test(NAME lrf_20_samples_test
+        SOURCES tests/unit/lrf_20_samples_test.cpp
+                src/drivers/laser_rangefinder.cpp
+        LIBS    rt
+        LABELS  "hardware"
+        TIMEOUT 120
+        HARDWARE
+        RESOURCE_LOCK uart_ttyAMA0
     )
-    target_include_directories(lrf_20_samples_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    target_link_libraries(lrf_20_samples_test PRIVATE
-        Threads::Threads Boost::unit_test_framework rt)
 
     aurore_add_test(NAME camera_wrapper_test
         SOURCES tests/unit/camera_wrapper_test.cpp
