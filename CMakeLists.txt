@@ -1085,6 +1085,7 @@ target_link_libraries(lrf_analyzer PRIVATE Threads::Threads)
 
 add_executable(hardware_verify
     src/drivers/fusion_hat/hardware_verify.cpp
+    src/drivers/fusion_hat/fusion_hat_sensor.cpp
 )
 target_include_directories(hardware_verify PRIVATE
     ${CMAKE_SOURCE_DIR}/include
@@ -1093,6 +1094,7 @@ target_link_libraries(hardware_verify PRIVATE Threads::Threads)
 
 add_executable(laser_verify
     src/drivers/laser_verify.cpp
+    src/drivers/laser_rangefinder.cpp
 )
 target_include_directories(laser_verify PRIVATE
     ${CMAKE_SOURCE_DIR}/include

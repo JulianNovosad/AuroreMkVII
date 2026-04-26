@@ -62,11 +62,18 @@ function(aurore_add_test)
         COMMAND $<TARGET_FILE:${A_NAME}> --log_level=test_suite --report_level=detailed
     )
 
-    set(_props TIMEOUT ${A_TIMEOUT})
-    if(A_LABELS)        list(APPEND _props LABELS        "${A_LABELS}")        endif()
-    if(A_RESOURCE_LOCK) list(APPEND _props RESOURCE_LOCK ${A_RESOURCE_LOCK}) endif()
+    set_tests_properties(${A_NAME} PROPERTIES TIMEOUT ${A_TIMEOUT})
+    if(A_LABELS)
+        # Quote preserves semicolons in label strings (e.g. "tier0;fast;safety")
+        # as a single CTest LABELS value rather than splitting into CMake list items.
+        set_tests_properties(${A_NAME} PROPERTIES LABELS "${A_LABELS}")
+    endif()
+    if(A_RESOURCE_LOCK)
+        set_tests_properties(${A_NAME} PROPERTIES RESOURCE_LOCK ${A_RESOURCE_LOCK})
+    endif()
     # HARDWARE tests exit with code 77 on absent hardware; CTest marks them SKIP,
     # not FAIL — distinguishing "rig not attached" from a logic regression.
-    if(A_HARDWARE)      list(APPEND _props SKIP_RETURN_CODE 77)               endif()
-    set_tests_properties(${A_NAME} PROPERTIES ${_props})
+    if(A_HARDWARE)
+        set_tests_properties(${A_NAME} PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
 endfunction()
