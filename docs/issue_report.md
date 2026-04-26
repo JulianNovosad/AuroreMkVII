@@ -338,7 +338,10 @@ Compiled issues/bugs found in source code requiring investigation.
 - All TODO items complete - zero remaining
 
 ---
-- LogTester thread-safety fix: added mutex to protect std::deque in multi-threaded tests; test_stress_timestamp_ordering now passes without segfault (2026-04-26)
+- CI pipeline enhancement: Tier 0-4 test filtering with regression prevention, timing enforcement (2026-04-26)
+- Test utility infrastructure: test_utils.hpp with TestRig, FaultInjector for parameterized tests
+- 10 new robustness test suites: memory_resource_test, numeric_robustness_test, hostile_input_test, resource_exhaustion_test, reset_recovery_test, observability_test, temporal_consistency_test, fault_containment_test, concurrency_pathology_test, thermal_dma_health_test
+- Build script: build-native.sh convenience script for native compilation (2026-04-26)
 
 ---
 - HeapTracker::reset() missing peak_allocated_bytes_ reset (caused false positive leak in long-run test): fixed 2026-04-26
