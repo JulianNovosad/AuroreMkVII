@@ -805,6 +805,7 @@ LogTester::LogTester() {}
 
 void LogTester::log_event(int event_id, const char* event_type) {
     (void)event_type;
+    std::lock_guard<std::mutex> lock(mutex_);
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
     uint64_t ts_ns = static_cast<uint64_t>(ts.tv_sec) * 1000000000ULL + 
@@ -814,6 +815,7 @@ void LogTester::log_event(int event_id, const char* event_type) {
 }
 
 LogTester::CompletenessReport LogTester::get_completeness_report() const {
+    std::lock_guard<std::mutex> lock(mutex_);
     CompletenessReport report;
     report.events_logged = timestamps_.size();
     report.completeness_ratio = 1.0;
@@ -821,6 +823,7 @@ LogTester::CompletenessReport LogTester::get_completeness_report() const {
 }
 
 LogTester::OrderReport LogTester::get_order_report() const {
+    std::lock_guard<std::mutex> lock(mutex_);
     OrderReport report;
     report.total_events = timestamps_.size();
     
