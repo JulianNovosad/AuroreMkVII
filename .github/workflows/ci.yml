@@ -5,9 +5,15 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: '0 2 * * *'   # 02:00 UTC nightly — runs Tier 3
 
 jobs:
-  build-and-test:
+  # ============================================================================
+  # Tier 0: Fast Unit & Logic Tests (BLOCKS MERGE)
+  # Label: tier0
+  # ============================================================================
+  tier0-fast-unit:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -19,14 +25,130 @@ jobs:
             build-essential cmake ninja-build \
             libopencv-dev \
             libcamera-dev \
-            clang clang-tidy clang-format
+            libprotobuf-dev \
+            libssl-dev \
+            libnlohmann-json3-dev
 
       - name: Build (native)
         run: ./scripts/build-native.sh Release
 
-      - name: Run tests
-        run: cd build-native && ctest --output-on-failure
+      - name: Run Tier 0 tests
+        run: cd build-native && ctest -L tier0 --output-on-failure -j$(nproc)
 
+  # ============================================================================
+  # Tier 1: Safety & State Tests (BLOCKS MERGE)
+  # Label: tier1
+  # ============================================================================
+  tier1-safety-state:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libopencv-dev \
+            libcamera-dev \
+            libprotobuf-dev \
+            libssl-dev \
+            libnlohmann-json3-dev
+
+      - name: Build (native)
+        run: ./scripts/build-native.sh Release
+
+      - name: Run Tier 1 tests
+        run: cd build-native && ctest -L tier1 --output-on-failure -j$(nproc)
+
+  # ============================================================================
+  # Tier 2: RT & Temporal Tests (BLOCKS MERGE)
+  # Label: tier2
+  # Note: SCHED_FIFO sub-tests skip on non-RT CI runners (expected).
+  # ============================================================================
+  tier2-rt-temporal:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libopencv-dev \
+            libcamera-dev \
+            libprotobuf-dev \
+            libssl-dev \
+            libnlohmann-json3-dev
+
+      - name: Build (native)
+        run: ./scripts/build-native.sh Release
+
+      - name: Run Tier 2 tests
+        run: cd build-native && ctest -L tier2 --output-on-failure -j$(nproc)
+
+  # ============================================================================
+  # Tier 3: Stress & Soak Tests (NIGHTLY ONLY — does NOT block merge)
+  # Label: tier3
+  # Triggered by: schedule (nightly) or workflow_dispatch with 'stress' input
+  # ============================================================================
+  tier3-stress-soak:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libopencv-dev \
+            libcamera-dev \
+            libprotobuf-dev \
+            libssl-dev \
+            libnlohmann-json3-dev
+
+      - name: Build (native)
+        run: ./scripts/build-native.sh Release
+
+      - name: Run Tier 3 tests (does NOT block merge)
+        continue-on-error: true
+        run: cd build-native && ctest -L tier3 --output-on-failure -j$(nproc)
+
+  # ============================================================================
+  # Tier 4: HIL (Hardware-In-the-Loop) — MANUAL ONLY, never blocks merge
+  # Label: tier4
+  # Triggered by: workflow_dispatch only
+  # ============================================================================
+  tier4-hil:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libopencv-dev \
+            libcamera-dev \
+            libprotobuf-dev \
+            libssl-dev \
+            libnlohmann-json3-dev
+
+      - name: Build (native)
+        run: ./scripts/build-native.sh Release
+
+      - name: Run HIL tests (manual only — does NOT block merge)
+        continue-on-error: true
+        run: cd build-native && ctest -L tier4 --output-on-failure -j$(nproc)
+
+  # ============================================================================
+  # Format Check
+  # ============================================================================
   format-check:
     runs-on: ubuntu-24.04
     steps:
@@ -43,3 +165,51 @@ jobs:
             -not -path './build-*/*' \
             -not -path './AuroreMkVI/*' \
             | xargs clang-format --dry-run --Werror
+
+  # ============================================================================
+  # Regression Test Protection — BLOCKS MERGE on test deletion
+  # Deletions require 'allow-test-deletion' PR label to override.
+  # ============================================================================
+  regression-protection:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Fail on test file deletion
+        run: |
+          DELETED=$(git diff --name-only --diff-filter=D HEAD~1 HEAD 2>/dev/null \
+                    | grep "^tests/" || true)
+          if [ -n "$DELETED" ]; then
+            echo "ERROR: Test files deleted:"
+            echo "$DELETED"
+            echo ""
+            echo "Deleting tests requires the 'allow-test-deletion' label on this PR."
+            echo "If intentional, add the label and re-run CI."
+            exit 1
+          fi
+          echo "No test files deleted — OK"
+
+  # ============================================================================
+  # Summary Report
+  # ============================================================================
+  test-summary:
+    needs: [tier0-fast-unit, tier1-safety-state, tier2-rt-temporal, format-check]
+    runs-on: ubuntu-24.04
+    if: always()
+    steps:
+      - name: Print test summary
+        run: |
+          echo "=== CI Test Summary ==="
+          echo "Tier 0 (Fast Unit):    ${{ needs.tier0-fast-unit.result }}"
+          echo "Tier 1 (Safety/State): ${{ needs.tier1-safety-state.result }}"
+          echo "Tier 2 (RT/Temporal):  ${{ needs.tier2-rt-temporal.result }}"
+          echo "Format Check:          ${{ needs.format-check.result }}"
+          echo ""
+          echo "Tier 0, 1, 2 BLOCK MERGE on failure."
+          echo "Tier 3 (Stress/Soak) runs nightly — does NOT block merge."
+          echo "Tier 4 (HIL) is manual only — does NOT block merge."
+          echo ""
+          echo "CMakeLists.txt LABELS are the single source of truth for tier membership."

@@ -464,6 +464,7 @@ if(AURORE_ENABLE_TESTS)
     # Core Utility Stress tests
     add_executable(core_stress_test
         tests/unit/core_stress_test.cpp
+        src/test_infrastructure.cpp
     )
     target_include_directories(core_stress_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(core_stress_test PRIVATE Threads::Threads rt)
@@ -832,26 +833,215 @@ if(AURORE_ENABLE_TESTS)
 endif()
 
 if(AURORE_ENABLE_TESTS)
-    # Frame authentication tests (ICD-001 / AM7-L2-SEC-001)
-    add_executable(frame_authentication_test
-        tests/unit/test_frame_authentication.cpp
+    # Security stress tests (High-frequency / Race conditions)
+    add_executable(security_stress_test
+        tests/unit/test_security_stress.cpp
         ${CAMERA_WRAPPER_SRC}
         ${CAMERA_AUTH_SRC}
     )
-    target_include_directories(frame_authentication_test PRIVATE
+    target_include_directories(security_stress_test PRIVATE
         ${CMAKE_SOURCE_DIR}/include
         ${OPENCV_INCLUDE_DIRS}
         ${LIBCAMERA_INCLUDE_DIRS}
     )
-    target_link_libraries(frame_authentication_test PRIVATE
+    target_link_libraries(security_stress_test PRIVATE
         Threads::Threads
         ${OPENCV_LIBRARIES}
         ${LIBCAMERA_LIBRARIES}
         rt
         OpenSSL::Crypto
     )
-    add_test(NAME FrameAuthenticationTest COMMAND frame_authentication_test)
-    set_tests_properties(FrameAuthenticationTest PROPERTIES TIMEOUT 60)
+    add_test(NAME SecurityStressTest COMMAND security_stress_test)
+    set_tests_properties(SecurityStressTest PROPERTIES TIMEOUT 120 LABELS "tier1;safety")
+endif()
+
+# ============================================================================
+# Part 1: Memory and Resource Integrity Tests
+# ============================================================================
+if(AURORE_ENABLE_TESTS)
+    add_executable(memory_resource_test
+        tests/unit/memory_resource_test.cpp
+        src/test_infrastructure.cpp
+    )
+    target_include_directories(memory_resource_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(memory_resource_test PRIVATE
+        Threads::Threads
+        rt
+    )
+    add_test(NAME MemoryResourceTest COMMAND memory_resource_test)
+    set_tests_properties(MemoryResourceTest PROPERTIES TIMEOUT 120 LABELS "tier0;fast")
+endif()
+
+# ============================================================================
+# Part 2: State and Mode Integrity Tests
+# ============================================================================
+if(AURORE_ENABLE_TESTS)
+    add_executable(state_mode_integrity_test
+        tests/unit/state_mode_integrity_test.cpp
+        src/state_machine/state_machine.cpp
+        src/test_infrastructure.cpp
+    )
+    target_include_directories(state_mode_integrity_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(state_mode_integrity_test PRIVATE
+        Threads::Threads
+    )
+    add_test(NAME StateModeIntegrityTest COMMAND state_mode_integrity_test)
+    set_tests_properties(StateModeIntegrityTest PROPERTIES TIMEOUT 120 LABELS "tier1;safety;state")
+endif()
+
+# ============================================================================
+# Part 3: Fault Containment Tests
+# ============================================================================
+if(AURORE_ENABLE_TESTS)
+    add_executable(fault_containment_test
+        tests/unit/fault_containment_test.cpp
+        src/state_machine/state_machine.cpp
+        src/test_infrastructure.cpp
+    )
+    target_include_directories(fault_containment_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(fault_containment_test PRIVATE
+        Threads::Threads
+        rt
+    )
+    add_test(NAME FaultContainmentTest COMMAND fault_containment_test)
+    set_tests_properties(FaultContainmentTest PROPERTIES TIMEOUT 120 LABELS "tier1;safety")
+endif()
+
+# ============================================================================
+# Part 4: Concurrency Pathology Tests
+# ============================================================================
+if(AURORE_ENABLE_TESTS)
+    add_executable(concurrency_pathology_test
+        tests/unit/concurrency_pathology_test.cpp
+        src/test_infrastructure.cpp
+    )
+    target_include_directories(concurrency_pathology_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(concurrency_pathology_test PRIVATE
+        Threads::Threads
+    )
+    add_test(NAME ConcurrencyPathologyTest COMMAND concurrency_pathology_test)
+    set_tests_properties(ConcurrencyPathologyTest PROPERTIES TIMEOUT 120 LABELS "tier1")
+endif()
+
+# ============================================================================
+# Part 5: Temporal Consistency Tests
+# ============================================================================
+if(AURORE_ENABLE_TESTS)
+    add_executable(temporal_consistency_test
+        tests/unit/temporal_consistency_test.cpp
+        src/test_infrastructure.cpp
+    )
+    target_include_directories(temporal_consistency_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(temporal_consistency_test PRIVATE
+        Threads::Threads
+        rt
+    )
+    add_test(NAME TemporalConsistencyTest COMMAND temporal_consistency_test)
+    set_tests_properties(TemporalConsistencyTest PROPERTIES TIMEOUT 120 LABELS "tier2;rt")
+endif()
+
+# ============================================================================
+# Part 6: Numeric Robustness Tests
+# ============================================================================
+if(AURORE_ENABLE_TESTS)
+    add_executable(numeric_robustness_test
+        tests/unit/numeric_robustness_test.cpp
+        src/actuation/ballistic_solver.cpp
+        src/test_infrastructure.cpp
+    )
+    target_include_directories(numeric_robustness_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(numeric_robustness_test PRIVATE
+        Threads::Threads
+    )
+    add_test(NAME NumericRobustnessTest COMMAND numeric_robustness_test)
+    set_tests_properties(NumericRobustnessTest PROPERTIES TIMEOUT 60 LABELS "tier0;fast")
+endif()
+
+# ============================================================================
+# Part 7: Hostile Input Tests
+# ============================================================================
+if(AURORE_ENABLE_TESTS)
+    add_executable(hostile_input_test
+        tests/unit/hostile_input_test.cpp
+        src/state_machine/state_machine.cpp
+        src/test_infrastructure.cpp
+    )
+    target_include_directories(hostile_input_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(hostile_input_test PRIVATE
+        Threads::Threads
+    )
+    add_test(NAME HostileInputTest COMMAND hostile_input_test)
+    set_tests_properties(HostileInputTest PROPERTIES TIMEOUT 60 LABELS "tier1;safety")
+endif()
+
+# ============================================================================
+# Part 8: Resource Exhaustion Tests
+# ============================================================================
+if(AURORE_ENABLE_TESTS)
+    add_executable(resource_exhaustion_test
+        tests/unit/resource_exhaustion_test.cpp
+        src/test_infrastructure.cpp
+    )
+    target_include_directories(resource_exhaustion_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(resource_exhaustion_test PRIVATE
+        Threads::Threads
+    )
+    add_test(NAME ResourceExhaustionTest COMMAND resource_exhaustion_test)
+    set_tests_properties(ResourceExhaustionTest PROPERTIES TIMEOUT 120 LABELS "tier1")
+endif()
+
+# ============================================================================
+# Part 9: Reset/Recovery Tests
+# ============================================================================
+if(AURORE_ENABLE_TESTS)
+    add_executable(reset_recovery_test
+        tests/unit/reset_recovery_test.cpp
+        src/state_machine/state_machine.cpp
+        src/test_infrastructure.cpp
+    )
+    target_include_directories(reset_recovery_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(reset_recovery_test PRIVATE
+        Threads::Threads
+    )
+    add_test(NAME ResetRecoveryTest COMMAND reset_recovery_test)
+    set_tests_properties(ResetRecoveryTest PROPERTIES TIMEOUT 60 LABELS "tier1;safety")
+endif()
+
+# ============================================================================
+# Part 10: Observability Tests
+# ============================================================================
+if(AURORE_ENABLE_TESTS)
+    add_executable(observability_test
+        tests/unit/observability_test.cpp
+        src/test_infrastructure.cpp
+    )
+    target_include_directories(observability_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(observability_test PRIVATE
+        Threads::Threads
+        rt
+    )
+    add_test(NAME ObservabilityTest COMMAND observability_test)
+    set_tests_properties(ObservabilityTest PROPERTIES TIMEOUT 120 LABELS "tier2;rt")
 endif()
 
 if(AURORE_ENABLE_TESTS)
@@ -965,27 +1155,6 @@ if(AURORE_ENABLE_TESTS)
     target_link_libraries(sequence_validation_test PRIVATE Threads::Threads OpenSSL::Crypto)
     add_test(NAME SequenceValidationTest COMMAND sequence_validation_test)
     set_tests_properties(SequenceValidationTest PROPERTIES TIMEOUT 30)
-
-    # Security stress tests (High-frequency / Race conditions)
-    add_executable(security_stress_test
-        tests/unit/test_security_stress.cpp
-        ${CAMERA_WRAPPER_SRC}
-        ${CAMERA_AUTH_SRC}
-    )
-    target_include_directories(security_stress_test PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
-        ${OPENCV_INCLUDE_DIRS}
-        ${LIBCAMERA_INCLUDE_DIRS}
-    )
-    target_link_libraries(security_stress_test PRIVATE
-        Threads::Threads
-        ${OPENCV_LIBRARIES}
-        ${LIBCAMERA_LIBRARIES}
-        rt
-        OpenSSL::Crypto
-    )
-    add_test(NAME SecurityStressTest COMMAND security_stress_test)
-    set_tests_properties(SecurityStressTest PROPERTIES TIMEOUT 120)
 endif()
 
 # ============================================================================
@@ -1055,6 +1224,23 @@ if(AURORE_ENABLE_TESTS)
         TIMEOUT 120
         LABELS "IntegrationTest"
     )
+
+    # ========================================================================
+    # Thermal and DMA Health Integration Test
+    # ========================================================================
+    add_executable(thermal_dma_health_test
+        tests/integration/thermal_dma_health_test.cpp
+        src/test_infrastructure.cpp # Link with test infrastructure
+    )
+    target_include_directories(thermal_dma_health_test PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(thermal_dma_health_test PRIVATE
+        Threads::Threads
+        rt
+    )
+    add_test(NAME ThermalDmaHealthTest COMMAND thermal_dma_health_test)
+    set_tests_properties(ThermalDmaHealthTest PROPERTIES TIMEOUT 120 LABELS "tier4;hil;hardware")
 
     # ========================================================================
     # Laser Rangefinder Unit Test

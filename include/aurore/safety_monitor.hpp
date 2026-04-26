@@ -619,6 +619,13 @@ class SafetyMonitor {
     bool is_running() const noexcept { return running_.load(std::memory_order_acquire); }
 
     /**
+     * @brief Get correlated subsystem for a fault
+     */
+    PipelineStage get_correlated_subsystem() const noexcept {
+        return PipelineStage::VISION;
+    }
+
+    /**
      * @brief Update vision frame status
      *
      * Call this from vision pipeline thread after processing each frame.

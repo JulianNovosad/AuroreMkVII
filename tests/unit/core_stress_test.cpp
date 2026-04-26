@@ -1,16 +1,15 @@
-#include <atomic>
-#include <cassert>
-#include <chrono>
-#include <cstdint>
-#include <cstring>
-#include <iostream>
-#include <thread>
-#include <vector>
-#include <signal.h>
-#include <unistd.h>
-
-#include "aurore/timing.hpp"
+#include "aurore/test_utils.hpp"
 #include "aurore/ring_buffer.hpp"
+#include "aurore/timing.hpp"
+#include <atomic>
+#include <csignal>
+#include <cstring>
+#include <functional>
+#include <iostream>
+#include <stdexcept>
+#include <thread>
+#include <unistd.h>
+#include <vector>
 
 namespace {
 
@@ -19,9 +18,10 @@ std::atomic<size_t> g_tests_run(0);
 std::atomic<size_t> g_tests_passed(0);
 std::atomic<size_t> g_tests_failed(0);
 
-#define TEST(name) void name()
+#define TEST(name) void name(); namespace { struct Test##name { Test##name() { RUN_TEST(name); } }; Test##name test_##name##_instance; } void name()
 #define RUN_TEST(name) do { \
     g_tests_run.fetch_add(1); \
+    aurore::test::TestEnvironment::reset_trackers(); \
     try { \
         name(); \
         g_tests_passed.fetch_add(1); \
@@ -43,6 +43,10 @@ std::atomic<size_t> g_tests_failed(0);
 } while(0)
 #define ASSERT_GE(a, b) do { if (!((a) >= (b))) throw std::runtime_error("Assertion failed: " #a " < " #b); } while(0)
 #define ASSERT_GT(a, b) do { if (!((a) > (b))) throw std::runtime_error("Assertion failed: " #a " <= " #b); } while(0)
+#define ASSERT_LE(a, b) do { if (!((a) <= (b))) throw std::runtime_error("Assertion failed: " #a " > " #b); } while(0)
+
+constexpr uint64_t kMaxStackSizeKb = 8192; // Max stack size for StackTracker
+constexpr size_t kHeapBaselineEnvelopeBytes = 1024 * 1024; // 1MB heap baseline
 
 void signal_handler(int) {}
 
@@ -269,6 +273,8 @@ TEST(test_alignment_assert) {
 }
 
 int main() {
+    aurore::test::TestEnvironment::init(kMaxStackSizeKb, kHeapBaselineEnvelopeBytes);
+
     std::cout << "Running Core Stress tests..." << std::endl;
     RUN_TEST(test_wrap_safe_diff);
     RUN_TEST(test_timestamp_window_wrap);
