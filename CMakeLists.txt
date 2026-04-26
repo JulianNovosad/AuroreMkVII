@@ -459,7 +459,7 @@ if(AURORE_ENABLE_TESTS)
                 src/test_infrastructure.cpp
         LIBS    rt
         LABELS  "tier0;fast"
-        TIMEOUT 120
+        TIMEOUT 60
     )
 
     # -----------------------------------------------------------------------
@@ -911,7 +911,7 @@ if(AURORE_ENABLE_TESTS)
                 ${CAMERA_WRAPPER_SRC}
                 ${CAMERA_AUTH_SRC}
         LIBS    rt OpenSSL::Crypto ${OPENCV_LIBRARIES} ${LIBCAMERA_LIBRARIES}
-        LABELS  "Optional;hardware"
+        LABELS  "optional;hardware"
         TIMEOUT 60
         HARDWARE
         RESOURCE_LOCK CSI_CAMERA_0
