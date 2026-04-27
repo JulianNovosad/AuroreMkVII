@@ -567,4 +567,30 @@ int LaserRangefinder::diagnose_wiring() {
     return 0;
 }
 
+// ============================================================================
+// Fast hardware probe
+// ============================================================================
+
+bool LaserRangefinder::probe_present(int timeout_ms) {
+    if (fd_ < 0) return false;
+
+    // Flush stale UART buffers
+    ::tcflush(fd_, TCIOFLUSH);
+
+    // Send wake-up command
+    char cmd = '\r';
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
+    ::write(fd_, &cmd, 1);
+#pragma GCC diagnostic pop
+
+    // Wait for response with poll
+    pollfd pfd{};
+    pfd.fd = fd_;
+    pfd.events = POLLIN;
+
+    int ret = ::poll(&pfd, 1, timeout_ms);
+    return ret > 0 && (pfd.revents & POLLIN) != 0;
+}
+
 }  // namespace aurore

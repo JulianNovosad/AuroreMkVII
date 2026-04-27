@@ -10,6 +10,9 @@
  * - Run with sudo for UART access
  * 
  * Usage: sudo ./laser_rangefinder_test [/dev/ttyAMAxx]
+ * 
+ * FAIL-FAST: Tests fail immediately with clear error if hardware is absent.
+ * No mocks or simulations - tests connect to real hardware or fail.
  */
 
 #include "aurore/drivers/laser_rangefinder.hpp"
@@ -30,6 +33,8 @@ static constexpr float kAccuracyToleranceM = 0.1f; // ±10cm tolerance
 static constexpr int kMaxReadAttempts = 50;        // Max attempts to get valid reading
 static constexpr int kSampleCount = 10;            // Number of samples for stability test
 
+static constexpr int kHardwareDetectTimeoutMs = 500;  // Fail-fast: timeout for hardware detection
+
 // Test result tracking
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -39,11 +44,22 @@ static int tests_failed = 0;
         if (condition) {                                          \
             std::cout << "  PASS: " << message << "\n";           \
             tests_passed++;                                       \
-        } else {                                                  \
+        } else {                                              \
             std::cerr << "  FAIL: " << message << "\n";           \
             tests_failed++;                                       \
         }                                                         \
     } while (0)
+
+bool wait_for_hardware_response(LaserRangefinder& lrf, int timeout_ms) {
+    const int max_cycles = timeout_ms / 50;
+    for (int i = 0; i < max_cycles; ++i) {
+        if (lrf.latest_range_m() > 0.0f || lrf.status_frames_received() > 0) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return false;
+}
 
 /**
  * Test 1: Default construction and initial state
@@ -67,18 +83,18 @@ void test_uart_initialization(const std::string& device) {
     
     LaserRangefinder lrf;
     
-    // Try to open the UART device
     bool init_ok = lrf.init(device);
     
-    if (init_ok) {
-        TEST_ASSERT(lrf.is_ready(), "LRF is ready after successful init");
-        std::cout << "  INFO: UART " << device << " opened successfully\n";
-    } else {
-        std::cerr << "  WARNING: Could not open " << device << " - skipping hardware tests\n";
-        std::cerr << "  INFO: Run with sudo for UART access, or check device path\n";
-        TEST_ASSERT(false, "UART initialization failed (run with sudo?)");
+    if (!init_ok) {
+        std::cerr << "  FATAL: Cannot open " << device << " - hardware unavailable\n";
+        std::cerr << "  Check: ls /dev/ttyAMA* for available UART devices\n";
+        std::cerr << "  Fix: Connect M01 laser rangefinder to UART pins GPIO14/15\n";
+        TEST_ASSERT(false, "UART initialization failed - hardware not connected");
         return;
     }
+    
+    TEST_ASSERT(lrf.is_ready(), "LRF is ready after successful init");
+    std::cout << "  INFO: UART " << device << " opened successfully\n";
 }
 
 /**
@@ -87,28 +103,21 @@ void test_uart_initialization(const std::string& device) {
 void test_continuous_mode_and_readings(const std::string& device) {
     std::cout << "\n=== Test: Continuous Mode and Readings ===\n";
 
-    // M01 needs 3+ seconds to recover from the previous test's stop() command
-    // (destructor fires stop() when test_uart_initialization's lrf goes out of scope)
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-
     LaserRangefinder lrf;
 
     if (!lrf.init(device)) {
-        std::cerr << "  SKIP: UART init failed\n";
+        std::cerr << "  FATAL: UART init failed - hardware unavailable\n";
+        TEST_ASSERT(false, "UART hardware not connected");
         return;
     }
 
-    // Fail-fast wiring diagnostic before starting continuous mode
-    int diag = lrf.diagnose_wiring();
-    if (diag != 0) {
+    // FAST PROBE: Check for hardware response within 200ms
+    if (!lrf.probe_present(200)) {
         lrf.stop();
-        const char* reasons[] = {"OK", "no response (TX/RX swap or disconnected)",
-                                  "garbage (baud mismatch)", "wrong protocol"};
-        const char* reason = (diag >= 0 && diag <= 3) ? reasons[diag] : "unknown";
-        TEST_ASSERT(false,
-            "M01 laser not responding on " + device + ": " + reason + "\n"
-            "      Check: ls /dev/ttyAMA*\n"
-            "      Fix: Connect M01 LRF to UART pins GPIO14/15, ensure VCC=3.3V and ENA=HIGH");
+        std::cerr << "  FATAL: No response from LRF within 200ms - hardware not connected\n";
+        std::cerr << "  Check: LRF is powered (5V) and ENA pin is HIGH\n";
+        std::cerr << "  Fix: Connect M01 laser rangefinder to UART pins GPIO14/15\n";
+        TEST_ASSERT(false, "LRF hardware not responding - timeout");
         return;
     }
 
@@ -122,19 +131,18 @@ void test_continuous_mode_and_readings(const std::string& device) {
         return;
     }
 
-    // Wait for any frame activity — M01 modules send 0xEE status frames
-    // when no target is in beam, and 0xAA data frames with range data
-    // M01 needs 3-5 seconds warm-up time before sending valid range data
-    float first_range = 0.0f;
-    const int max_wait_cycles = 80;  // 8s max wait for M01 warm-up
-    for (int i = 0; i < max_wait_cycles; ++i) {
-        first_range = lrf.latest_range_m();
-        if (first_range > 0.0f) break;  // Got valid range data
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // FAIL-FAST: Wait with timeout for hardware response (fail immediately if no response)
+    bool has_response = wait_for_hardware_response(lrf, kHardwareDetectTimeoutMs);
+    if (!has_response) {
+        lrf.stop();
+        std::cerr << "  FATAL: No response from LRF within " << kHardwareDetectTimeoutMs << "ms\n";
+        std::cerr << "  Check: LRF is powered (5V) and ENA pin is HIGH\n";
+        TEST_ASSERT(false, "LRF hardware not responding - timeout");
+        return;
     }
 
     // Check that the LRF is communicating (data OR status frames)
-    bool has_data = first_range > 0.0f;
+    bool has_data = lrf.latest_range_m() > 0.0f;
     bool has_status = lrf.status_frames_received() > 0;
     TEST_ASSERT(has_data || has_status, "LRF is communicating (data or status frames received)");
 
@@ -144,12 +152,13 @@ void test_continuous_mode_and_readings(const std::string& device) {
         return;
     }
 
+    float first_range = lrf.latest_range_m();
     if (has_data) {
         std::cout << "  INFO: Target detected — range: " << first_range << "m\n";
         TEST_ASSERT(first_range >= LaserRangefinder::kMinRangeM,
                     "Range >= minimum (" + std::to_string(LaserRangefinder::kMinRangeM) + "m)");
         TEST_ASSERT(first_range <= LaserRangefinder::kMaxRangeM,
-                    "Range <= maximum (" + std::to_string(LaserRangefinder::kMaxRangeM) + "m)");
+                    "Range <= maximum (" + std::to_string(LaserRangefinder::kMaxRangeM) + "m");
 
         uint64_t ts = lrf.last_reading_ns();
         TEST_ASSERT(ts > 0, "Timestamp updated on valid reading");
@@ -203,17 +212,16 @@ void test_continuous_mode_and_readings(const std::string& device) {
 void test_protocol_parsing(const std::string& device) {
     std::cout << "\n=== Test: M01 Protocol Parsing ===\n";
 
-    // M01 needs 5+ seconds to recover after stop() command
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-
     LaserRangefinder lrf;
 
     if (!lrf.init(device)) {
-        std::cerr << "  SKIP: UART init failed\n";
+        std::cerr << "  FATAL: UART init failed - hardware unavailable\n";
+        TEST_ASSERT(false, "UART hardware not connected");
         return;
     }
 
-    if (lrf.diagnose_wiring() != 0) {
+    // Fast probe instead of diagnose_wiring()
+    if (!lrf.probe_present(200)) {
         lrf.stop();
         TEST_ASSERT(false,
             "M01 laser not responding on " + device + "\n"
@@ -231,12 +239,13 @@ void test_protocol_parsing(const std::string& device) {
         return;
     }
 
-    // Wait for any frame activity (data or status)
-    const int max_wait_cycles = 50;  // 5s max
-    for (int i = 0; i < max_wait_cycles; ++i) {
-        if (lrf.latest_range_m() > 0.0f) break;
-        if (lrf.status_frames_received() > 0) break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // FAIL-FAST: Wait with timeout for hardware response
+    bool has_response = wait_for_hardware_response(lrf, kHardwareDetectTimeoutMs);
+    if (!has_response) {
+        lrf.stop();
+        std::cerr << "  FATAL: No response from LRF within " << kHardwareDetectTimeoutMs << "ms\n";
+        TEST_ASSERT(false, "LRF hardware not responding - timeout");
+        return;
     }
 
     bool has_data = lrf.latest_range_m() > 0.0f;
@@ -283,9 +292,6 @@ void test_protocol_parsing(const std::string& device) {
 void test_thread_safety(const std::string& device) {
     std::cout << "\n=== Test: Thread Safety ===\n";
 
-    // M01 needs 5+ seconds to recover after stop() command
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-
     LaserRangefinder lrf;
 
     if (!lrf.init(device)) {
@@ -296,10 +302,8 @@ void test_thread_safety(const std::string& device) {
         return;
     }
 
-    // M01 needs time to recover after init
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-    if (lrf.diagnose_wiring() != 0) {
+    // Fast probe instead of diagnose_wiring()
+    if (!lrf.probe_present(200)) {
         lrf.stop();
         TEST_ASSERT(false,
             "M01 laser not responding on " + device + "\n"
@@ -317,12 +321,13 @@ void test_thread_safety(const std::string& device) {
         return;
     }
 
-    // Wait for any frame activity (data or status)
-    const int max_wait_cycles = 50;  // 5s max
-    for (int i = 0; i < max_wait_cycles; ++i) {
-        if (lrf.latest_range_m() > 0.0f) break;
-        if (lrf.status_frames_received() > 0) break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // FAIL-FAST: Wait with timeout for hardware response
+    bool has_response = wait_for_hardware_response(lrf, kHardwareDetectTimeoutMs);
+    if (!has_response) {
+        lrf.stop();
+        std::cerr << "  FATAL: No response from LRF within " << kHardwareDetectTimeoutMs << "ms\n";
+        TEST_ASSERT(false, "LRF hardware not responding - timeout");
+        return;
     }
 
     bool has_activity = lrf.latest_range_m() > 0.0f || lrf.status_frames_received() > 0;
@@ -402,6 +407,15 @@ void test_range_accuracy(const std::string& device) {
     if (!lrf.start_continuous()) {
         std::cerr << "  SKIP: Could not start continuous mode\n";
         lrf.stop();
+        return;
+    }
+
+    // FAIL-FAST: Wait with timeout for hardware response
+    bool has_response = wait_for_hardware_response(lrf, kHardwareDetectTimeoutMs);
+    if (!has_response) {
+        lrf.stop();
+        std::cerr << "  FATAL: No response from LRF within " << kHardwareDetectTimeoutMs << "ms\n";
+        TEST_ASSERT(false, "LRF hardware not responding - timeout");
         return;
     }
 

@@ -93,6 +93,14 @@ public:
      */
     int diagnose_wiring();
 
+    /**
+     * @brief Fast hardware probe: check if device is present and responsive
+     *
+     * Returns true if any response received within 200ms, false otherwise.
+     * Does NOT start continuous mode - just checks for activity.
+     */
+    bool probe_present(int timeout_ms = 200);
+
 private:
     void reader_loop_m01();
     void reader_loop_modbus();
