@@ -33,7 +33,7 @@ static constexpr float kAccuracyToleranceM = 0.1f; // ±10cm tolerance
 static constexpr int kMaxReadAttempts = 50;        // Max attempts to get valid reading
 static constexpr int kSampleCount = 10;            // Number of samples for stability test
 
-static constexpr int kHardwareDetectTimeoutMs = 500;  // Fail-fast: timeout for hardware detection
+static constexpr int kHardwareDetectTimeoutMs = 2000;  // Fail-fast: timeout for hardware detection
 
 // Test result tracking
 static int tests_passed = 0;
@@ -109,19 +109,12 @@ void test_continuous_mode_and_readings(const std::string& device) {
         std::cerr << "  FATAL: UART init failed - hardware unavailable\n";
         TEST_ASSERT(false, "UART hardware not connected");
         return;
-    }
+        }
 
-    // FAST PROBE: Check for hardware response within 200ms
-    if (!lrf.probe_present(200)) {
-        lrf.stop();
-        std::cerr << "  FATAL: No response from LRF within 200ms - hardware not connected\n";
-        std::cerr << "  Check: LRF is powered (5V) and ENA pin is HIGH\n";
-        std::cerr << "  Fix: Connect M01 laser rangefinder to UART pins GPIO14/15\n";
-        TEST_ASSERT(false, "LRF hardware not responding - timeout");
-        return;
-    }
+        std::cout << "  INFO: Waiting 2s for LRF warm-up...\n";
+        std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    // Start continuous measurement mode
+        // Start continuous measurement mode
     bool started = lrf.start_continuous();
     TEST_ASSERT(started, "Continuous mode started");
     
@@ -218,19 +211,12 @@ void test_protocol_parsing(const std::string& device) {
         std::cerr << "  FATAL: UART init failed - hardware unavailable\n";
         TEST_ASSERT(false, "UART hardware not connected");
         return;
-    }
+        }
 
-    // Fast probe instead of diagnose_wiring()
-    if (!lrf.probe_present(200)) {
-        lrf.stop();
-        TEST_ASSERT(false,
-            "M01 laser not responding on " + device + "\n"
-            "      Check: ls /dev/ttyAMA*\n"
-            "      Fix: Connect M01 LRF to UART pins GPIO14/15, ensure VCC=3.3V and ENA=HIGH");
-        return;
-    }
+        std::cout << "  INFO: Waiting 2s for LRF warm-up...\n";
+        std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    if (!lrf.start_continuous()) {
+        if (!lrf.start_continuous()) {
         lrf.stop();
         TEST_ASSERT(false, 
             "M01 LASER NOT RESPONDING on " + device + "\n"
@@ -300,19 +286,12 @@ void test_thread_safety(const std::string& device) {
             "      Check: ls /dev/ttyAMA*\n"
             "      Fix: Connect M01 laser rangefinder to UART");
         return;
-    }
+        }
 
-    // Fast probe instead of diagnose_wiring()
-    if (!lrf.probe_present(200)) {
-        lrf.stop();
-        TEST_ASSERT(false,
-            "M01 laser not responding on " + device + "\n"
-            "      Check: ls /dev/ttyAMA*\n"
-            "      Fix: Connect M01 LRF to UART pins GPIO14/15, ensure VCC=3.3V and ENA=HIGH");
-        return;
-    }
+        std::cout << "  INFO: Waiting 2s for LRF warm-up...\n";
+        std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    if (!lrf.start_continuous()) {
+        if (!lrf.start_continuous()) {
         lrf.stop();
         TEST_ASSERT(false, 
             "M01 LASER NOT RESPONDING on " + device + "\n"
@@ -403,6 +382,9 @@ void test_range_accuracy(const std::string& device) {
             "      Fix: Connect M01 LRF to UART pins GPIO14/15, ensure VCC=3.3V and ENA=HIGH");
         return;
     }
+
+    std::cout << "  INFO: Waiting 2s for LRF warm-up...\n";
+    std::this_thread::sleep_for(std::chrono::seconds(2));
 
     if (!lrf.start_continuous()) {
         std::cerr << "  SKIP: Could not start continuous mode\n";

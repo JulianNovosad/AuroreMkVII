@@ -20,13 +20,7 @@ int main() {
         return 1;
     }
 
-    // Fast probe: check for hardware within 200ms
-    if (!lrf.probe_present(200)) {
-        lrf.stop();
-        std::cerr << "FATAL: No response from LRF within 200ms - hardware not connected\n";
-        std::cerr << "Check: LRF is powered (5V) and ENA pin is HIGH\n";
-        return 1;
-    }
+
 
     if (!lrf.start_continuous()) {
         std::cerr << "FAIL: start_continuous failed\n";

@@ -59,7 +59,7 @@ function(aurore_add_test)
 
     add_test(
         NAME    ${A_NAME}
-        COMMAND $<TARGET_FILE:${A_NAME}> --log_level=test_suite --report_level=detailed
+        COMMAND $<TARGET_FILE:${A_NAME}>
     )
 
     set_tests_properties(${A_NAME} PROPERTIES TIMEOUT ${A_TIMEOUT})
