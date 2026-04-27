@@ -109,11 +109,14 @@ TEST(test_vacuum_match) {
     ASSERT_NEAR(state.z, 95.095f, 0.1f);
 }
 
-// 50. NaN/Inf Solve: Verify solve() throws on non-finite inputs.
+// 50. NaN/Inf Solve: Verify solve() returns nullopt on non-finite inputs.
 TEST(test_nan_inf_solve) {
     BallisticSolver solver;
-    ASSERT_THROWS(solver.solve(NAN, 0, 0, 900.0f));
-    ASSERT_THROWS(solver.solve(100.0f, INFINITY, 0, 900.0f));
+    solver.initialize_lookup_table();
+    auto result1 = solver.solve(NAN, 0, 0, 900.0f);
+    ASSERT_FALSE(result1.has_value());
+    auto result2 = solver.solve(100.0f, INFINITY, 0, 900.0f);
+    ASSERT_FALSE(result2.has_value());
 }
 
 // 60. Profile Fallback

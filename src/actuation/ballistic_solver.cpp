@@ -386,7 +386,7 @@ std::optional<KineticSolution> BallisticSolver::solve_kinetic(float range_m, flo
                                                               float target_velocity_m_s) const {
     if (!std::isfinite(range_m) || !std::isfinite(height_offset_m) ||
         !std::isfinite(muzzle_velocity_m_s) || !std::isfinite(target_velocity_m_s)) {
-        throw std::runtime_error("BallisticSolver: solve_kinetic input parameters contain NaN or Inf");
+        return std::nullopt;
     }
 
     if (muzzle_velocity_m_s <= 0.f || range_m <= 0.f) return std::nullopt;
@@ -505,7 +505,7 @@ std::optional<KineticSolution> BallisticSolver::solve_kinetic(float range_m, flo
 std::optional<DropSolution> BallisticSolver::solve_drop(float range_m, float height_m,
                                                         float target_velocity_m_s) const {
     if (!std::isfinite(range_m) || !std::isfinite(height_m) || !std::isfinite(target_velocity_m_s)) {
-        throw std::runtime_error("BallisticSolver: solve_drop input parameters contain NaN or Inf");
+        return std::nullopt;
     }
 
     if (range_m <= 0.f) return std::nullopt;
@@ -550,7 +550,7 @@ std::optional<DropSolution> BallisticSolver::solve_drop(float range_m, float hei
     float el_deg = launch_angle * 180.f / static_cast<float>(M_PI);
     
     if (!std::isfinite(el_deg) || !std::isfinite(launch_v) || !std::isfinite(tof)) {
-        throw std::runtime_error("BallisticSolver: solve_drop intermediate results contain NaN or Inf");
+        return std::nullopt;
     }
     
     return DropSolution{el_deg, 0.f, launch_v, tof};
@@ -562,7 +562,11 @@ std::optional<FireControlSolution> BallisticSolver::solve(float range_m, float g
                                                           float target_velocity_m_s) const {
     if (!std::isfinite(range_m) || !std::isfinite(gimbal_el_deg) || !std::isfinite(target_aspect) ||
         !std::isfinite(muzzle_velocity_m_s) || !std::isfinite(target_velocity_m_s)) {
-        throw std::runtime_error("BallisticSolver: solve input parameters contain NaN or Inf");
+        return std::nullopt;
+    }
+
+    if (range_m <= 0.0f) {
+        return std::nullopt;
     }
 
     EngagementMode mode = select_mode(range_m, gimbal_el_deg, target_aspect);
@@ -586,7 +590,7 @@ std::optional<FireControlSolution> BallisticSolver::solve(float range_m, float g
     sol.p_hit = get_p_hit_from_table(range_m, sol.velocity_m_s, sol.kinetic_mode);
     
     if (!std::isfinite(sol.el_lead_deg) || !std::isfinite(sol.az_lead_deg) || !std::isfinite(sol.p_hit)) {
-        throw std::runtime_error("BallisticSolver: solve intermediate results contain NaN or Inf");
+        return std::nullopt;
     }
     
     return sol;
