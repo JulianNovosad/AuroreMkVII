@@ -337,12 +337,15 @@ All previously listed critical, high, and medium priority issues have been resol
 (none — all known spec items implemented)
 
 ### Is the Product Fully Done?
-**Yes.** Product complete as of 2026-04-27:
+**Yes.** Product complete as of 2026-04-30:
 - All spec requirements implemented (57/57 tests pass)
 - WCET: 3.03ms max (≤5ms spec)
 - Jitter: P99.9 ≤ 417µs (≤5% spec)
 - All critical blockers resolved
 - All TODO items complete - zero remaining
+
+---
+- Gimbal endstop limits fixed: now set on channels 10/11 (matching servo output channels) instead of incorrectly using channels 0/1 (AM7-L3-ACT-001); gimbal_controller_test, fusion_hat_test pass (2026-04-30)
 
 ---
 - BallisticSolver input validation fix: return nullopt instead of throwing for NaN/Inf/negative/zero range (AM7-L3-SAFE-002); numeric_robustness_test now passes (23/23); ballistics_stress_test updated (2026-04-27)
