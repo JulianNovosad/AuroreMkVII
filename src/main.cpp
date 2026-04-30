@@ -486,8 +486,8 @@ int main(int argc, char* argv[]) {
     const float az_max = config.get_float("gimbal.azimuth.max_deg", 90.0f);
     const float el_min = config.get_float("gimbal.elevation.min_deg", -10.0f);
     const float el_max = config.get_float("gimbal.elevation.max_deg", 45.0f);
-    fusion_hat.set_endstop_limits(0, az_min, az_max);  // Channel 0 = azimuth
-    fusion_hat.set_endstop_limits(1, el_min, el_max);  // Channel 1 = elevation
+    fusion_hat.set_endstop_limits(11, az_min, az_max);  // Channel 11 = azimuth (left-right pan)
+    fusion_hat.set_endstop_limits(10, el_min, el_max);  // Channel 10 = elevation (up-down tilt)
 
     // GimbalController for AUTO/FREECAM gimbal targeting
     aurore::GimbalController gimbal_ctrl;
@@ -660,22 +660,11 @@ int main(int argc, char* argv[]) {
         });
 
     // AM7-L3-ACT-002: Gimbal command sequence gap detection — reject out-of-order commands.
-    // The link protocol sends angular RATES (deg/s); integrate over dt to get absolute target.
-    std::atomic<uint64_t> freecam_last_ns{0};
-    link_server.set_freecam_callback([&](float az_dps, float el_dps, float /*vel*/,
+    // The link protocol sends absolute target angles (degrees) from operator UI.
+    link_server.set_freecam_callback([&](float az_deg, float el_deg, float /*vel*/,
                                          uint32_t seq_num) {
-        const uint64_t now_ns = aurore::get_timestamp();
-        const uint64_t prev_ns = freecam_last_ns.exchange(now_ns, std::memory_order_acq_rel);
-        const float dt_s = (prev_ns == 0)
-                           ? (1.0f / 120.0f)
-                           : std::clamp(static_cast<float>(now_ns - prev_ns) * 1e-9f,
-                                        0.001f, 0.1f);
-
-        // Integrate rate onto current gimbal position to get absolute target.
-        const float new_az = gimbal_ctrl.current_az() + az_dps * dt_s;
-        const float new_el = gimbal_ctrl.current_el() + el_dps * dt_s;
-
-        auto cmd = gimbal_ctrl.process_command_with_gap_check(new_az, new_el, seq_num);
+        // Incoming values are absolute target angles from the operator UI, not rates.
+        auto cmd = gimbal_ctrl.process_command_with_gap_check(az_deg, el_deg, seq_num);
         if (!cmd.has_value()) {
             std::cerr << "AuroreLink: gimbal sequence gap detected (seq=" << seq_num
                       << ") — holding position\n";
@@ -1321,8 +1310,8 @@ int main(int argc, char* argv[]) {
             if (actuation_allowed &&
                 (state == aurore::FcsState::TRACKING || state == aurore::FcsState::ARMED ||
                  state == aurore::FcsState::FREECAM)) {
-                fusion_hat.set_servo_angle(10, gimbal_cmd.az_deg);  // ch10 = azimuth
-                fusion_hat.set_servo_angle(11, gimbal_cmd.el_deg);  // ch11 = elevation
+                fusion_hat.set_servo_angle(11, gimbal_cmd.az_deg);  // ch11 = azimuth (left-right pan)
+                fusion_hat.set_servo_angle(10, gimbal_cmd.el_deg);  // ch10 = elevation (up-down tilt)
             }
 
             // I2C fault: only count errors and trigger fault when the gimbal is actively
