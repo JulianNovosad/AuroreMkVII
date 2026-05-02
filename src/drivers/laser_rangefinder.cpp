@@ -142,16 +142,11 @@ size_t LaserRangefinder::parse_m01_frame(const uint8_t* buf, size_t len, uint32_
             const uint8_t actual_ck = frame[kM01MinFrameLen - 1];
 
             if (expected_ck == actual_ck) {
-                // DISTANCE at bytes[5:6] = big-endian uint16 in MILLIMETERS (NOT BCD!)
-                // Frame: EE 00 00 00 00 01 00 02 03
-                //                 ^    ^
-                //                 |    +-- byte[6] = 0x00
-                //                 +------- byte[5] = 0x01
-                // Example: 0x01 0x00 → (0x01<<8)|0x00 = 256mm = 25.6cm
+                // Distance at bytes[5:6] = big-endian uint16 in MILLIMETERS
                 const uint8_t d_hi = frame[5];
                 const uint8_t d_lo = frame[6];
                 const uint32_t dist_mm = (static_cast<uint32_t>(d_hi) << 8) | d_lo;
-                out_mm = dist_mm;  // Already in millimetres!
+                out_mm = dist_mm;
 
                 frames_received_.fetch_add(1, std::memory_order_relaxed);
                 return i + kM01MinFrameLen;
