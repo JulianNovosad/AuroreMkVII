@@ -52,7 +52,7 @@ bool test_inference_module() {
         if (tpu_dev.good()) {
             std::cout << "✓ TPU device accessible: /dev/apex_0" << std::endl;
         } else {
-            std::cout << "⚠ TPU device not accessible, but modules compiled" << std::endl;
+            std::cout << "[WARNING] TPU device not accessible, but modules compiled" << std::endl;
         }
         
         std::cout << "✓ Inference module initialization test passed" << std::endl;
@@ -218,11 +218,11 @@ int main(int argc, char** argv) {
     std::cout << "Tests passed: " << passed_tests << "/" << test_count << std::endl;
     
     if (all_tests_passed) {
-        std::cout << "🎉 ALL MODULE TESTS PASSED!" << std::endl;
-        std::cout << "✅ Aurore Mk VI system is ready for operation" << std::endl;
+        std::cout << "ALL MODULE TESTS PASSED!" << std::endl;
+        std::cout << "[OK] Aurore Mk VI system is ready for operation" << std::endl;
         APP_LOG_INFO("All module tests passed - system ready");
     } else {
-        std::cout << "⚠ Some tests failed - check error messages above" << std::endl;
+        std::cout << "[WARNING] Some tests failed - check error messages above" << std::endl;
         APP_LOG_WARNING("Some module tests failed");
     }
     

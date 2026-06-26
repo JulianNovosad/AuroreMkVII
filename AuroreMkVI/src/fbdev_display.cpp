@@ -52,24 +52,24 @@ uint64_t FbdevDisplay::get_time_us() {
 }
 
 bool FbdevDisplay::initialize() {
-    std::cout << "🎯 INITIALIZING FBDEV DISPLAY" << std::endl;
+    std::cout << "[TARGET] INITIALIZING FBDEV DISPLAY" << std::endl;
 
     // Open framebuffer device
     fb_fd_ = open("/dev/fb0", O_RDWR);
     if (fb_fd_ < 0) {
-        std::cerr << "❌ ERROR: Failed to open /dev/fb0: " << strerror(errno) << std::endl;
+        std::cerr << "[ERROR] ERROR: Failed to open /dev/fb0: " << strerror(errno) << std::endl;
         return false;
     }
-    std::cout << "✅ Opened /dev/fb0 (FD: " << fb_fd_ << ")" << std::endl;
+    std::cout << "[OK] Opened /dev/fb0 (FD: " << fb_fd_ << ")" << std::endl;
 
     // Get framebuffer fixed information
     struct fb_fix_screeninfo finfo;
     if (ioctl(fb_fd_, FBIOGET_FSCREENINFO, &finfo) < 0) {
-        std::cerr << "❌ ERROR: Failed to get fixed screeninfo: " << strerror(errno) << std::endl;
+        std::cerr << "[ERROR] ERROR: Failed to get fixed screeninfo: " << strerror(errno) << std::endl;
         close(fb_fd_);
         return false;
     }
-    std::cout << "✅ Framebuffer fix: " << finfo.id << std::endl;
+    std::cout << "[OK] Framebuffer fix: " << finfo.id << std::endl;
     std::cout << "  Line length (pitch): " << finfo.line_length << std::endl;
     std::cout << "  Memory size: " << finfo.smem_len << " bytes" << std::endl;
 
@@ -78,11 +78,11 @@ bool FbdevDisplay::initialize() {
     // Get framebuffer variable information
     struct fb_var_screeninfo vinfo;
     if (ioctl(fb_fd_, FBIOGET_VSCREENINFO, &vinfo) < 0) {
-        std::cerr << "❌ ERROR: Failed to get variable screeninfo: " << strerror(errno) << std::endl;
+        std::cerr << "[ERROR] ERROR: Failed to get variable screeninfo: " << strerror(errno) << std::endl;
         close(fb_fd_);
         return false;
     }
-    std::cout << "✅ Framebuffer var: " << vinfo.xres << "x" << vinfo.yres << ", "
+    std::cout << "[OK] Framebuffer var: " << vinfo.xres << "x" << vinfo.yres << ", "
               << vinfo.bits_per_pixel << " bpp" << std::endl;
 
     width_ = vinfo.xres;
@@ -96,21 +96,21 @@ bool FbdevDisplay::initialize() {
     // Memory map the framebuffer
     fb_ptr_ = (uint8_t*)mmap(NULL, screen_size_, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd_, 0);
     if (fb_ptr_ == MAP_FAILED) {
-        std::cerr << "❌ ERROR: Failed to mmap framebuffer: " << strerror(errno) << std::endl;
+        std::cerr << "[ERROR] ERROR: Failed to mmap framebuffer: " << strerror(errno) << std::endl;
         close(fb_fd_);
         return false;
     }
-    std::cout << "✅ Framebuffer mmap'd at " << (void*)fb_ptr_ << std::endl;
+    std::cout << "[OK] Framebuffer mmap'd at " << (void*)fb_ptr_ << std::endl;
 
     // Clear framebuffer to black
     memset(fb_ptr_, 0, screen_size_);
-    std::cout << "✅ Framebuffer cleared" << std::endl;
+    std::cout << "[OK] Framebuffer cleared" << std::endl;
 
     // Display startup screen
     display_startup_screen("AURORE MK VI", 0.2);
 
     last_present_time_ = get_time_us();
-    std::cout << "🎯 FBDEV DISPLAY READY" << std::endl;
+    std::cout << "[TARGET] FBDEV DISPLAY READY" << std::endl;
     return true;
 }
 
@@ -159,7 +159,7 @@ void FbdevDisplay::render_frame(const uint8_t* frame_data, uint32_t frame_width,
     total_frames_++;
 
     if (total_frames_ % 60 == 0) {
-        std::cout << "✅ FBDEV: Frame " << total_frames_ << " presented" << std::endl;
+        std::cout << "[OK] FBDEV: Frame " << total_frames_ << " presented" << std::endl;
     }
 }
 
@@ -213,7 +213,7 @@ void FbdevDisplay::display_startup_screen(const std::string& text, double durati
 }
 
 void FbdevDisplay::cleanup() {
-    std::cout << "🧹 Cleaning up FBDEV resources..." << std::endl;
+    std::cout << "Cleaning up FBDEV resources..." << std::endl;
 
     if (fb_ptr_ && fb_ptr_ != MAP_FAILED) {
         // Clear framebuffer on exit
@@ -227,7 +227,7 @@ void FbdevDisplay::cleanup() {
         fb_fd_ = -1;
     }
 
-    std::cout << "✅ FBDEV cleanup complete" << std::endl;
+    std::cout << "[OK] FBDEV cleanup complete" << std::endl;
 }
 
 void FbdevDisplay::check_system_health() {

@@ -66,7 +66,7 @@ bool DrmDisplay::should_present_now() {
 bool DrmDisplay::find_connector_and_crtc() {
     drmModeRes* resources = drmModeGetResources(drm_fd_);
     if (!resources) {
-        std::cerr << "❌ ERROR: Failed to get DRM resources" << std::endl;
+        std::cerr << "[ERROR] ERROR: Failed to get DRM resources" << std::endl;
         return false;
     }
 
@@ -79,14 +79,14 @@ bool DrmDisplay::find_connector_and_crtc() {
         if (conn->connection == DRM_MODE_CONNECTED && conn->count_modes > 0) {
             connected_connector = conn;
             connector_id_ = conn->connector_id;
-            std::cout << "✅ Found connected connector: ID=" << connector_id_ << std::endl;
+            std::cout << "[OK] Found connected connector: ID=" << connector_id_ << std::endl;
             break;
         }
         drmModeFreeConnector(conn);
     }
 
     if (!connected_connector) {
-        std::cerr << "❌ ERROR: No connected connector found" << std::endl;
+        std::cerr << "[ERROR] ERROR: No connected connector found" << std::endl;
         drmModeFreeResources(resources);
         return false;
     }
@@ -96,11 +96,11 @@ bool DrmDisplay::find_connector_and_crtc() {
     if (encoder) {
         crtc_id_ = encoder->crtc_id;
         drmModeFreeEncoder(encoder);
-        std::cout << "✅ Found CRTC from encoder: ID=" << crtc_id_ << std::endl;
+        std::cout << "[OK] Found CRTC from encoder: ID=" << crtc_id_ << std::endl;
     }
 
     if (crtc_id_ == 0) {
-        std::cerr << "❌ ERROR: No CRTC found" << std::endl;
+        std::cerr << "[ERROR] ERROR: No CRTC found" << std::endl;
         drmModeFreeConnector(connected_connector);
         drmModeFreeResources(resources);
         return false;
@@ -119,10 +119,10 @@ bool DrmDisplay::find_connector_and_crtc() {
     
     if (best_mode) {
         mode_ = *best_mode;
-        std::cout << "✅ Display mode: " << mode_.hdisplay << "x" << mode_.vdisplay 
+        std::cout << "[OK] Display mode: " << mode_.hdisplay << "x" << mode_.vdisplay 
                   << " @ " << mode_.vrefresh << "Hz" << std::endl;
     } else {
-        std::cerr << "❌ ERROR: No suitable display mode found" << std::endl;
+        std::cerr << "[ERROR] ERROR: No suitable display mode found" << std::endl;
         drmModeFreeConnector(connected_connector);
         drmModeFreeResources(resources);
         return false;
@@ -134,7 +134,7 @@ bool DrmDisplay::find_connector_and_crtc() {
 }
 
 bool DrmDisplay::create_framebuffer_pool(uint32_t width, uint32_t height) {
-    std::cout << "🎨 Creating framebuffer pool (" << width << "x" << height << ")" << std::endl;
+    std::cout << "Creating framebuffer pool (" << width << "x" << height << ")" << std::endl;
     
     for (int i = 0; i < FRAMEBUFFER_COUNT; i++) {
         Framebuffer& fb = framebuffers_[i];
@@ -151,7 +151,7 @@ bool DrmDisplay::create_framebuffer_pool(uint32_t width, uint32_t height) {
         create_req.flags = 0;
 
         if (drmIoctl(drm_fd_, DRM_IOCTL_MODE_CREATE_DUMB, &create_req) < 0) {
-            std::cerr << "❌ Failed to create dumb buffer " << i << ": " << strerror(errno) << std::endl;
+            std::cerr << "[ERROR] Failed to create dumb buffer " << i << ": " << strerror(errno) << std::endl;
             return false;
         }
 
@@ -166,14 +166,14 @@ bool DrmDisplay::create_framebuffer_pool(uint32_t width, uint32_t height) {
         struct drm_mode_map_dumb map_req = {};
         map_req.handle = fb.buffer_handle;
         if (drmIoctl(drm_fd_, DRM_IOCTL_MODE_MAP_DUMB, &map_req) < 0) {
-            std::cerr << "❌ Failed to map dumb buffer " << i << ": " << strerror(errno) << std::endl;
+            std::cerr << "[ERROR] Failed to map dumb buffer " << i << ": " << strerror(errno) << std::endl;
             return false;
         }
 
         fb.map = (uint8_t*)mmap(nullptr, fb.size, PROT_READ | PROT_WRITE, MAP_SHARED,
                                 drm_fd_, map_req.offset);
         if (fb.map == MAP_FAILED) {
-            std::cerr << "❌ mmap failed for buffer " << i << ": " << strerror(errno) << std::endl;
+            std::cerr << "[ERROR] mmap failed for buffer " << i << ": " << strerror(errno) << std::endl;
             fb.map = nullptr;
             return false;
         }
@@ -189,7 +189,7 @@ bool DrmDisplay::create_framebuffer_pool(uint32_t width, uint32_t height) {
         if (drmModeAddFB2WithModifiers(drm_fd_, width, height, DRM_FORMAT_RGB565,
                                        handles, strides, offsets, modifiers,
                                        &fb.fb_id, 0) < 0) {
-            std::cerr << "❌ Failed to add framebuffer " << i << ": " << strerror(errno) << std::endl;
+            std::cerr << "[ERROR] Failed to add framebuffer " << i << ": " << strerror(errno) << std::endl;
             munmap(fb.map, fb.size);
             fb.map = nullptr;
             return false;
@@ -198,7 +198,7 @@ bool DrmDisplay::create_framebuffer_pool(uint32_t width, uint32_t height) {
         std::cout << "  Framebuffer " << i << ": ID=" << fb.fb_id << std::endl;
     }
 
-    std::cout << "✅ Framebuffer pool created (" << FRAMEBUFFER_COUNT << " buffers)" << std::endl;
+    std::cout << "[OK] Framebuffer pool created (" << FRAMEBUFFER_COUNT << " buffers)" << std::endl;
     return true;
 }
 
@@ -242,7 +242,7 @@ bool DrmDisplay::import_dma_buf_as_framebuffer(int dma_fd, uint32_t width, uint3
     // Import DMA-BUF
     int ret = drmPrimeFDToHandle(drm_fd_, dma_fd, &handles[0]);
     if (ret) {
-        std::cerr << "❌ Failed to import DMA-BUF: " << strerror(-ret) << std::endl;
+        std::cerr << "[ERROR] Failed to import DMA-BUF: " << strerror(-ret) << std::endl;
         return false;
     }
     
@@ -255,7 +255,7 @@ bool DrmDisplay::import_dma_buf_as_framebuffer(int dma_fd, uint32_t width, uint3
     ret = drmModeAddFB2(drm_fd_, width, height, format,
                         handles, pitches, offsets, out_fb_id, 0);
     if (ret) {
-        std::cerr << "❌ Failed to create FB from DMA-BUF: " << strerror(-ret) << std::endl;
+        std::cerr << "[ERROR] Failed to create FB from DMA-BUF: " << strerror(-ret) << std::endl;
         return false;
     }
     
@@ -263,26 +263,26 @@ bool DrmDisplay::import_dma_buf_as_framebuffer(int dma_fd, uint32_t width, uint3
 }
 
 bool DrmDisplay::initialize(uint32_t width, uint32_t height) {
-    std::cout << "🎯 INITIALIZING DRM DISPLAY: " << width << "x" << height << std::endl;
+    std::cout << "[TARGET] INITIALIZING DRM DISPLAY: " << width << "x" << height << std::endl;
     
     // Open DRM device (try card1 first for HDMI on Pi, then card0)
     drm_fd_ = open("/dev/dri/card1", O_RDWR | O_CLOEXEC);
     if (drm_fd_ < 0) {
         drm_fd_ = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
         if (drm_fd_ < 0) {
-            std::cerr << "❌ ERROR: Failed to open DRM device: " << strerror(errno) << std::endl;
+            std::cerr << "[ERROR] ERROR: Failed to open DRM device: " << strerror(errno) << std::endl;
             return false;
         }
     }
-    std::cout << "✅ DRM device opened (FD: " << drm_fd_ << ")" << std::endl;
+    std::cout << "[OK] DRM device opened (FD: " << drm_fd_ << ")" << std::endl;
     
     // Create GBM device for more efficient buffer management
     gbm_device_ = gbm_create_device(drm_fd_);
     if (!gbm_device_) {
-        std::cerr << "❌ Failed to create GBM device" << std::endl;
+        std::cerr << "[ERROR] Failed to create GBM device" << std::endl;
         return false;
     }
-    std::cout << "✅ GBM device created" << std::endl;
+    std::cout << "[OK] GBM device created" << std::endl;
     
     // Get DRM resources and find connected connector/CRTC
     if (!find_connector_and_crtc()) {
@@ -304,7 +304,7 @@ bool DrmDisplay::initialize(uint32_t width, uint32_t height) {
     // Set initial CRTC mode and framebuffer
     Framebuffer* first_fb = get_available_framebuffer();
     if (!first_fb) {
-        std::cerr << "❌ ERROR: No available framebuffer" << std::endl;
+        std::cerr << "[ERROR] ERROR: No available framebuffer" << std::endl;
         return false;
     }
     
@@ -312,14 +312,14 @@ bool DrmDisplay::initialize(uint32_t width, uint32_t height) {
     int ret = drmModeSetCrtc(drm_fd_, crtc_id_, fb_id_, 0, 0, 
                              &connector_id_, 1, &mode_);
     if (ret < 0) {
-        std::cerr << "❌ ERROR: Failed to set CRTC: " << strerror(errno) << std::endl;
+        std::cerr << "[ERROR] ERROR: Failed to set CRTC: " << strerror(errno) << std::endl;
         return false;
     }
     
-    std::cout << "✅ CRTC set with initial framebuffer: " << fb_id_ << std::endl;
+    std::cout << "[OK] CRTC set with initial framebuffer: " << fb_id_ << std::endl;
     
     // STARTUP SEQUENCE: Display "AURORE MK VI" for 0-0.2s
-    std::cout << "🚀 Starting startup sequence..." << std::endl;
+    std::cout << "[ROCKET] Starting startup sequence..." << std::endl;
     display_startup_screen("AURORE MK VI", 0.2);
     
     // Display system status messages for 0.2-0.5s
@@ -328,13 +328,13 @@ bool DrmDisplay::initialize(uint32_t width, uint32_t height) {
     display_startup_screen("> BALLISTICS ACTIVE", 0.1);
     
     last_present_time_ = get_time_us();
-    std::cout << "🎯 DRM DISPLAY READY" << std::endl;
+    std::cout << "[TARGET] DRM DISPLAY READY" << std::endl;
     return true;
 }
 
 void DrmDisplay::present_frame(const uint8_t* frame_data, const uint8_t* overlay_data) {
     if (!frame_data) {
-        std::cout << "DRM: ❌ Invalid frame data" << std::endl;
+        std::cout << "DRM: [ERROR] Invalid frame data" << std::endl;
         return;
     }
     
@@ -348,7 +348,7 @@ void DrmDisplay::present_frame(const uint8_t* frame_data, const uint8_t* overlay
     // Get available framebuffer
     Framebuffer* fb = get_available_framebuffer();
     if (!fb) {
-        std::cout << "DRM: ❌ No available framebuffer" << std::endl;
+        std::cout << "DRM: [ERROR] No available framebuffer" << std::endl;
         return;
     }
     
@@ -482,7 +482,7 @@ void DrmDisplay::present_frame(const uint8_t* frame_data, const uint8_t* overlay
             }
         }
         if (total_frames_ % 60 == 0) {
-            std::cout << "ℹ️  PAGE FLIP BUSY (already pending)" << std::endl;
+            std::cout << "[INFO] PAGE FLIP BUSY (already pending)" << std::endl;
         }
         return;
     }
@@ -494,9 +494,9 @@ void DrmDisplay::present_frame(const uint8_t* frame_data, const uint8_t* overlay
             framebuffers_[i].in_use = false;
         }
         if (ret == -ENOMEM) {
-            std::cerr << "❌ PAGE FLIP FAILED [" << failed_flips_ << "]: Out of memory - released all buffers" << std::endl;
+            std::cerr << "[ERROR] PAGE FLIP FAILED [" << failed_flips_ << "]: Out of memory - released all buffers" << std::endl;
         } else {
-            std::cerr << "❌ PAGE FLIP FAILED [" << failed_flips_ << "]: " << strerror(-ret) << std::endl;
+            std::cerr << "[ERROR] PAGE FLIP FAILED [" << failed_flips_ << "]: " << strerror(-ret) << std::endl;
         }
     } else {
         // Release old framebuffers after successful page flip
@@ -506,7 +506,7 @@ void DrmDisplay::present_frame(const uint8_t* frame_data, const uint8_t* overlay
             }
         }
         if (total_frames_ % 60 == 0) {
-            std::cout << "✅ PAGE FLIP SUCCESS [" << total_frames_ << "]: FB_ID=" << fb->fb_id << std::endl;
+            std::cout << "[OK] PAGE FLIP SUCCESS [" << total_frames_ << "]: FB_ID=" << fb->fb_id << std::endl;
         }
     }
 }
@@ -518,7 +518,7 @@ void DrmDisplay::render_frame(const uint8_t* frame_data, uint32_t frame_width, u
 void DrmDisplay::display_startup_screen(const std::string& text, double duration_seconds) {
     Framebuffer* fb = get_available_framebuffer();
     if (!fb) {
-        std::cerr << "❌ No available framebuffer for startup screen" << std::endl;
+        std::cerr << "[ERROR] No available framebuffer for startup screen" << std::endl;
         return;
     }
     
@@ -559,7 +559,7 @@ void DrmDisplay::display_startup_screen(const std::string& text, double duration
     // Page flip to display the startup screen (synchronous)
     int ret = drmModePageFlip(drm_fd_, crtc_id_, fb->fb_id, 0, nullptr);
     if (ret != 0) {
-        std::cerr << "❌ Startup screen page flip failed: " << strerror(-ret) << std::endl;
+        std::cerr << "[ERROR] Startup screen page flip failed: " << strerror(-ret) << std::endl;
     }
     
     // Wait for the specified duration
@@ -570,7 +570,7 @@ void DrmDisplay::display_startup_screen(const std::string& text, double duration
 }
 
 void DrmDisplay::cleanup() {
-    std::cout << "🧹 Cleaning up DRM resources..." << std::endl;
+    std::cout << "Cleaning up DRM resources..." << std::endl;
     
     destroy_framebuffer_pool();
     
@@ -584,5 +584,5 @@ void DrmDisplay::cleanup() {
         drm_fd_ = -1;
     }
     
-    std::cout << "✅ DRM cleanup complete" << std::endl;
+    std::cout << "[OK] DRM cleanup complete" << std::endl;
 }
