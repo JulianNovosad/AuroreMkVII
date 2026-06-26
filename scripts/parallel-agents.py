@@ -107,8 +107,8 @@ add_test(NAME GimbalControllerTest COMMAND gimbal_controller_test)
 ### Verify:
 ```bash
 cd /home/laptop/AuroreMkVII
-cmake --build build-native --target gimbal_controller_test -j4
-cd build-native && ./gimbal_controller_test
+cmake --build build-release --target gimbal_controller_test -j4
+cd build-release && ./gimbal_controller_test
 ```
 
 Build, test, commit.
@@ -198,8 +198,8 @@ add_test(NAME ConfigLoaderTest COMMAND config_loader_test)
 ### Verify:
 ```bash
 cd /home/laptop/AuroreMkVII
-cmake --build build-native --target config_loader_test -j4
-cd build-native && ./config_loader_test
+cmake --build build-release --target config_loader_test -j4
+cd build-release && ./config_loader_test
 ```
 
 Build, test, commit.
@@ -253,7 +253,7 @@ Usage: python3 viewer.py 127.0.0.1
 
 ### Verify:
 
-1. Start MkVII: ./build-native/aurore --dry-run
+1. Start MkVII: ./build-release/aurore --dry-run
 2. Run viewer: cd aurore_link && python3 viewer.py
 3. Verify telemetry displays
 
@@ -306,8 +306,8 @@ RK4 step:
 ### Verify:
 ```bash
 cd /home/laptop/AuroreMkVII
-cmake --build build-native --target ballistics_test -j4
-cd build-native && ./ballistics_test
+cmake --build build-release --target ballistics_test -j4
+cd build-release && ./ballistics_test
 ```
 
 Build, test, commit.
@@ -349,8 +349,8 @@ if (gimbal_settled) state_machine.on_gimbal_status(true);
 
 ```bash
 cd /home/laptop/AuroreMkVII
-cmake --build build-native --target aurore -j4
-timeout 8 ./build-native/aurore --dry-run 2>&1 | grep -E "State:|IDLE|SEARCH|TRACKING"
+cmake --build build-release --target aurore -j4
+timeout 8 ./build-release/aurore --dry-run 2>&1 | grep -E "State:|IDLE|SEARCH|TRACKING"
 ```
 
 Expected: State machine cycles through IDLE_SAFE -> SEARCH -> TRACKING states.
@@ -417,8 +417,8 @@ Ensure ${Protobuf_LIBRARIES} is linked to aurore target.
 
 ```bash
 cd /home/laptop/AuroreMkVII
-cmake --build build-native --target aurore -j4
-timeout 8 ./build-native/aurore --dry-run 2>&1 | grep -E "AuroreLink|listening"
+cmake --build build-release --target aurore -j4
+timeout 8 ./build-release/aurore --dry-run 2>&1 | grep -E "AuroreLink|listening"
 ```
 
 Expected: AuroreLink listening: telemetry=9000 command=9002

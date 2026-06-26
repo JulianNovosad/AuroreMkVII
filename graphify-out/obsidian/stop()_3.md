@@ -1,0 +1,20 @@
+---
+source_file: "src/drivers/camera_wrapper.cpp"
+type: "code"
+community: "Community 71"
+location: "L1129"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Community_71
+---
+
+# stop()
+
+## Connections
+- [[CameraWrapper()]] - `calls` [EXTRACTED]
+- [[camera_wrapper.cpp]] - `contains` [EXTRACTED]
+- [[cleanup_libcamera()]] - `calls` [EXTRACTED]
+- [[init_libcamera()]] - `calls` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Community_71

@@ -1,0 +1,18 @@
+---
+source_file: "src/actuation/ballistic_solver.cpp"
+type: "code"
+community: "Community 106"
+location: "L111"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Community_106
+---
+
+# setActiveProfile()
+
+## Connections
+- [[ballistic_solver.cpp]] - `contains` [EXTRACTED]
+- [[string]] - `references` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Community_106

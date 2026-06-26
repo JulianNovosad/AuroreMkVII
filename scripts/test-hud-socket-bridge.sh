@@ -6,18 +6,18 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-BUILD_DIR="$PROJECT_ROOT/build-native"
+BUILD_DIR="$PROJECT_ROOT/build-release"
 
 echo "[Test] HUD Socket Bridge Integration Test"
 echo "==========================================="
 
 if [ ! -d "$BUILD_DIR" ]; then
-  echo "ERROR: build-native directory not found. Run ./scripts/build-native.sh first."
+  echo "ERROR: build-release directory not found. Run ./scripts/build-release.sh first."
   exit 1
 fi
 
 if [ ! -f "$BUILD_DIR/hud_socket_test" ]; then
-  echo "ERROR: hud_socket_test binary not found. Run ./scripts/build-native.sh first."
+  echo "ERROR: hud_socket_test binary not found. Run ./scripts/build-release.sh first."
   exit 1
 fi
 
@@ -112,8 +112,8 @@ echo "  - Reconnection logic (2s backoff): OK"
 echo "  - Fallback to mock data: OK"
 echo ""
 echo "To test end-to-end:"
-echo "  1. Terminal 1: cd /home/laptop/AuroreMkVII && ./scripts/build-native.sh Release"
-echo "  2. Terminal 1: cd build-native && ./aurore --dry-run"
+echo "  1. Terminal 1: cd ~/AuroreMkVII && ./scripts/build-release.sh"
+echo "  2. Terminal 1: cd build-release && ./aurore --dry-run"
 echo "  3. Terminal 2: cd aurore-link && npm install && node mock-server.js"
 echo "  4. Open http://localhost:8080 in your browser"
 echo ""

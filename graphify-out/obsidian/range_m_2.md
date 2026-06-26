@@ -1,0 +1,17 @@
+---
+source_file: "include/aurore/spatial_resolver.hpp"
+type: "code"
+community: "Community 107"
+location: "L41"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Community_107
+---
+
+# range_m
+
+## Connections
+- [[TargetVector]] - `defines` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Community_107

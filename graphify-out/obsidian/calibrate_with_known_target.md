@@ -1,0 +1,17 @@
+---
+source_file: "include/aurore/spatial_resolver.hpp"
+type: "code"
+community: "Community 72"
+location: "L120"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Community_72
+---
+
+# calibrate_with_known_target
+
+## Connections
+- [[SpatialResolver]] - `defines` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Community_72

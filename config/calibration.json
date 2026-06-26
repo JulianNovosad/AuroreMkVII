@@ -1,15 +1,15 @@
 {
-  "saved_at": "2026-04-25T16:20:26.449Z",
+  "saved_at": "2026-06-26T19:33:52.447Z",
   "servo": {
-    "pan_channel": 10,
-    "tilt_channel": 11,
-    "pan_center_deg": 95,
-    "tilt_center_deg": 100
+    "pan_channel": 11,
+    "tilt_channel": 10,
+    "pan_center_deg": 90,
+    "tilt_center_deg": 90
   },
-  "lrf": {},
-  "cameras": {
-    "pixel_offset_x": -5.4878048780487845,
-    "pixel_offset_y": 25.000000000000007,
-    "sample_count": 1
-  }
+  "lrf": {
+    "pan_at_center_deg": 90,
+    "tilt_at_center_deg": 90,
+    "distance_at_center_mm": null
+  },
+  "cameras": null
 }

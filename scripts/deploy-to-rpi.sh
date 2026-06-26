@@ -8,13 +8,13 @@
 # Prerequisites:
 #   - SSH access to Raspberry Pi 5
 #   - SSH key-based authentication recommended
-#   - Cross-compiled binaries from build-rpi.sh
+#   - Binaries built with ./scripts/build-release.sh
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-BUILD_DIR="$PROJECT_DIR/build-rpi"
+BUILD_DIR="$PROJECT_DIR/build-release"
 
 # Default target
 RPI_USER="${RPI_USER:-pi}"
@@ -31,7 +31,7 @@ echo ""
 if [[ ! -d "$BUILD_DIR" ]]; then
     echo "ERROR: Build directory not found: $BUILD_DIR"
     echo ""
-    echo "Run ./scripts/build-rpi.sh first to cross-compile."
+    echo "Run ./scripts/build-release.sh first."
     exit 1
 fi
 

@@ -137,7 +137,7 @@ if [ $FAIL_COUNT -gt 0 ]; then
     echo "Please connect missing hardware and re-run this script."
     echo ""
     echo "After connecting hardware, run tests with:"
-    echo "  cd build-native && sudo ctest --output-on-failure"
+    echo "  cd build-release && sudo ctest --output-on-failure"
     exit 1
 else
     echo -e "${GREEN}ALL HARDWARE PRESENT${NC}"

@@ -479,6 +479,28 @@ int main(int argc, char* argv[]) {
     aurore::AuroreLinkServer link_server(link_cfg);
     link_server.start();
 
+    // Clean up stale sockets from previous runs (prevents "Address already in use" errors)
+    // This is critical for reliable startup after crash/restart
+    {
+        const std::vector<std::string> stale_sockets = {
+            "/run/aurore/hud_telemetry.sock",
+            "/run/aurore/mjpeg_stream.sock",
+            "/run/aurore/mjpeg_usb_stream.sock",
+            "/tmp/aurore_cmd.sock",
+        };
+        for (const auto& sock_path : stale_sockets) {
+            std::error_code ec;
+            if (std::filesystem::exists(sock_path, ec)) {
+                if (std::filesystem::remove(sock_path, ec)) {
+                    std::cout << "Cleaned stale socket: " << sock_path << std::endl;
+                } else {
+                    std::cerr << "Warning: Could not remove stale socket " << sock_path << ": "
+                              << ec.message() << std::endl;
+                }
+            }
+        }
+    }
+
     // Initialize HUD socket for low-latency telemetry to aurore-link frontend
     aurore::HudSocketConfig hud_cfg;
     hud_cfg.socket_path =

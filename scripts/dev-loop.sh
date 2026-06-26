@@ -54,8 +54,8 @@ Make the change. Rules:
   - One logical unit per session — do not bundle unrelated changes.
 
 STEP 6 — BUILD AND TEST
-  cd build-rpi && cmake --build . -j$(nproc)
-  cd build-rpi && ctest --output-on-failure
+  cd build-release && cmake --build . -j$(nproc)
+  cd build-release && ctest --output-on-failure
 If the build or any test fails, diagnose and fix it before proceeding.
 If a hardware test cannot run because hardware is absent, note it and pick
 a different item instead — never skip or stub a hardware test.

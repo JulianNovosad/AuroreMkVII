@@ -38,27 +38,26 @@ Session logs are written to `agent_logs/dev-loop-<timestamp>.log`. The rolling c
 
 ```bash
 # Build for Raspberry Pi 5 (aarch64) — only supported target
-./scripts/build-rpi.sh [Debug|Release|RelWithDebInfo]
+./scripts/build-release.sh   # Release build → build-release/
+./scripts/build-debug.sh    # Debug build   → build-debug/
 
 # Deploy to RPi 5 (reads $RPI_USER and $RPI_HOST env vars)
 ./scripts/deploy-to-rpi.sh
 
 # Manual build on the Pi
-mkdir build-rpi && cd build-rpi
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . -j$(nproc)
+./scripts/build-release.sh
 ```
 
 ## Testing
 
 ```bash
 # Run all unit tests
-cd build-rpi && ctest --output-on-failure
+cd build-release && ctest --output-on-failure
 
 # Run a single test binary directly
-cd build-rpi && ./ring_buffer_test
-cd build-rpi && ./timing_test
-cd build-rpi && ./safety_monitor_test
+cd build-release && ./ring_buffer_test
+cd build-release && ./timing_test
+cd build-release && ./safety_monitor_test
 
 # WCET measurement (run on RPi 5 target)
 ./scripts/wcet_analysis.sh --samples=1000000
@@ -81,13 +80,13 @@ All hardware is assumed connected and functional. Verify with `ls /dev/video* /d
 
 ```bash
 # Run clang-tidy (configured as CMake target)
-cd build-rpi && cmake --build . --target tidy
+cd build-release && cmake --build . --target tidy
 
 # Check formatting
-cd build-rpi && cmake --build . --target format-check
+cd build-release && cmake --build . --target format-check
 
 # Apply formatting
-cd build-rpi && cmake --build . --target format
+cd build-release && cmake --build . --target format
 ```
 
 ## Architecture
@@ -202,3 +201,15 @@ On the RPi 5, CPUs 2–3 must be isolated (`isolcpus=2-3 nohz_full=2-3 rcu_nocbs
     - Rule 18-4-1: No use of dynamic heap memory in RT paths
     - Use clang-tidy with `readability-*` and `cppcoreguidelines-*` checks enabled
     - Use MIL-STD-498/ DO-178C process compliance for documentation and traceability
+
+## Hardware Context
+This is a Raspberry Pi 5 / Aurore MkVII project. All performance work, NEON code, and camera/MIPI fixes must be validated on actual hardware. Never propose 'actionable without hardware' plans for perf/HW issues.
+
+## NEON / SIMD Code Rules
+Before writing any NEON intrinsics, verify each intrinsic exists in arm_neon.h (e.g., vld5_u8 does NOT exist). Compile-check incrementally rather than writing large blocks. For DMA buffer reads, assume non-cacheable memory and use vectorized loads with prefetch.
+
+## Test & Verify Loop
+After any code change: (1) build, (2) run the relevant test suite, (3) on fix-and-retry tasks, iterate until ALL tests pass before declaring done. Don't stop at compilation success.
+
+## Session Hygiene
+When approaching context/usage limits, STOP starting new investigations. Instead: commit current progress, write a STATUS.md summarizing the hypothesis/next step, and exit cleanly so the next session can resume.

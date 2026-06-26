@@ -1,0 +1,18 @@
+---
+source_file: "src/vision/dual_camera_manager.cpp"
+type: "code"
+community: "Community 93"
+location: "L21"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Community_93
+---
+
+# init_mipi()
+
+## Connections
+- [[CameraWrapper]] - `references` [EXTRACTED]
+- [[dual_camera_manager.cpp]] - `contains` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Community_93
