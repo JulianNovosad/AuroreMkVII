@@ -14,10 +14,12 @@
  */
 
 #include <pthread.h>
+#include <pwd.h>
 #include <sched.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -239,6 +241,57 @@ bool drop_privileges(bool keep_rt_caps = true) {
               << std::endl;
 
     return true;
+}
+
+// Spawn Node.js web server (aurore-link) as a child process
+pid_t spawn_web_server() {
+    const char* node_user = "pi";
+    const char* repo_root = "/home/pi/AuroreMkVII";
+    const char* server_dir = "aurore-link";
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        std::cerr << "Failed to spawn Node.js server: " << strerror(errno) << std::endl;
+        return -1;
+    }
+
+    if (pid == 0) {  // Child process
+        // Change to repository root, then to server directory
+        if (chdir(repo_root) != 0) {
+            std::cerr << "[aurore-link] Failed to cd to " << repo_root << ": " << strerror(errno)
+                      << std::endl;
+            exit(1);
+        }
+        if (chdir(server_dir) != 0) {
+            std::cerr << "[aurore-link] Failed to cd to " << server_dir << ": " << strerror(errno)
+                      << std::endl;
+            exit(1);
+        }
+
+        // Get user info for node_user
+        struct passwd* pw = getpwnam(node_user);
+        if (!pw) {
+            std::cerr << "[aurore-link] User '" << node_user << "' not found" << std::endl;
+            exit(1);
+        }
+
+        // Drop privileges to node_user
+        if (setgid(pw->pw_gid) != 0 || setuid(pw->pw_uid) != 0) {
+            std::cerr << "[aurore-link] Failed to drop privileges to " << node_user << std::endl;
+            exit(1);
+        }
+
+        // Execute Node.js server
+        execl("/usr/bin/node", "node", "server.js", nullptr);
+
+        // If execl returns, it failed
+        std::cerr << "[aurore-link] Failed to exec Node.js: " << strerror(errno) << std::endl;
+        exit(1);
+    }
+
+    // Parent process
+    std::cout << "Web server (aurore-link) spawned with PID " << pid << std::endl;
+    return pid;
 }
 
 }  // anonymous namespace
@@ -473,6 +526,12 @@ int main(int argc, char* argv[]) {
     // Command socket: receives JSON-derived text commands from aurore-link (Node.js)
     aurore::CommandSocket cmd_socket;
     cmd_socket.start();
+
+    // Spawn Node.js web server (aurore-link) for remote HUD interface on port 8080
+    pid_t web_server_pid = spawn_web_server();
+    if (web_server_pid == -1) {
+        std::cerr << "Warning: Failed to spawn web server" << std::endl;
+    }
 
     // Gimbal controller (FusionHAT+ sysfs driver — fails gracefully without hardware)
     aurore::FusionHat fusion_hat;
@@ -1676,6 +1735,28 @@ int main(int argc, char* argv[]) {
 
     // Stop telemetry writer
     telemetry.stop();
+
+    // Terminate web server gracefully
+    if (web_server_pid != -1) {
+        std::cout << "Terminating web server (PID " << web_server_pid << ")..." << std::endl;
+        kill(web_server_pid, SIGTERM);
+        // Wait for graceful shutdown (2 second timeout)
+        for (int i = 0; i < 20; i++) {
+            int status;
+            pid_t result = waitpid(web_server_pid, &status, WNOHANG);
+            if (result == web_server_pid) {
+                std::cout << "Web server terminated." << std::endl;
+                break;
+            }
+            usleep(100000);  // 100ms
+        }
+        // Force kill if still running
+        if (kill(web_server_pid, 0) == 0) {
+            std::cout << "Force killing web server..." << std::endl;
+            kill(web_server_pid, SIGKILL);
+            waitpid(web_server_pid, nullptr, 0);
+        }
+    }
 
     // Unlock memory
     munlockall();
