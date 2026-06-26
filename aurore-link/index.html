@@ -22,6 +22,16 @@
       <!-- Scanline overlay (video layer only) -->
       <div class="video-overlay-noise"></div>
 
+      <!-- Fault/Error Overlay — displayed when RPi 5 is unreachable -->
+      <div id="fault-overlay" class="fault-overlay hidden">
+        <div class="fault-message">
+          <div class="fault-title">⚠ SYSTEM FAULT ⚠</div>
+          <div class="fault-reason" id="fault-reason">RPi 5 not responding</div>
+          <div class="fault-detail" id="fault-detail">Cannot connect to Aurore MkVII control system</div>
+          <div class="fault-hint">Waiting for connection...</div>
+        </div>
+      </div>
+
       <!-- ====================================================
            BALLISTIC PIPPER — Offset crosshair for lead
            Placed outside hud-overlay for proper z-index

@@ -119,8 +119,8 @@ function findUsbCamera() {
 // ===========================================================================
 
 const SYSFS_PWM_BASE = '/sys/class/fusion_hat/fusion_hat/pwm';
-const SERVO_PAN_CH   = 10;
-const SERVO_TILT_CH  = 11;
+const SERVO_PAN_CH   = 11;  // left-right pan (physical port 11)
+const SERVO_TILT_CH  = 10;  // up-down tilt (physical port 10)
 const SERVO_PERIOD_US = 20000;  // 50 Hz
 
 // Server-side state: last commanded angles (degrees, 0–180)
@@ -1092,22 +1092,7 @@ hudWss.on('connection', (ws, req) => {
         state.gimbalYaw = Math.max(-90, Math.min(90, state.gimbalYaw));
         state.gimbalPitch = Math.max(-10, Math.min(45, state.gimbalPitch));
 
-        // Write to actual servos - convert from -90..90 / -10..45 to 0..180
-        // Note: Invert axes if servos are mounted backwards
-        const INVERT_PAN = true;    // Set true if pan direction is reversed (A/D swapped)
-        const INVERT_TILT = true;   // Set true if tilt direction is reversed (W moves down instead of up)
-        
-        const panAngle = (INVERT_PAN ? -state.gimbalYaw : state.gimbalYaw) + 90;
-        const tiltAngle = (INVERT_TILT ? -state.gimbalPitch : state.gimbalPitch) + 90;
-        
-        try {
-          writeServoAngle(SERVO_PAN_CH, panAngle);
-          writeServoAngle(SERVO_TILT_CH, tiltAngle);
-          console.log(`[SERVO] Wrote pan=${panAngle.toFixed(1)}° tilt=${tiltAngle.toFixed(1)}° (yaw=${state.gimbalYaw.toFixed(1)} pitch=${state.gimbalPitch.toFixed(1)})`);
-        } catch (err) {
-          console.error('[SERVO] Write failed:', err.message);
-        }
-
+        // C++ actuation thread owns servo control at 120Hz — do not write sysfs here.
         sendCmd(`FREECAM ${state.gimbalYaw.toFixed(3)} ${state.gimbalPitch.toFixed(3)}`);
         console.log(`[CMD] freecam az=${az.toFixed(2)} el=${el.toFixed(2)} → yaw=${state.gimbalYaw.toFixed(2)} pitch=${state.gimbalPitch.toFixed(2)}`);
         break;
@@ -1128,7 +1113,19 @@ hudWss.on('connection', (ws, req) => {
     hudClients.delete(ws);
   });
 
-  ws.send(JSON.stringify(buildTelemetry()));
+  // Send initial telemetry (real or fault state, not mocks)
+  let initialTelemetry;
+  if (state.use_hud_socket && state.hud_socket_connected && lastHudFrameData) {
+    initialTelemetry = lastHudFrameData;
+  } else {
+    initialTelemetry = {
+      ts: Date.now(),
+      fault: true,
+      fault_reason: 'RPi 5 not responding',
+      fault_detail: 'Cannot connect to Aurore MkVII control system',
+    };
+  }
+  ws.send(JSON.stringify(initialTelemetry));
 });
 
 // ===========================================================================
@@ -1167,12 +1164,24 @@ setInterval(() => {
 
   let telemetry;
   if (state.use_hud_socket && state.hud_socket_connected && lastHudFrameData) {
+    // Real data from C++ binary
     telemetry = lastHudFrameData;
+  } else if (!state.use_hud_socket || !state.hud_socket_connected) {
+    // No connection to C++ binary — send fault state instead of mocks
+    telemetry = {
+      ts: Date.now(),
+      fault: true,
+      fault_reason: 'RPi 5 not responding',
+      fault_detail: 'Cannot connect to Aurore MkVII control system',
+    };
   } else {
-    state.frame_count += Math.round(120 * TELEMETRY_INTERVAL_MS / 1000);
-    state.track_t += 0.012;
-    state.phit_t += 0.021;
-    telemetry = buildTelemetry();
+    // Fallback (should not reach here)
+    telemetry = {
+      ts: Date.now(),
+      fault: true,
+      fault_reason: 'Unknown error',
+      fault_detail: 'Telemetry unavailable',
+    };
   }
 
   const msg = JSON.stringify(telemetry);

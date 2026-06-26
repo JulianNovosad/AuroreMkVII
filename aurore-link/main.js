@@ -10,6 +10,9 @@
 // DOM refs — Video Stream
 // ---------------------------------------------------------------------------
 const videoEl = document.getElementById('video');
+const faultOverlay = document.getElementById('fault-overlay');
+const faultReasonEl = document.getElementById('fault-reason');
+const faultDetailEl = document.getElementById('fault-detail');
 
 // ---------------------------------------------------------------------------
 // DOM refs — HUD Overlay Quadrants
@@ -38,52 +41,29 @@ const bracketBL  = document.querySelector('.bracket-bl');
 const bracketBR  = document.querySelector('.bracket-br');
 
 // ---------------------------------------------------------------------------
-// Keyboard Controls State
+// Gimbal Control — Trapezoidal Velocity Profile
 // ---------------------------------------------------------------------------
-const keyState = {};
-const keyTimers = {};
-const TAP_WINDOW_MS = 100;  // Double tap window for snappy response
-const TAP_DELTA = 0.75;     // Single tap: 0.75°
-const DOUBLE_TAP_DELTA = 3; // Double tap: 3°
-const HOLD_DELTA = 0.15;    // Hold: 0.15° per 100ms (1.5°/sec)
-const HOLD_INTERVAL_MS = 100; // 10Hz command rate for hold slew
-
-// Accumulated gimbal position (matches C++ gimbal controller)
-let accumulatedYaw = 0;
-let accumulatedPitch = 0;
 
 // Gimbal limits (MUST match C++: src/actuation/gimbal_controller.hpp)
-const GIMBAL_YAW_MIN = -90;
-const GIMBAL_YAW_MAX = 90;
+const GIMBAL_YAW_MIN   = -90;
+const GIMBAL_YAW_MAX   =  90;
 const GIMBAL_PITCH_MIN = -10;
-const GIMBAL_PITCH_MAX = 45;
+const GIMBAL_PITCH_MAX =  45;
 
-// Smoothing for realistic gimbal movement (matches real servo dynamics)
-let targetYaw = 0;             // Target gimbal position
-let targetPitch = 0;
-let currentYaw = 0;            // Current (smoothed) position
-let currentPitch = 0;
-let velocityYaw = 0;           // Current angular velocity (°/sec)
-let velocityPitch = 0;
+// Trapezoid parameters
+const MAX_SPEED = 60;          // °/s  — peak slew rate
+const ACCEL     = 90;          // °/s² — ramp up / ramp down
+const UPDATE_HZ = 30;
+const dt        = 1 / UPDATE_HZ;
 
-// Gimbal smoothing using exponential moving average (EMA)
-// Much simpler and more reliable than PD control
-const SMOOTHING_ENABLED = true;
-const SMOOTH_ALPHA = 0.08;  // 0.08 = very smooth, 8% of new value per frame
+// Gimbal state
+let yaw      = 0;   // current absolute position (°)
+let pitch    = 0;
+let velYaw   = 0;   // current velocity (°/s)
+let velPitch = 0;
 
-// Servo latency simulation (real servos have ~70ms delay)
-const SERVO_LATENCY_MS = 70;
-const SERVO_LATENCY_FRAMES = 4;  // ~70ms at 60fps
-let latencyBufferYaw = [];       // Circular buffer for delayed position
-let latencyBufferPitch = [];
-
-// PD control state
-let prevErrorYaw = 0;
-let prevErrorPitch = 0;
-let lastSendTime = 0;
-let smoothingInitialized = false;  // Track if smoothing has started
-
-let holdInterval = null;
+// WASD held-key state
+const keyDown = { KeyW: false, KeyA: false, KeyS: false, KeyD: false };
 
 // ---------------------------------------------------------------------------
 // HUD Update Functions
@@ -139,9 +119,8 @@ function updateGimbalPipper(gimbal) {
   const degScaleX = W / 66;  // pixels per degree horizontal
   const degScaleY = H / 41;  // pixels per degree vertical
 
-  // Use smoothed current position if smoothing is active, otherwise use telemetry
-  const displayYaw = (SMOOTHING_ENABLED && smoothingInitialized) ? currentYaw : gimbal.yaw;
-  const displayPitch = (SMOOTHING_ENABLED && smoothingInitialized) ? currentPitch : gimbal.pitch;
+  const displayYaw   = yaw;
+  const displayPitch = pitch;
 
   // Gimbal yaw moves horizontally, pitch moves vertically
   const px = cx + displayYaw * degScaleX;
@@ -267,19 +246,8 @@ function updateHUD(s) {
   // Link status (derived from WebSocket state)
   // Updated separately by connection handler
 
-  // Gimbal coords - use smoothed values when available
-  if (SMOOTHING_ENABLED && smoothingInitialized) {
-    gimbalCoordsEl.textContent = `AZ ${currentYaw.toFixed(1)}° EL ${currentPitch.toFixed(1)}°`;
-  } else {
-    gimbalCoordsEl.textContent = 'AZ ' + s.gimbal.yaw.toFixed(1) + '° EL ' + s.gimbal.pitch.toFixed(1) + '°';
-  }
-
-  // Update analog dial - use smoothed values when available
-  if (SMOOTHING_ENABLED && smoothingInitialized) {
-    gimbalNeedle.style.transform = `rotate(${currentYaw}deg)`;
-  } else {
-    updateGimbalDial(s.gimbal.yaw);
-  }
+  gimbalCoordsEl.textContent = `AZ ${yaw.toFixed(1)}° EL ${pitch.toFixed(1)}°`;
+  gimbalNeedle.style.transform = `rotate(${yaw}deg)`;
 
   // Sensor params (placeholder — not in current telemetry)
   sensorParamsEl.textContent = 'WHOT BRT -- CNT --';
@@ -294,6 +262,16 @@ let reconnectDelay = 2000;
 
 function updateLinkStatus(connected) {
   lnkStatusEl.textContent = connected ? 'LNK: UP' : 'LNK: DOWN';
+}
+
+function showFaultOverlay(reason, detail) {
+  faultReasonEl.textContent = reason || 'RPi 5 not responding';
+  faultDetailEl.textContent = detail || 'Cannot connect to Aurore MkVII control system';
+  faultOverlay.classList.remove('hidden');
+}
+
+function hideFaultOverlay() {
+  faultOverlay.classList.add('hidden');
 }
 
 function connect() {
@@ -311,14 +289,21 @@ function connect() {
   ws.addEventListener('message', (ev) => {
     try {
       const s = JSON.parse(ev.data);
-      updateHUD(s);
+      if (s.fault) {
+        showFaultOverlay(s.fault_reason, s.fault_detail);
+      } else {
+        hideFaultOverlay();
+        updateHUD(s);
+      }
     } catch (err) {
       console.warn('Bad telemetry JSON:', err);
+      showFaultOverlay('Protocol Error', 'Failed to parse telemetry');
     }
   });
 
   ws.addEventListener('close', () => {
     updateLinkStatus(false);
+    showFaultOverlay('Connection Lost', 'WebSocket disconnected from control station');
     setTimeout(connect, reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 1.5, 10000);
   });
@@ -513,166 +498,53 @@ function switchMode(newMode) {
   }
 }
 
-// Gimbal smoothing - called every animation frame
-// Implements PD control + servo latency simulation
-let lastSmoothTime = 0;
-let commandFrameCount = 0;
+// ---------------------------------------------------------------------------
+// Trapezoidal Velocity Profile — 30 Hz control tick
+// ---------------------------------------------------------------------------
 
-function updateGimbalSmoothing(timestamp) {
-  // Mark smoothing as initialized on first run
-  if (!smoothingInitialized) {
-    smoothingInitialized = true;
-    console.log('[SMOOTH] Smoothing initialized, video:', videoEl ? videoEl.clientWidth + 'x' + videoEl.clientHeight : 'null');
-    console.log('[SMOOTH] Starting loop, SMOOTHING_ENABLED:', SMOOTHING_ENABLED);
-    // Initialize current position to match target (no sudden jump)
-    currentYaw = targetYaw;
-    currentPitch = targetPitch;
-    lastSmoothTime = timestamp;
-  }
-
-  if (!SMOOTHING_ENABLED) {
-    // No smoothing - just use target directly
-    currentYaw = targetYaw;
-    currentPitch = targetPitch;
-    if (currentMode === 'FREECAM') {
-      console.log('[SMOOTH] No smoothing, sending:', { az: currentYaw, el: currentPitch });
-      sendCmd({ type: 'freecam', az: currentYaw, el: currentPitch });
-    }
-  } else {
-    // Simple exponential moving average smoothing
-    // current = current + alpha * (target - current)
-    const alpha = SMOOTH_ALPHA;
-    
-    currentYaw += alpha * (targetYaw - currentYaw);
-    currentPitch += alpha * (targetPitch - currentPitch);
-    
-    // Send smoothed position at 30Hz (both AUTO and FREECAM modes)
-    const sendYaw = currentYaw;
-    const sendPitch = currentPitch;
-    
-    if (timestamp - lastSendTime >= 33.33) {
-      if (isFinite(sendYaw) && isFinite(sendPitch)) {
-        sendCmd({ type: 'freecam', az: sendYaw, el: sendPitch });
-        lastSendTime = timestamp;
-      }
-    }
-  }
-
-  // Continue animation loop
-  requestAnimationFrame(updateGimbalSmoothing);
+function moveToward(val, target, step) {
+  if (val < target) return Math.min(val + step, target);
+  if (val > target) return Math.max(val - step, target);
+  return val;
 }
 
-// Start smoothing loop
-console.log('[SMOOTH] Checking if should start loop, SMOOTHING_ENABLED:', SMOOTHING_ENABLED);
-if (SMOOTHING_ENABLED) {
-  console.log('[SMOOTH] Starting animation loop');
-  requestAnimationFrame(updateGimbalSmoothing);
-}
+function trapezoidTick() {
+  // Desired velocity from held keys
+  let wantVelYaw   = 0;
+  let wantVelPitch = 0;
+  if (keyDown.KeyA) wantVelYaw   -= MAX_SPEED;
+  if (keyDown.KeyD) wantVelYaw   += MAX_SPEED;
+  if (keyDown.KeyW) wantVelPitch += MAX_SPEED;
+  if (keyDown.KeyS) wantVelPitch -= MAX_SPEED;
 
-// Gimbal control command
-function sendGimbalCommand(azDelta, elDelta) {
-  console.log('[GIMBAL] sendGimbalCommand called:', { azDelta, elDelta });
-  // Accumulate deltas for absolute position
-  accumulatedYaw += azDelta;
-  accumulatedPitch += elDelta;
-  console.log('[GIMBAL] After accumulate:', { accumulatedYaw, accumulatedPitch });
+  // Ramp velocity toward desired (trapezoid — constant acceleration)
+  velYaw   = moveToward(velYaw,   wantVelYaw,   ACCEL * dt);
+  velPitch = moveToward(velPitch, wantVelPitch, ACCEL * dt);
 
-  // Clamp to gimbal limits (MUST match C++: src/actuation/gimbal_controller.hpp)
-  accumulatedYaw = Math.max(GIMBAL_YAW_MIN, Math.min(GIMBAL_YAW_MAX, accumulatedYaw));
-  accumulatedPitch = Math.max(GIMBAL_PITCH_MIN, Math.min(GIMBAL_PITCH_MAX, accumulatedPitch));
+  // Integrate position
+  yaw   = Math.max(GIMBAL_YAW_MIN,   Math.min(GIMBAL_YAW_MAX,   yaw   + velYaw   * dt));
+  pitch = Math.max(GIMBAL_PITCH_MIN, Math.min(GIMBAL_PITCH_MAX, pitch + velPitch * dt));
 
-  // Set target for smoothing
-  targetYaw = accumulatedYaw;
-  targetPitch = accumulatedPitch;
-  console.log('[GIMBAL] After set target:', { targetYaw, targetPitch });
-  
-  // If smoothing is disabled, send immediately
-  if (!SMOOTHING_ENABLED) {
-    console.log('[GIMBAL] Smoothing disabled, sending immediately:', { az: targetYaw, el: targetPitch });
-    sendCmd({ type: 'freecam', az: targetYaw, el: targetPitch });
+  // Kill velocity at limits to prevent windup
+  if (yaw   <= GIMBAL_YAW_MIN   || yaw   >= GIMBAL_YAW_MAX)   velYaw   = 0;
+  if (pitch <= GIMBAL_PITCH_MIN || pitch >= GIMBAL_PITCH_MAX) velPitch = 0;
+
+  // Send absolute target to C++ (joystick bypasses this when active)
+  if (currentMode === 'FREECAM' && !joyActive) {
+    sendCmd({ type: 'freecam', az: yaw, el: pitch });
   }
 }
 
-// Key event handlers
-function handleWASDKey(key, isPressed) {
-  console.log('[WASD] handleWASDKey called:', key, isPressed, 'currentMode:', currentMode);
-  if (currentMode !== 'FREECAM') {
-    console.log('[WASD] Not in FREECAM mode, ignoring');
-    return;
-  }
+setInterval(trapezoidTick, 1000 / UPDATE_HZ);
 
-  const now = Date.now();
-
-  if (isPressed) {
-    console.log('[WASD] Key pressed, stopping hold slew');
-    // Stop any existing hold interval first
-    stopHoldSlew();
-    
-    keyState[key] = true;
-    const lastTap = keyTimers[key];
-    
-    if (lastTap && (now - lastTap < TAP_WINDOW_MS)) {
-      // Double tap detected (within 500ms)
-      keyTimers[key] = 0;
-      applyGimbalDelta(key, DOUBLE_TAP_DELTA);
-      showNotification(`${key}: +${DOUBLE_TAP_DELTA}°`);
-    } else {
-      // Single tap detected
-      keyTimers[key] = now;
-      applyGimbalDelta(key, TAP_DELTA);
-      showNotification(`${key}: +${TAP_DELTA}°`);
-      
-      // Start hold slew after tap window if still pressing
-      setTimeout(() => {
-        if (keyState[key] && keyTimers[key] === now) {
-          startHoldSlew(key);
-        }
-      }, TAP_WINDOW_MS);
-    }
-  } else {
-    keyState[key] = false;
-    stopHoldSlew();
-  }
+// WASD handlers — just gate on FREECAM, trapezoid does the rest
+function onKeyDown(key) {
+  if (currentMode !== 'FREECAM') return;
+  keyDown[key] = true;
 }
 
-function applyGimbalDelta(key, delta) {
-  console.log('[WASD] applyGimbalDelta:', key, delta);
-  switch(key) {
-    case 'KeyW': sendGimbalCommand(0, delta); break;      // Pitch up
-    case 'KeyS': sendGimbalCommand(0, -delta); break;     // Pitch down
-    case 'KeyA': sendGimbalCommand(-delta, 0); break;     // Yaw left
-    case 'KeyD': sendGimbalCommand(delta, 0); break;      // Yaw right
-  }
-  console.log('[WASD] After sendGimbalCommand:', { targetYaw, targetPitch, accumulatedYaw, accumulatedPitch });
-}
-
-function startHoldSlew(key) {
-  if (!keyState[key]) return;
-  
-  const deltaMap = {
-    'KeyW': [0, HOLD_DELTA],
-    'KeyS': [0, -HOLD_DELTA],
-    'KeyA': [-HOLD_DELTA, 0],
-    'KeyD': [HOLD_DELTA, 0]
-  };
-  
-  const [azDelta, elDelta] = deltaMap[key];
-  
-  // Send commands at 10Hz while holding
-  holdInterval = setInterval(() => {
-    if (!keyState[key]) {
-      stopHoldSlew();
-      return;
-    }
-    sendGimbalCommand(azDelta, elDelta);
-  }, HOLD_INTERVAL_MS);
-}
-
-function stopHoldSlew() {
-  if (holdInterval) {
-    clearInterval(holdInterval);
-    holdInterval = null;
-  }
+function onKeyUp(key) {
+  keyDown[key] = false;
 }
 
 // Zoom control
@@ -697,22 +569,20 @@ function assignTargetAtPosition(screenX, screenY) {
   
   // RPI Cam Module 3: 66° horizontal FOV, 41° vertical FOV
   // Convert pixel offset to degrees
-  const yaw = (offsetX / (rect.width / 2)) * 33;   // ±33° (half of 66°)
-  const pitch = -(offsetY / (rect.height / 2)) * 20.5;  // ±20.5° (half of 41°), negative because Y is inverted
-  
+  const yawDelta   =  (offsetX / (rect.width  / 2)) * 33;    // ±33° (half of 66°)
+  const pitchDelta = -(offsetY / (rect.height / 2)) * 20.5;  // ±20.5° (half of 41°)
+
   // Click offset is relative to where the gimbal is currently pointing.
-  // Add to current accumulated position to get the absolute target angle.
-  const absoluteYaw   = Math.max(GIMBAL_YAW_MIN,   Math.min(GIMBAL_YAW_MAX,   accumulatedYaw   + yaw));
-  const absolutePitch = Math.max(GIMBAL_PITCH_MIN,  Math.min(GIMBAL_PITCH_MAX, accumulatedPitch + pitch));
+  const absoluteYaw   = Math.max(GIMBAL_YAW_MIN,   Math.min(GIMBAL_YAW_MAX,   yaw   + yawDelta));
+  const absolutePitch = Math.max(GIMBAL_PITCH_MIN,  Math.min(GIMBAL_PITCH_MAX, pitch + pitchDelta));
 
   console.log('[CLICK] Screen:', { x: screenX, y: screenY }, 'Offset:', { x: offsetX.toFixed(0), y: offsetY.toFixed(0) });
-  console.log('[CLICK] Angles:', { yawDelta: yaw.toFixed(1), pitchDelta: pitch.toFixed(1), absoluteYaw: absoluteYaw.toFixed(1), absolutePitch: absolutePitch.toFixed(1) });
+  console.log('[CLICK] Angles:', { yawDelta: yawDelta.toFixed(1), pitchDelta: pitchDelta.toFixed(1), absoluteYaw: absoluteYaw.toFixed(1), absolutePitch: absolutePitch.toFixed(1) });
 
-  // Update accumulated position and target for smoothing
-  accumulatedYaw = absoluteYaw;
-  accumulatedPitch = absolutePitch;
-  targetYaw = absoluteYaw;
-  targetPitch = absolutePitch;
+  yaw = absoluteYaw;
+  pitch = absolutePitch;
+  velYaw = 0;
+  velPitch = 0;
 
   showNotification(`TARGET: AZ ${absoluteYaw.toFixed(1)}° EL ${absolutePitch.toFixed(1)}°`);
 }
@@ -751,27 +621,14 @@ window.addEventListener('keydown', (e) => {
     case 'KeyA':
     case 'KeyS':
     case 'KeyD':
-      handleWASDKey(e.code, true);
+      onKeyDown(e.code);
       break;
     case 'KeyR':
       if (currentMode === 'FREECAM') {
-        // Stop all movement first
-        stopHoldSlew();
-        // Reset all key states
-        keyState['KeyW'] = false;
-        keyState['KeyA'] = false;
-        keyState['KeyS'] = false;
-        keyState['KeyD'] = false;
-        keyTimers['KeyW'] = 0;
-        keyTimers['KeyA'] = 0;
-        keyTimers['KeyS'] = 0;
-        keyTimers['KeyD'] = 0;
-        // Reset accumulated position to center (smoothing will interpolate)
-        accumulatedYaw = 0;
-        accumulatedPitch = 0;
-        targetYaw = 0;
-        targetPitch = 0;
-        showNotification('GIMBAL: CENTERED (0°, 0°)');
+        keyDown.KeyW = keyDown.KeyA = keyDown.KeyS = keyDown.KeyD = false;
+        yaw = 0; pitch = 0; velYaw = 0; velPitch = 0;
+        sendCmd({ type: 'freecam', az: 0, el: 0 });
+        showNotification('GIMBAL: CENTERED');
       }
       break;
     case 'Equal':
@@ -787,7 +644,7 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('keyup', (e) => {
   if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
-    handleWASDKey(e.code, false);
+    onKeyUp(e.code);
   }
 });
 
