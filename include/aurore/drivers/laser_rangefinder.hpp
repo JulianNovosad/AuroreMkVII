@@ -12,7 +12,7 @@ namespace aurore {
  */
 enum class LrfProtocol : uint8_t {
     M01 = 0,         ///< M01 9-byte continuous mode (0xAA sync, passive)
-    MODBUS_RTU = 1,   ///< Modbus RTU poll/response (active polling)
+    MODBUS_RTU = 1,  ///< Modbus RTU poll/response (active polling)
 };
 
 // Laser rangefinder driver over UART (9600 8N1).
@@ -22,7 +22,7 @@ enum class LrfProtocol : uint8_t {
 // Spawns a background thread for continuous reading / periodic polling.
 // All public methods are thread-safe.
 class LaserRangefinder {
-public:
+   public:
     static constexpr float kMaxRangeM = 50.0f;
     static constexpr float kMinRangeM = 0.05f;
 
@@ -32,9 +32,9 @@ public:
     // [6-9]=Distance in BCD (4 bytes = 8 digits, e.g. 0x00001234 = 12.34m)
     // [10-11]=additional data, [12]=checksum (sum of bytes 1-11)
     static constexpr int kM01FrameLen = 13;
-    static constexpr int kM01DistOffset = 6;     // BCD distance at bytes 6-9
-    static constexpr int kM01MinFrameLen = 9;    // Minimum frame we accept
-    static constexpr int kM01MaxFrameLen = 13;   // Full frame length
+    static constexpr int kM01DistOffset = 6;    // BCD distance at bytes 6-9
+    static constexpr int kM01MinFrameLen = 9;   // Minimum frame we accept
+    static constexpr int kM01MaxFrameLen = 13;  // Full frame length
 
     // Modbus RTU constants
     static constexpr uint8_t kModbusAddr = 0x01;
@@ -76,8 +76,12 @@ public:
     LrfProtocol protocol() const noexcept { return protocol_; }
 
     // Diagnostic counters (lock-free, read from any thread)
-    uint32_t frames_received() const noexcept { return frames_received_.load(std::memory_order_acquire); }
-    uint32_t status_frames_received() const noexcept { return status_frames_.load(std::memory_order_acquire); }
+    uint32_t frames_received() const noexcept {
+        return frames_received_.load(std::memory_order_acquire);
+    }
+    uint32_t status_frames_received() const noexcept {
+        return status_frames_.load(std::memory_order_acquire);
+    }
     uint32_t crc_errors() const noexcept { return crc_errors_.load(std::memory_order_acquire); }
     uint32_t frame_errors() const noexcept { return frame_errors_.load(std::memory_order_acquire); }
 
@@ -101,7 +105,7 @@ public:
      */
     bool probe_present(int timeout_ms = 200);
 
-private:
+   private:
     void reader_loop_m01();
     void reader_loop_modbus();
 
@@ -120,14 +124,15 @@ private:
 
     int fd_{-1};
     LrfProtocol protocol_{LrfProtocol::M01};
-    std::atomic<uint32_t> range_mm_{0};    // 0 = no valid reading
+    std::atomic<uint32_t> range_mm_{0};  // 0 = no valid reading
     std::atomic<uint64_t> last_ts_ns_{0};
     std::atomic<bool> running_{false};
     std::thread reader_thread_;
 
     // Diagnostic counters
     std::atomic<uint32_t> frames_received_{0};
-    std::atomic<uint32_t> status_frames_{0};  // 0xEE status/warm-up frames (LRF connected, no target)
+    std::atomic<uint32_t> status_frames_{
+        0};  // 0xEE status/warm-up frames (LRF connected, no target)
     std::atomic<uint32_t> crc_errors_{0};
     std::atomic<uint32_t> frame_errors_{0};
 };

@@ -1,10 +1,10 @@
 /**
  * @file wcet_measurement.cpp
  * @brief Worst-Case Execution Time measurement tool
- * 
+ *
  * Measures WCET for control loop components using statistical analysis.
  * Collects 100M+ samples and fits to Generalized Extreme Value distribution.
- * 
+ *
  * Usage:
  *   ./aurore_wcet_measurement --samples=10000000
  */
@@ -23,7 +23,7 @@
 namespace {
 
 struct WcetConfig {
-    size_t num_samples = 1000000;  // 1M samples default
+    size_t num_samples = 1000000;   // 1M samples default
     uint64_t workload_ns = 100000;  // 100μs simulated work
     const char* output_file = nullptr;
     bool verbose = false;
@@ -31,24 +31,21 @@ struct WcetConfig {
 
 WcetConfig parse_args(int argc, char* argv[]) {
     WcetConfig config;
-    
+
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
-        
+
         if (arg.rfind("--samples=", 0) == 0) {
             config.num_samples = std::stoull(arg.substr(10));
-        }
-        else if (arg.rfind("--workload=", 0) == 0) {
+        } else if (arg.rfind("--workload=", 0) == 0) {
             config.workload_ns = std::stoull(arg.substr(11));
-        }
-        else if (arg.rfind("--output=", 0) == 0) {
+        } else if (arg.rfind("--output=", 0) == 0) {
             config.output_file = arg.substr(9).c_str();
-        }
-        else if (arg == "--verbose" || arg == "-v") {
+        } else if (arg == "--verbose" || arg == "-v") {
             config.verbose = true;
         }
     }
-    
+
     return config;
 }
 
@@ -75,32 +72,33 @@ struct Statistics {
 
 Statistics calculate_stats(std::vector<uint64_t>& samples) {
     Statistics stats;
-    
+
     std::sort(samples.begin(), samples.end());
-    
+
     stats.min = samples.front();
     stats.max = samples.back();
-    
+
     // Mean
     uint64_t sum = std::accumulate(samples.begin(), samples.end(), 0ULL);
     stats.mean = sum / samples.size();
-    
+
     // Median
     stats.median = samples[samples.size() / 2];
-    
+
     // Standard deviation
     uint64_t sq_sum = 0;
     for (auto s : samples) {
         int64_t diff = static_cast<int64_t>(s) - static_cast<int64_t>(stats.mean);
         sq_sum += static_cast<uint64_t>(diff * diff);
     }
-    stats.stddev = static_cast<uint64_t>(std::sqrt(static_cast<double>(sq_sum) / static_cast<double>(samples.size())));
-    
+    stats.stddev = static_cast<uint64_t>(
+        std::sqrt(static_cast<double>(sq_sum) / static_cast<double>(samples.size())));
+
     // Percentiles
     stats.p99 = samples[samples.size() * 99 / 100];
     stats.p999 = samples[samples.size() * 999 / 1000];
     stats.p9999 = samples[samples.size() * 9999 / 10000];
-    
+
     return stats;
 }
 
@@ -118,18 +116,18 @@ void print_stats(const Statistics& stats, const WcetConfig& config) {
     std::cout << "  P99:         " << stats.p99 << " ns" << std::endl;
     std::cout << "  P99.9:       " << stats.p999 << " ns" << std::endl;
     std::cout << "  P99.99:      " << stats.p9999 << " ns" << std::endl;
-    
+
     // WCET estimate (P99.99 with margin)
     uint64_t wcet_estimate = stats.p9999 * 110 / 100;  // 10% margin
     std::cout << "\nWCET Estimate (P99.99 + 10% margin): " << wcet_estimate << " ns" << std::endl;
-    
+
     // Jitter analysis
     uint64_t jitter = stats.stddev;
     double jitter_percent = static_cast<double>(jitter) / static_cast<double>(stats.mean) * 100.0;
     std::cout << "\nJitter Analysis:" << std::endl;
     std::cout << "  Absolute:    " << jitter << " ns" << std::endl;
     std::cout << "  Relative:    " << jitter_percent << "% of mean" << std::endl;
-    
+
     // Pass/fail against 5ms requirement
     bool pass = wcet_estimate <= 5000000;  // 5ms
     std::cout << "\nRequirement Check (WCET ≤ 5ms): " << (pass ? "PASS" : "FAIL") << std::endl;
@@ -141,7 +139,7 @@ void write_csv(const char* filename, const std::vector<uint64_t>& samples) {
         std::cerr << "Failed to open output file: " << filename << std::endl;
         return;
     }
-    
+
     out << "sample_index,execution_time_ns" << std::endl;
     for (size_t i = 0; i < samples.size(); i++) {
         out << i << "," << samples[i] << std::endl;
@@ -155,42 +153,43 @@ void run_jitter_analysis(size_t num_samples);
 
 int main(int argc, char* argv[]) {
     WcetConfig config = parse_args(argc, argv);
-    
+
     std::cout << "Aurore MkVII WCET Measurement Tool" << std::endl;
     std::cout << "===================================" << std::endl;
     std::cout << "Collecting " << config.num_samples << " samples..." << std::endl;
-    
+
     std::vector<uint64_t> samples;
     samples.reserve(config.num_samples);
-    
+
     auto total_start = aurore::get_timestamp();
-    
+
     for (size_t i = 0; i < config.num_samples; i++) {
         auto start = aurore::get_timestamp();
-        
+
         // Simulate work
         simulate_work(config.workload_ns);
-        
+
         auto end = aurore::get_timestamp();
         samples.push_back(end - start);
-        
+
         if (config.verbose && i % 100000 == 0) {
             std::cout << "  Collected " << i << " samples..." << std::endl;
         }
     }
-    
+
     auto total_end = aurore::get_timestamp();
     double total_time = static_cast<double>(total_end - total_start) / 1e9;
-    
+
     std::cout << "Collection complete in " << total_time << " seconds" << std::endl;
-    std::cout << "Sampling rate: " << (static_cast<double>(config.num_samples) / total_time) << " samples/sec" << std::endl;
-    
+    std::cout << "Sampling rate: " << (static_cast<double>(config.num_samples) / total_time)
+              << " samples/sec" << std::endl;
+
     // Calculate statistics
     Statistics stats = calculate_stats(samples);
-    
+
     // Print results
     print_stats(stats, config);
-    
+
     // Write CSV if requested
     if (config.output_file) {
         write_csv(config.output_file, samples);

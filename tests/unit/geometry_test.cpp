@@ -1,7 +1,8 @@
-#include "aurore/gimbal_controller.hpp"
 #include <cassert>
 #include <cmath>
 #include <iostream>
+
+#include "aurore/gimbal_controller.hpp"
 
 using namespace aurore;
 
@@ -79,7 +80,7 @@ void test_limits_clamping() {
     assert(cmd_max.az_deg <= 90.0f);
     assert(cmd_max.el_deg <= 45.0f);
     (void)cmd_max;
-    
+
     GimbalCommand cmd_min = controller.command_from_pixel(-2000.0f, 2000.0f);
     assert(cmd_min.az_deg >= -90.0f);
     assert(cmd_min.el_deg >= -45.0f);

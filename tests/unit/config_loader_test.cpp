@@ -1,12 +1,13 @@
 #include "aurore/config_loader.hpp"
 
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <cstdlib>
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
+
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <iostream>
+#include <string>
 
 namespace {
 
@@ -23,7 +24,7 @@ std::string create_temp_config_file() {
     }
     std::string path = std::string(temp_path) + ".json";
     close(fd);
-    
+
     std::ofstream out(path);
     if (!out.is_open()) {
         std::remove(temp_path);
@@ -147,25 +148,30 @@ int test_missing_key_returns_default() {
 
     int int_default = loader.get_int("nonexistent.key", 42);
     if (int_default != 42) {
-        std::cerr << "FAIL: test_missing_key_returns_default - int default expected 42, got " << int_default << "\n";
+        std::cerr << "FAIL: test_missing_key_returns_default - int default expected 42, got "
+                  << int_default << "\n";
         return 1;
     }
 
     float float_default = loader.get_float("nonexistent.key", 3.14f);
     if (float_default < 3.13f || float_default > 3.15f) {
-        std::cerr << "FAIL: test_missing_key_returns_default - float default expected 3.14, got " << float_default << "\n";
+        std::cerr << "FAIL: test_missing_key_returns_default - float default expected 3.14, got "
+                  << float_default << "\n";
         return 1;
     }
 
     bool bool_default = loader.get_bool("nonexistent.key", true);
     if (!bool_default) {
-        std::cerr << "FAIL: test_missing_key_returns_default - bool default expected true, got false\n";
+        std::cerr
+            << "FAIL: test_missing_key_returns_default - bool default expected true, got false\n";
         return 1;
     }
 
     std::string string_default = loader.get_string("nonexistent.key", "default_value");
     if (string_default != "default_value") {
-        std::cerr << "FAIL: test_missing_key_returns_default - string default expected 'default_value', got '" << string_default << "'\n";
+        std::cerr << "FAIL: test_missing_key_returns_default - string default expected "
+                     "'default_value', got '"
+                  << string_default << "'\n";
         return 1;
     }
 

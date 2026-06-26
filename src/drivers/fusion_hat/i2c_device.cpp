@@ -1,12 +1,13 @@
 #include "aurore/drivers/i2c_device.hpp"
 
-#include <cerrno>
-#include <cstring>
 #include <fcntl.h>
-#include <iostream>
 #include <linux/i2c-dev.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+
+#include <cerrno>
+#include <cstring>
+#include <iostream>
 
 namespace aurore {
 
@@ -17,9 +18,7 @@ I2cDevice::~I2cDevice() {
     }
 }
 
-I2cDevice::I2cDevice(I2cDevice&& other) noexcept : fd_(other.fd_) {
-    other.fd_ = -1;
-}
+I2cDevice::I2cDevice(I2cDevice&& other) noexcept : fd_(other.fd_) { other.fd_ = -1; }
 
 I2cDevice& I2cDevice::operator=(I2cDevice&& other) noexcept {
     if (this != &other) {
@@ -33,14 +32,13 @@ I2cDevice& I2cDevice::operator=(I2cDevice&& other) noexcept {
 bool I2cDevice::init(const std::string& device_path, uint8_t slave_addr) {
     fd_ = ::open(device_path.c_str(), O_RDWR);
     if (fd_ < 0) {
-        std::cerr << "I2cDevice: open " << device_path << " failed: "
-                  << std::strerror(errno) << "\n";
+        std::cerr << "I2cDevice: open " << device_path << " failed: " << std::strerror(errno)
+                  << "\n";
         return false;
     }
     if (::ioctl(fd_, I2C_SLAVE, static_cast<int>(slave_addr)) < 0) {
-        std::cerr << "I2cDevice: ioctl I2C_SLAVE(0x" << std::hex
-                  << static_cast<int>(slave_addr) << ") failed: "
-                  << std::strerror(errno) << "\n";
+        std::cerr << "I2cDevice: ioctl I2C_SLAVE(0x" << std::hex << static_cast<int>(slave_addr)
+                  << ") failed: " << std::strerror(errno) << "\n";
         ::close(fd_);
         fd_ = -1;
         return false;

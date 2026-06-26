@@ -28,8 +28,8 @@
 #include <vector>
 
 #include "aurore/safety_monitor.hpp"
-#include "aurore/timing.hpp"
 #include "aurore/state_machine.hpp"
+#include "aurore/timing.hpp"
 
 namespace {
 
@@ -44,25 +44,40 @@ std::atomic<uint32_t> g_faults_detected(0);
 std::atomic<uint32_t> g_faults_recovered(0);
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::cout << "  PASS: " << #name << std::endl; \
-    } \
-    catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                          \
+    do {                                                                        \
+        g_tests_run.fetch_add(1);                                               \
+        try {                                                                   \
+            name();                                                             \
+            g_tests_passed.fetch_add(1);                                        \
+            std::cout << "  PASS: " << #name << std::endl;                      \
+        } catch (const std::exception& e) {                                     \
+            g_tests_failed.fetch_add(1);                                        \
+            std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
+        }                                                                       \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_NE(a, b) do { if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " == " #b); } while(0)
-#define ASSERT_GT(a, b) do { if ((a) <= (b)) throw std::runtime_error("Assertion failed: " #a " <= " #b); } while(0)
-#define ASSERT_LT(a, b) do { if ((a) >= (b)) throw std::runtime_error("Assertion failed: " #a " >= " #b); } while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_NE(a, b)                                                              \
+    do {                                                                             \
+        if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " == " #b); \
+    } while (0)
+#define ASSERT_GT(a, b)                                                              \
+    do {                                                                             \
+        if ((a) <= (b)) throw std::runtime_error("Assertion failed: " #a " <= " #b); \
+    } while (0)
+#define ASSERT_LT(a, b)                                                              \
+    do {                                                                             \
+        if ((a) >= (b)) throw std::runtime_error("Assertion failed: " #a " >= " #b); \
+    } while (0)
 
 // ============================================================================
 // Fault Injection Framework
@@ -92,8 +107,8 @@ class FaultInjectionTestFixture {
           recovery_callback_count_(0) {
         // Configure safety monitor
         aurore::SafetyMonitorConfig config;
-        config.vision_deadline_ns = 10000000;       // 10ms
-        config.actuation_deadline_ns = 2000000;     // 2ms
+        config.vision_deadline_ns = 10000000;    // 10ms
+        config.actuation_deadline_ns = 2000000;  // 2ms
         config.frame_stall_threshold = 2;
         config.max_consecutive_misses = 3;
         config.watchdog_kick_interval_ms = 50;
@@ -132,7 +147,7 @@ class FaultInjectionTestFixture {
      * @return FaultInjectionResult Detection and recovery results
      */
     FaultInjectionResult inject_fault(aurore::SafetyFaultCode fault_code,
-                                       uint32_t fault_duration_ms = 100) {
+                                      uint32_t fault_duration_ms = 100) {
         FaultInjectionResult result;
         result.injected_fault = fault_code;
 
@@ -331,16 +346,14 @@ class FMEACoverageTracker {
         initialize_fault_codes();
     }
 
-    void record_coverage(aurore::SafetyFaultCode fault_code) {
-        covered_faults_.insert(fault_code);
-    }
+    void record_coverage(aurore::SafetyFaultCode fault_code) { covered_faults_.insert(fault_code); }
 
     void record_total(uint32_t count) { total_faults_ = count; }
 
     double coverage_percent() const noexcept {
         if (total_faults_ == 0) return 0.0;
-        return static_cast<double>(covered_faults_.size()) /
-               static_cast<double>(total_faults_) * 100.0;
+        return static_cast<double>(covered_faults_.size()) / static_cast<double>(total_faults_) *
+               100.0;
     }
 
     size_t covered_count() const noexcept { return covered_faults_.size(); }
@@ -612,8 +625,8 @@ TEST(test_fault_injection_fmea_coverage) {
     tracker.record_total(22);  // Total fault codes defined
 
     // Report coverage
-    std::cout << "  FMEA Coverage: " << tracker.covered_count() << "/"
-              << tracker.total_count() << " (" << tracker.coverage_percent() << "%)" << std::endl;
+    std::cout << "  FMEA Coverage: " << tracker.covered_count() << "/" << tracker.total_count()
+              << " (" << tracker.coverage_percent() << "%)" << std::endl;
 
     // Verify we tested multiple fault categories (relaxed requirement)
     ASSERT_GT(tracker.covered_count(), 0);
@@ -624,14 +637,14 @@ TEST(test_fault_injection_fault_code_strings) {
     ASSERT_NE(std::strlen(aurore::fault_code_to_string(aurore::SafetyFaultCode::NONE)), 0);
     ASSERT_NE(std::strlen(aurore::fault_code_to_string(aurore::SafetyFaultCode::VISION_STALLED)),
               0);
-    ASSERT_NE(
-        std::strlen(aurore::fault_code_to_string(aurore::SafetyFaultCode::EMERGENCY_STOP_REQUESTED)),
-        0);
+    ASSERT_NE(std::strlen(
+                  aurore::fault_code_to_string(aurore::SafetyFaultCode::EMERGENCY_STOP_REQUESTED)),
+              0);
 
     // Unknown code should return "UNKNOWN"
-    ASSERT_EQ(std::string(aurore::fault_code_to_string(
-                  static_cast<aurore::SafetyFaultCode>(0xFFFF))),
-              "UNKNOWN");
+    ASSERT_EQ(
+        std::string(aurore::fault_code_to_string(static_cast<aurore::SafetyFaultCode>(0xFFFF))),
+        "UNKNOWN");
 }
 
 TEST(test_fault_injection_safety_event_logging) {

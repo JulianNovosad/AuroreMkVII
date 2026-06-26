@@ -21,9 +21,8 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
-#include <string>
-
 #include <opencv2/core.hpp>
+#include <string>
 
 #include "aurore/camera_wrapper.hpp"
 #include "aurore/timing.hpp"
@@ -37,19 +36,19 @@ void signal_handler(int /*sig*/) { g_shutdown = 1; }
 struct Stats {
     uint64_t min_us{UINT64_MAX};
     uint64_t max_us{0};
-    double   sum_us{0.0};
-    double   sum_sq_us{0.0};
+    double sum_us{0.0};
+    double sum_sq_us{0.0};
     uint64_t count{0};
 
     void record(uint64_t v) {
         if (v < min_us) min_us = v;
         if (v > max_us) max_us = v;
-        sum_us    += static_cast<double>(v);
+        sum_us += static_cast<double>(v);
         sum_sq_us += static_cast<double>(v) * static_cast<double>(v);
         ++count;
     }
 
-    double mean()   const { return count ? sum_us / static_cast<double>(count) : 0.0; }
+    double mean() const { return count ? sum_us / static_cast<double>(count) : 0.0; }
     double stddev() const {
         if (count < 2) return 0.0;
         const double m = mean();
@@ -59,18 +58,18 @@ struct Stats {
 
 void print_stats(const char* label, const Stats& s) {
     std::cout << "\n  " << label << ":\n"
-              << "    Min:     " << s.min_us    << " µs\n"
-              << "    Max:     " << s.max_us    << " µs\n"
-              << "    Mean:    " << static_cast<uint64_t>(s.mean())   << " µs\n"
+              << "    Min:     " << s.min_us << " µs\n"
+              << "    Max:     " << s.max_us << " µs\n"
+              << "    Mean:    " << static_cast<uint64_t>(s.mean()) << " µs\n"
               << "    Jitter:  " << static_cast<uint64_t>(s.stddev()) << " µs (1\xCF\x83)\n";
 }
 
 }  // namespace
 
 int main(int argc, char* argv[]) {
-    uint64_t    num_samples = 1000;
+    uint64_t num_samples = 1000;
     std::string output_path = "latency_samples.csv";
-    bool        verbose     = false;
+    bool verbose = false;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -82,7 +81,7 @@ int main(int argc, char* argv[]) {
             verbose = true;
     }
 
-    std::signal(SIGINT,  signal_handler);
+    std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
 
     std::cout << "=== Aurore MkVII End-to-End Latency Measurement ===\n"
@@ -128,11 +127,9 @@ int main(int argc, char* argv[]) {
             if (!tracker_ready && wbgr.cols > 0) {
                 const int iw = wbgr.cols / 4;
                 const int ih = wbgr.rows / 4;
-                const cv::Rect2d bbox(
-                    static_cast<double>(wbgr.cols / 2 - iw / 2),
-                    static_cast<double>(wbgr.rows / 2 - ih / 2),
-                    static_cast<double>(iw),
-                    static_cast<double>(ih));
+                const cv::Rect2d bbox(static_cast<double>(wbgr.cols / 2 - iw / 2),
+                                      static_cast<double>(wbgr.rows / 2 - ih / 2),
+                                      static_cast<double>(iw), static_cast<double>(ih));
                 tracker_ready = tracker.init(wbgr, bbox);
             }
             // Run 3 warmup updates to prime FFT allocations and caches
@@ -144,7 +141,6 @@ int main(int argc, char* argv[]) {
     uint64_t sample_id = 0;
 
     while (sample_id < num_samples && !g_shutdown) {
-
         // Stage 1: Camera capture (t_sw_receive = software-side receive timestamp)
         aurore::ZeroCopyFrame frame{};
         if (!camera->capture_frame(frame, 100)) {
@@ -155,8 +151,8 @@ int main(int argc, char* argv[]) {
 
         // Stage 2: Vision — wrap DMA buffer as BGR Mat (zero-copy)
         const uint64_t t_vis_start = aurore::get_timestamp();
-        const cv::Mat  bgr         = camera->wrap_as_mat(frame);
-        const uint64_t t_vis_done  = aurore::get_timestamp();
+        const cv::Mat bgr = camera->wrap_as_mat(frame);
+        const uint64_t t_vis_done = aurore::get_timestamp();
 
         // Stage 3: Track compute — KCF update (tracker already warmed up)
         aurore::TrackSolution sol{};
@@ -181,23 +177,17 @@ int main(int argc, char* argv[]) {
         camera->release_frame(frame);
 
         // Compute latencies (µs)
-        const uint64_t vision_us    = (t_vis_done   - t_vis_start)  / 1000;
-        const uint64_t track_us     = (t_track_done  - t_vis_done)   / 1000;
-        const uint64_t actuation_us = (t_act_done    - t_track_done) / 1000;
+        const uint64_t vision_us = (t_vis_done - t_vis_start) / 1000;
+        const uint64_t track_us = (t_track_done - t_vis_done) / 1000;
+        const uint64_t actuation_us = (t_act_done - t_track_done) / 1000;
         // E2E: software pipeline start (frame received from kernel) → actuation done.
         // Excludes camera ISP pipeline latency which is hardware-constant and outside spec scope.
-        const uint64_t e2e_us       = (t_act_done > t_sw_receive)
-                                       ? (t_act_done - t_sw_receive) / 1000
-                                       : 0;
+        const uint64_t e2e_us =
+            (t_act_done > t_sw_receive) ? (t_act_done - t_sw_receive) / 1000 : 0;
 
-        csv << sample_id       << ","
-            << frame.sequence  << ","
-            << t_sw_receive    << ","
-            << vision_us       << ","
-            << track_us        << ","
-            << actuation_us    << ","
-            << e2e_us          << ","
-            << (sol.valid ? 1 : 0) << "\n";
+        csv << sample_id << "," << frame.sequence << "," << t_sw_receive << "," << vision_us << ","
+            << track_us << "," << actuation_us << "," << e2e_us << "," << (sol.valid ? 1 : 0)
+            << "\n";
 
         vision_stats.record(vision_us);
         track_stats.record(track_us);
@@ -205,8 +195,7 @@ int main(int argc, char* argv[]) {
         e2e_stats.record(e2e_us);
 
         if (verbose && sample_id % 100 == 0) {
-            std::cout << "sample " << sample_id
-                      << "  e2e=" << e2e_us << "us"
+            std::cout << "sample " << sample_id << "  e2e=" << e2e_us << "us"
                       << "  track=" << (sol.valid ? "ok" : "no") << "\n";
         }
 
@@ -219,24 +208,24 @@ int main(int argc, char* argv[]) {
     // Summary
     std::cout << "\n=== RESULTS (" << sample_id << " samples) ===\n";
     print_stats("Vision (wrap_as_mat)", vision_stats);
-    print_stats("Track  (KCF update)",  track_stats);
-    print_stats("Actuation compute",    actuation_stats);
+    print_stats("Track  (KCF update)", track_stats);
+    print_stats("Actuation compute", actuation_stats);
 
     const bool vision_pass = vision_stats.count && vision_stats.max_us <= 5000;
-    const bool track_pass  = track_stats.count  && track_stats.max_us  <= 5000;
+    const bool track_pass = track_stats.count && track_stats.max_us <= 5000;
 
     std::cout << "\n  End-to-End (HW capture timestamp to actuation compute):\n"
               << "    Min:    " << e2e_stats.min_us << " us\n"
               << "    Max:    " << e2e_stats.max_us << " us\n"
-              << "    Mean:   " << static_cast<uint64_t>(e2e_stats.mean())   << " us\n"
+              << "    Mean:   " << static_cast<uint64_t>(e2e_stats.mean()) << " us\n"
               << "    Jitter: " << static_cast<uint64_t>(e2e_stats.stddev()) << " us (1 sigma)\n"
               << "\n  Note: multi-thread pipeline adds ~4ms phased scheduling overhead;\n"
               << "        I2C actuation write adds ~1-3ms hardware latency on top.\n"
               << "\n  WCET spec per stage: <=5000 us\n"
-              << "  Vision: " << (vision_pass ? "PASS" : "FAIL")
-              << " (max=" << vision_stats.max_us << " us)\n"
-              << "  Track:  " << (track_pass  ? "PASS" : "FAIL")
-              << " (max=" << track_stats.max_us  << " us)\n\n";
+              << "  Vision: " << (vision_pass ? "PASS" : "FAIL") << " (max=" << vision_stats.max_us
+              << " us)\n"
+              << "  Track:  " << (track_pass ? "PASS" : "FAIL") << " (max=" << track_stats.max_us
+              << " us)\n\n";
 
     return 0;
 }

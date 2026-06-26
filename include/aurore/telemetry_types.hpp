@@ -318,17 +318,17 @@ struct SystemHealthData {
  */
 struct BinaryLogEntry {
     // Core fields (fixed size: 8 + 2 + 1 = 11 bytes + padding)
-    uint64_t timestamp_ns{0};       ///< Timestamp (CLOCK_MONOTONIC_RAW)
-    uint16_t event_id{0};           ///< Event ID (TelemetryEventId value)
-    uint8_t severity{0};            ///< Severity (TelemetrySeverity value)
-    uint8_t data_len{0};            ///< Length of data payload (0-64 bytes)
+    uint64_t timestamp_ns{0};  ///< Timestamp (CLOCK_MONOTONIC_RAW)
+    uint16_t event_id{0};      ///< Event ID (TelemetryEventId value)
+    uint8_t severity{0};       ///< Severity (TelemetrySeverity value)
+    uint8_t data_len{0};       ///< Length of data payload (0-64 bytes)
 
     // Data payload (fixed-size buffer for binary format)
     static constexpr size_t kMaxDataSize = 64;
-    uint8_t data[kMaxDataSize]{};   ///< Variable-length data (padded to 64 bytes)
+    uint8_t data[kMaxDataSize]{};  ///< Variable-length data (padded to 64 bytes)
 
     // HMAC-SHA256 signature (8 x u32 = 32 bytes)
-    uint32_t hmac[8]{};             ///< HMAC-SHA256 signature
+    uint32_t hmac[8]{};  ///< HMAC-SHA256 signature
 
     /**
      * @brief SEC-009: Set data payload with bounds checking
@@ -345,23 +345,17 @@ struct BinaryLogEntry {
     /**
      * @brief SEC-009: Set data from string with bounds checking
      */
-    void set_data(const std::string& str) {
-        set_data(str.c_str(), str.size());
-    }
+    void set_data(const std::string& str) { set_data(str.c_str(), str.size()); }
 
     /**
      * @brief Set event ID from TelemetryEventId enum
      */
-    void set_event_id(TelemetryEventId id) {
-        event_id = static_cast<uint16_t>(id);
-    }
+    void set_event_id(TelemetryEventId id) { event_id = static_cast<uint16_t>(id); }
 
     /**
      * @brief Set severity from TelemetrySeverity enum
      */
-    void set_severity(TelemetrySeverity sev) {
-        severity = static_cast<uint8_t>(sev);
-    }
+    void set_severity(TelemetrySeverity sev) { severity = static_cast<uint8_t>(sev); }
 
     /**
      * @brief SEC-009: Validate entry structure
@@ -388,18 +382,19 @@ struct BinaryLogEntry {
     /**
      * @brief Get total entry size (for binary serialization)
      */
-    static constexpr size_t entry_size() {
-        return sizeof(BinaryLogEntry);
-    }
+    static constexpr size_t entry_size() { return sizeof(BinaryLogEntry); }
 };
 
 // SEC-009: Compile-time size verification for BinaryLogEntry
 // Note: Struct has padding after data_len (1 byte padding to align hmac to 4-byte boundary)
-// Layout: timestamp(8) + event_id(2) + severity(1) + data_len(1) + padding(2) + data(64) + hmac(32) = 110 bytes
-// Actual layout with alignment: timestamp(8) + event_id(2) + severity(1) + data_len(1) + pad(4) + data(64) + hmac(32) = 112 bytes
-// hmac offset: 8 + 2 + 1 + 1 + 4 (padding) = 16, then + 64 (data) = 80... but actual is 76
-static_assert(sizeof(BinaryLogEntry) == 112, "BinaryLogEntry size mismatch (expected 112 bytes with padding)");
-// Note: Actual offset is 76 due to compiler packing (4 bytes padding total: 2 after data_len, 2 more for alignment)
+// Layout: timestamp(8) + event_id(2) + severity(1) + data_len(1) + padding(2) + data(64) + hmac(32)
+// = 110 bytes Actual layout with alignment: timestamp(8) + event_id(2) + severity(1) + data_len(1)
+// + pad(4) + data(64) + hmac(32) = 112 bytes hmac offset: 8 + 2 + 1 + 1 + 4 (padding) = 16, then +
+// 64 (data) = 80... but actual is 76
+static_assert(sizeof(BinaryLogEntry) == 112,
+              "BinaryLogEntry size mismatch (expected 112 bytes with padding)");
+// Note: Actual offset is 76 due to compiler packing (4 bytes padding total: 2 after data_len, 2
+// more for alignment)
 
 /**
  * @brief Simplified CSV log entry (MVP version)
@@ -443,13 +438,13 @@ struct CsvLogEntry {
     float cpu_usage_percent = 0.0f;
 
     // Dual-stream vision data (AM7-L3-VIS-002)
-    uint32_t mipi_frame_id = 0;      ///< MIPI CSI-2 frame ID
-    uint32_t usb_frame_id = 0;        ///< USB webcam frame ID
-    uint64_t mipi_latency_us = 0;     ///< MIPI frame capture to process latency
+    uint32_t mipi_frame_id = 0;        ///< MIPI CSI-2 frame ID
+    uint32_t usb_frame_id = 0;         ///< USB webcam frame ID
+    uint64_t mipi_latency_us = 0;      ///< MIPI frame capture to process latency
     uint64_t usb_latency_us = 0;       ///< USB frame capture to process latency
-    float usb_roi_x = 0.0f;           ///< USB detection ROI center X
+    float usb_roi_x = 0.0f;            ///< USB detection ROI center X
     float usb_roi_y = 0.0f;            ///< USB detection ROI center Y
-    bool optical_gate_passed = false; ///< Optical Logic Gate validation result
+    bool optical_gate_passed = false;  ///< Optical Logic Gate validation result
 
     // SEC-009: Fixed-size buffers with explicit constants
     char module[kModule_name_max] = {};

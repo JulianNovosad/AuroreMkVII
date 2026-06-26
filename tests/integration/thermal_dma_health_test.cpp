@@ -11,12 +11,13 @@
  * @copyright Aurore MkVII Project - Educational/Personal Use Only
  */
 
-#include "aurore/test_utils.hpp"
-#include <iostream>
-#include <thread>
 #include <chrono>
+#include <functional>  // For std::function
+#include <iostream>
 #include <stdexcept>
-#include <functional> // For std::function
+#include <thread>
+
+#include "aurore/test_utils.hpp"
 
 namespace {
 
@@ -25,34 +26,54 @@ std::atomic<size_t> g_tests_passed(0);
 std::atomic<size_t> g_tests_failed(0);
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    aurore::test::TestEnvironment::reset_trackers(); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::cout << "  PASS: " << #name << std::endl; \
-    } catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                          \
+    do {                                                                        \
+        g_tests_run.fetch_add(1);                                               \
+        aurore::test::TestEnvironment::reset_trackers();                        \
+        try {                                                                   \
+            name();                                                             \
+            g_tests_passed.fetch_add(1);                                        \
+            std::cout << "  PASS: " << #name << std::endl;                      \
+        } catch (const std::exception& e) {                                     \
+            g_tests_failed.fetch_add(1);                                        \
+            std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
+        }                                                                       \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_GT(a, b) do { if ((a) <= (b)) throw std::runtime_error("Assertion failed: " #a " > " #b); } while(0)
-#define ASSERT_LT(a, b) do { if ((a) >= (b)) throw std::runtime_error("Assertion failed: " #a " < " #b); } while(0)
-#define ASSERT_GE(a, b) do { if ((a) < (b)) throw std::runtime_error("Assertion failed: " #a " >= " #b); } while(0)
-#define ASSERT_LE(a, b) do { if ((a) > (b)) throw std::runtime_error("Assertion failed: " #a " <= " #b); } while(0)
-#define ASSERT_NEAR(a, b, tol) do { \
-    auto diff = std::abs(static_cast<int64_t>(a) - static_cast<int64_t>(b)); \
-    if (diff > static_cast<int64_t>(tol)) \
-        throw std::runtime_error("Assertion failed: " #a " not near " #b); \
-} while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_GT(a, b)                                                             \
+    do {                                                                            \
+        if ((a) <= (b)) throw std::runtime_error("Assertion failed: " #a " > " #b); \
+    } while (0)
+#define ASSERT_LT(a, b)                                                             \
+    do {                                                                            \
+        if ((a) >= (b)) throw std::runtime_error("Assertion failed: " #a " < " #b); \
+    } while (0)
+#define ASSERT_GE(a, b)                                                             \
+    do {                                                                            \
+        if ((a) < (b)) throw std::runtime_error("Assertion failed: " #a " >= " #b); \
+    } while (0)
+#define ASSERT_LE(a, b)                                                             \
+    do {                                                                            \
+        if ((a) > (b)) throw std::runtime_error("Assertion failed: " #a " <= " #b); \
+    } while (0)
+#define ASSERT_NEAR(a, b, tol)                                                   \
+    do {                                                                         \
+        auto diff = std::abs(static_cast<int64_t>(a) - static_cast<int64_t>(b)); \
+        if (diff > static_cast<int64_t>(tol))                                    \
+            throw std::runtime_error("Assertion failed: " #a " not near " #b);   \
+    } while (0)
 
-constexpr uint64_t kMaxStackSizeKb = 8192; // Max stack size for StackTracker
-constexpr size_t kHeapBaselineEnvelopeBytes = 1024 * 1024; // 1MB heap baseline
+constexpr uint64_t kMaxStackSizeKb = 8192;                  // Max stack size for StackTracker
+constexpr size_t kHeapBaselineEnvelopeBytes = 1024 * 1024;  // 1MB heap baseline
 
 }  // anonymous namespace
 
@@ -61,16 +82,16 @@ constexpr size_t kHeapBaselineEnvelopeBytes = 1024 * 1024; // 1MB heap baseline
 // ============================================================================
 
 TEST(test_thermal_throttling_transitions) {
-    aurore::test::ThermalHealthMonitor monitor(80.0); // Critical threshold at 80C
+    aurore::test::ThermalHealthMonitor monitor(80.0);  // Critical threshold at 80C
 
     // Nominal state
     monitor.update_temperature(50.0);
     ASSERT_EQ(monitor.check_throttle_state(), aurore::test::ThrottleState::Nominal);
 
     // Transition to throttling
-    monitor.update_temperature(70.0); // 80 - 15 = 65, so 70 is throttling
+    monitor.update_temperature(70.0);  // 80 - 15 = 65, so 70 is throttling
     ASSERT_EQ(monitor.check_throttle_state(), aurore::test::ThrottleState::Throttling);
-    monitor.record_throttle_event(); // Simulate system recording throttle
+    monitor.record_throttle_event();  // Simulate system recording throttle
 
     // Transition to critical
     monitor.update_temperature(85.0);
@@ -84,11 +105,11 @@ TEST(test_thermal_timing_contract_under_throttle) {
     // The verify_timing_contract() in the monitor checks for a 60s max.
     // This test will pass. A real test would check actual timing.
     monitor.update_temperature(85.0);
-    monitor.simulate_throttling_transition(); // Transition to Critical
-    
+    monitor.simulate_throttling_transition();  // Transition to Critical
+
     // For this test, we can only verify the logic of the monitor's contract check.
     // Actual timing verification needs external measurement in a real system.
-    ASSERT_TRUE(monitor.verify_timing_contract()); 
+    ASSERT_TRUE(monitor.verify_timing_contract());
 }
 
 TEST(test_thermal_recovery_to_nominal) {
@@ -120,7 +141,7 @@ TEST(test_dma_buffer_alignment_integrity) {
     // For testing arbitrary alignment, the monitor would need to be configurable.
     // For now, checking the default value's alignment properties.
     auto stats = monitor.get_stats();
-    ASSERT_TRUE(stats.alignment_valid); 
+    ASSERT_TRUE(stats.alignment_valid);
 }
 
 TEST(test_dma_fault_injection_containment) {
@@ -150,7 +171,7 @@ TEST(test_dma_exhaustion_scenario) {
         monitor.record_transfer(1024, 100);
     }
     ASSERT_TRUE(dma_channel_monitor.is_exhausted());
-    ASSERT_FALSE(dma_channel_monitor.acquire()); // Should fail to acquire more
+    ASSERT_FALSE(dma_channel_monitor.acquire());  // Should fail to acquire more
 
     // Simulate an error under exhaustion
     monitor.record_error();

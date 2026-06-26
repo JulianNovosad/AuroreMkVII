@@ -20,7 +20,7 @@ namespace aurore {
 //
 // Thread-safe: all reads are stateless file operations (no shared fd).
 class FusionHatSensor {
-public:
+   public:
     FusionHatSensor() = default;
     ~FusionHatSensor() = default;
 
@@ -48,7 +48,7 @@ public:
     // Read firmware version string (e.g. "1.0.2").
     std::string read_firmware_version() const;
 
-private:
+   private:
     // Find the IIO device index whose name == "fusion-hat".
     int find_iio_device() const;
 

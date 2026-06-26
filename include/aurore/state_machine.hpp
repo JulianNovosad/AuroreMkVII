@@ -71,7 +71,7 @@ enum class FcsState : uint8_t {
 };
 
 struct Detection {
-    int id{-1};                          ///< Target/marker ID (-1 for visual detection)
+    int id{-1};  ///< Target/marker ID (-1 for visual detection)
     float confidence{0.0f};
     struct {
         int x, y, w, h;
@@ -132,13 +132,14 @@ struct alignas(64) BallisticsFrameState {
     uint8_t padding[6]{0};
 };
 
-static_assert(sizeof(BallisticsFrameState) <= 256, "BallisticsFrameState should fit in one cache line region");
+static_assert(sizeof(BallisticsFrameState) <= 256,
+              "BallisticsFrameState should fit in one cache line region");
 
 // AM7-L3-SAFE-002: Range data structure with timestamp and checksum
 struct RangeData {
-    float range_m{0.f};           ///< Range value in meters
-    uint64_t timestamp_ns{0};     ///< Capture timestamp (CLOCK_MONOTONIC_RAW)
-    uint16_t checksum{0};         ///< CRC-16 checksum for validation
+    float range_m{0.f};        ///< Range value in meters
+    uint64_t timestamp_ns{0};  ///< Capture timestamp (CLOCK_MONOTONIC_RAW)
+    uint16_t checksum{0};      ///< CRC-16 checksum for validation
 
     // AM7-L3-SAFE-002: Valid range bounds [0.5m, 5000m]
     static constexpr float kRangeMinM = 0.5f;
@@ -283,14 +284,14 @@ class StateMachine {
     // AM7-L2-TGT-003/004: Target validation state
     // Position history for 3-frame stability validation (Δ ≤ 2 pixels)
     PositionHistoryEntry position_history_[3]{};
-    int position_history_idx_{0};           // Circular buffer index
-    int stable_frame_count_{0};             // Consecutive stable frames
-    bool position_valid_{false};            // 3-frame stability achieved
+    int position_history_idx_{0};  // Circular buffer index
+    int stable_frame_count_{0};    // Consecutive stable frames
+    bool position_valid_{false};   // 3-frame stability achieved
 
     // AM7-L2-TGT-004: Lock confirmation state (250ms window, 95% stability)
     std::chrono::milliseconds lock_confirm_age_ms_{0};
-    int lock_confirm_stable_frames_{0};     // Stable frames in 250ms window
-    bool lock_confirmed_{false};            // 250ms lock confirmation achieved
+    int lock_confirm_stable_frames_{0};  // Stable frames in 250ms window
+    bool lock_confirmed_{false};         // 250ms lock confirmation achieved
 
     // AM7-L2-TGT-003: Stability threshold (Δ ≤ 2 pixels)
     static constexpr float kPositionStabilityPx = 2.0f;
@@ -309,8 +310,8 @@ class StateMachine {
     bool have_prediction_{false};
 
     // AM7-L3-TGT-003: Low-confidence de-selection (PSR < 3.0 for > 250ms = 30 frames at 120Hz)
-    static constexpr int   kLowConfFramesMax  = 30;
-    static constexpr float kPsrLowThreshold   = 3.0f;
+    static constexpr int kLowConfFramesMax = 30;
+    static constexpr float kPsrLowThreshold = 3.0f;
     int low_conf_frames_{0};
 
     // AM7-L2-TGT-003: Check if position is stable (Δ ≤ 2 pixels for 3 frames)

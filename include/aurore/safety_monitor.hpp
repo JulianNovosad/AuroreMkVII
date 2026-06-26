@@ -22,11 +22,11 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
+#include <ostream>
 #include <string>
 #include <thread>
 
-#include <iostream>
-#include <ostream>
 #include "timing.hpp"
 
 namespace aurore {
@@ -621,9 +621,7 @@ class SafetyMonitor {
     /**
      * @brief Get correlated subsystem for a fault
      */
-    PipelineStage get_correlated_subsystem() const noexcept {
-        return PipelineStage::VISION;
-    }
+    PipelineStage get_correlated_subsystem() const noexcept { return PipelineStage::VISION; }
 
     /**
      * @brief Update vision frame status

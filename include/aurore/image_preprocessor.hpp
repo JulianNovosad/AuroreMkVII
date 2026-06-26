@@ -21,7 +21,7 @@
 #include <stdexcept>
 
 namespace cv {
-    class Mat;
+class Mat;
 }
 
 namespace aurore {
@@ -30,9 +30,8 @@ namespace aurore {
  * @brief Image preprocessing exception
  */
 class ImagePreprocessorException : public std::runtime_error {
-public:
-    explicit ImagePreprocessorException(const std::string& msg)
-        : std::runtime_error(msg) {}
+   public:
+    explicit ImagePreprocessorException(const std::string& msg) : std::runtime_error(msg) {}
 };
 
 /**
@@ -42,7 +41,7 @@ public:
  * Designed for real-time processing with minimal overhead.
  */
 class ImagePreprocessor {
-public:
+   public:
     /**
      * @brief Construct preprocessor for given resolution
      *
@@ -83,10 +82,8 @@ public:
      * @param hsv_max_v Value max (0-255)
      * @return cv::Mat Binary mask (CV_8UC1)
      */
-    cv::Mat threshold_hsv(const cv::Mat& bgr_input,
-                          int hsv_min_h, int hsv_max_h,
-                          int hsv_min_s, int hsv_max_s,
-                          int hsv_min_v, int hsv_max_v);
+    cv::Mat threshold_hsv(const cv::Mat& bgr_input, int hsv_min_h, int hsv_max_h, int hsv_min_s,
+                          int hsv_max_s, int hsv_min_v, int hsv_max_v);
 
     /**
      * @brief Get preprocessor resolution
@@ -94,7 +91,7 @@ public:
     int width() const noexcept { return width_; }
     int height() const noexcept { return height_; }
 
-private:
+   private:
     int width_;
     int height_;
 
@@ -124,10 +121,8 @@ private:
      * @param rgb_out Output RGB triplets
      * @param width Width in pixels
      */
-    static void demosaic_row_grbg(const uint16_t* raw_row0,
-                                   const uint16_t* raw_row1,
-                                   uint8_t* rgb_out,
-                                   int width) noexcept;
+    static void demosaic_row_grbg(const uint16_t* raw_row0, const uint16_t* raw_row1,
+                                  uint8_t* rgb_out, int width) noexcept;
 };
 
 }  // namespace aurore

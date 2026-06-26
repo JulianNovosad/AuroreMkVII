@@ -12,14 +12,14 @@
  */
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <future>
 #include <iostream>
+#include <mutex>
 #include <thread>
 #include <vector>
-#include <chrono>
-#include <mutex>
-#include <future>
 
 #include "aurore/ring_buffer.hpp"
 #include "aurore/test_infrastructure.hpp"
@@ -31,24 +31,40 @@ std::atomic<size_t> g_tests_passed(0);
 std::atomic<size_t> g_tests_failed(0);
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::cout << "  PASS: " << #name << std::endl; \
-    } catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                          \
+    do {                                                                        \
+        g_tests_run.fetch_add(1);                                               \
+        try {                                                                   \
+            name();                                                             \
+            g_tests_passed.fetch_add(1);                                        \
+            std::cout << "  PASS: " << #name << std::endl;                      \
+        } catch (const std::exception& e) {                                     \
+            g_tests_failed.fetch_add(1);                                        \
+            std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
+        }                                                                       \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_GT(a, b) do { if ((a) <= (b)) throw std::runtime_error("Assertion failed: " #a " > " #b); } while(0)
-#define ASSERT_LT(a, b) do { if ((a) >= (b)) throw std::runtime_error("Assertion failed: " #a " < " #b); } while(0)
-#define ASSERT_GE(a, b) do { if ((a) < (b)) throw std::runtime_error("Assertion failed: " #a " >= " #b); } while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_GT(a, b)                                                             \
+    do {                                                                            \
+        if ((a) <= (b)) throw std::runtime_error("Assertion failed: " #a " > " #b); \
+    } while (0)
+#define ASSERT_LT(a, b)                                                             \
+    do {                                                                            \
+        if ((a) >= (b)) throw std::runtime_error("Assertion failed: " #a " < " #b); \
+    } while (0)
+#define ASSERT_GE(a, b)                                                             \
+    do {                                                                            \
+        if ((a) < (b)) throw std::runtime_error("Assertion failed: " #a " >= " #b); \
+    } while (0)
 
 constexpr size_t kQueueCapacity = 4;
 
@@ -59,8 +75,7 @@ constexpr size_t kQueueCapacity = 4;
 // ============================================================================
 
 TEST(test_handle_leak_detection_basic) {
-    aurore::test::ResourceMonitor fd_monitor(
-        aurore::test::ResourceType::Descriptors, 100);
+    aurore::test::ResourceMonitor fd_monitor(aurore::test::ResourceType::Descriptors, 100);
 
     for (int i = 0; i < 50; i++) {
         ASSERT_TRUE(fd_monitor.acquire());
@@ -72,8 +87,7 @@ TEST(test_handle_leak_detection_basic) {
 }
 
 TEST(test_handle_no_leak_cycle) {
-    aurore::test::ResourceMonitor fd_monitor(
-        aurore::test::ResourceType::Descriptors, 100);
+    aurore::test::ResourceMonitor fd_monitor(aurore::test::ResourceType::Descriptors, 100);
 
     for (int i = 0; i < 10; i++) {
         ASSERT_TRUE(fd_monitor.acquire());
@@ -87,8 +101,7 @@ TEST(test_handle_no_leak_cycle) {
 }
 
 TEST(test_handle_leak_rate) {
-    aurore::test::ResourceMonitor fd_monitor(
-        aurore::test::ResourceType::Descriptors, 200);
+    aurore::test::ResourceMonitor fd_monitor(aurore::test::ResourceType::Descriptors, 200);
 
     size_t initial_leaks = 0;
     size_t final_leaks = 0;
@@ -110,8 +123,7 @@ TEST(test_handle_leak_rate) {
 }
 
 TEST(test_parallel_handle_acquisition) {
-    aurore::test::ResourceMonitor fd_monitor(
-        aurore::test::ResourceType::Descriptors, 20);
+    aurore::test::ResourceMonitor fd_monitor(aurore::test::ResourceType::Descriptors, 20);
 
     std::atomic<int> success_count(0);
 
@@ -142,8 +154,7 @@ TEST(test_parallel_handle_acquisition) {
 // ============================================================================
 
 TEST(test_dma_channel_exhaustion_basic) {
-    aurore::test::ResourceMonitor dma_monitor(
-        aurore::test::ResourceType::DmaChannels, 8);
+    aurore::test::ResourceMonitor dma_monitor(aurore::test::ResourceType::DmaChannels, 8);
 
     for (int i = 0; i < 8; i++) {
         ASSERT_TRUE(dma_monitor.acquire());
@@ -156,8 +167,7 @@ TEST(test_dma_channel_exhaustion_basic) {
 }
 
 TEST(test_dma_channel_recovery_after_release) {
-    aurore::test::ResourceMonitor dma_monitor(
-        aurore::test::ResourceType::DmaChannels, 4);
+    aurore::test::ResourceMonitor dma_monitor(aurore::test::ResourceType::DmaChannels, 4);
 
     for (int i = 0; i < 4; i++) {
         ASSERT_TRUE(dma_monitor.acquire());
@@ -174,8 +184,7 @@ TEST(test_dma_channel_recovery_after_release) {
 }
 
 TEST(test_dma_channel_peak_tracking) {
-    aurore::test::ResourceMonitor dma_monitor(
-        aurore::test::ResourceType::DmaChannels, 16);
+    aurore::test::ResourceMonitor dma_monitor(aurore::test::ResourceType::DmaChannels, 16);
 
     for (int i = 0; i < 10; i++) {
         dma_monitor.acquire();
@@ -267,7 +276,8 @@ TEST(test_queue_continuous_backpressure) {
                 std::this_thread::sleep_for(std::chrono::microseconds(1));
             }
         }
-        while (buffer.pop(val)) { }
+        while (buffer.pop(val)) {
+        }
     });
 
     producer.join();
@@ -320,8 +330,7 @@ TEST(test_queue_multiple_producers_backpressure) {
 // ============================================================================
 
 TEST(test_resource_stress_high_frequency) {
-    aurore::test::ResourceMonitor fd_monitor(
-        aurore::test::ResourceType::Descriptors, 50);
+    aurore::test::ResourceMonitor fd_monitor(aurore::test::ResourceType::Descriptors, 50);
 
     std::atomic<bool> done(false);
     std::atomic<size_t> acquire_count(0);
@@ -348,8 +357,7 @@ TEST(test_resource_stress_high_frequency) {
 }
 
 TEST(test_resource_stress_alternating) {
-    aurore::test::ResourceMonitor fd_monitor(
-        aurore::test::ResourceType::Descriptors, 100);
+    aurore::test::ResourceMonitor fd_monitor(aurore::test::ResourceType::Descriptors, 100);
 
     for (int round = 0; round < 20; round++) {
         for (int i = 0; i < 20; i++) {

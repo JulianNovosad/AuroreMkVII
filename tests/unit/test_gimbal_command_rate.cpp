@@ -25,31 +25,32 @@
  * @copyright AuroreMkVII Project - Educational/Personal Use Only
  */
 
-#include "aurore/gimbal_controller.hpp"
-#include "aurore/fusion_hat.hpp"
-#include "aurore/timing.hpp"
+#include <sched.h>  // For sched_setscheduler
 
 #include <atomic>
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <stdexcept>
 #include <thread>
 #include <vector>
-#include <stdexcept>
-#include <sched.h> // For sched_setscheduler
+
+#include "aurore/fusion_hat.hpp"
+#include "aurore/gimbal_controller.hpp"
+#include "aurore/timing.hpp"
 
 namespace {
 
 // Test configuration
-constexpr double kTargetRateHz = 120.0;                // Target command rate
-constexpr double kTargetPeriodMs = 8.333333;           // 120Hz = 8.333...ms
-constexpr double kRateTolerancePercent = 0.01;         // ±1% rate tolerance
-constexpr double kMaxJitterUs = 50.0;                  // AM7-L2-ACT-001 jitter budget
+constexpr double kTargetRateHz = 120.0;         // Target command rate
+constexpr double kTargetPeriodMs = 8.333333;    // 120Hz = 8.333...ms
+constexpr double kRateTolerancePercent = 0.01;  // ±1% rate tolerance
+constexpr double kMaxJitterUs = 50.0;           // AM7-L2-ACT-001 jitter budget
 // Phase variation budget: 0.1ms (100us)
 constexpr double kMaxPhaseVariationMs = 0.1;
 
-constexpr int kNumFrames = 360;                        // 3 seconds at 120Hz
-constexpr int kWarmupFrames = 10;                      // Warm-up frames
+constexpr int kNumFrames = 360;    // 3 seconds at 120Hz
+constexpr int kWarmupFrames = 10;  // Warm-up frames
 
 // Command timing measurement
 struct CommandTiming {
@@ -61,7 +62,7 @@ struct CommandTiming {
 
 // Mock gimbal command issuer
 class GimbalCommandSimulator {
-public:
+   public:
     GimbalCommandSimulator() : command_count_(0) {}
 
     void issue_command(float /*az_deg*/, float /*el_deg*/) {
@@ -70,20 +71,16 @@ public:
         command_count_.fetch_add(1, std::memory_order_relaxed);
     }
 
-    const std::vector<uint64_t>& get_timestamps() const {
-        return timestamps_;
-    }
+    const std::vector<uint64_t>& get_timestamps() const { return timestamps_; }
 
-    uint64_t command_count() const {
-        return command_count_.load(std::memory_order_relaxed);
-    }
+    uint64_t command_count() const { return command_count_.load(std::memory_order_relaxed); }
 
     void reset() {
         timestamps_.clear();
         command_count_.store(0, std::memory_order_relaxed);
     }
 
-private:
+   private:
     std::vector<uint64_t> timestamps_;
     std::atomic<uint64_t> command_count_;
 };
@@ -95,7 +92,7 @@ std::vector<CommandTiming> simulate_frame_synchronized_commands(int num_frames) 
     timings.reserve(static_cast<size_t>(num_frames));
 
     const uint64_t period_ns = static_cast<uint64_t>(kTargetPeriodMs * 1e6);  // 8.333ms in ns
-    
+
     // Use ThreadTiming for better accuracy than sleep_for
     aurore::ThreadTiming timing(period_ns, 0);
 
@@ -146,8 +143,10 @@ std::vector<CommandTiming> simulate_frame_synchronized_commands(int num_frames) 
 
 void test_command_rate_accuracy() {
     std::cout << "=== AM7-L2-ACT-001: Command Rate Accuracy Test ===" << std::endl;
-    std::cout << "Target rate: " << kTargetRateHz << " Hz ±" << (kRateTolerancePercent * 100.0) << "%" << std::endl;
-    std::cout << "Test duration: " << (static_cast<double>(kNumFrames) / kTargetRateHz) << " seconds (" << kNumFrames << " frames)" << std::endl;
+    std::cout << "Target rate: " << kTargetRateHz << " Hz ±" << (kRateTolerancePercent * 100.0)
+              << "%" << std::endl;
+    std::cout << "Test duration: " << (static_cast<double>(kNumFrames) / kTargetRateHz)
+              << " seconds (" << kNumFrames << " frames)" << std::endl;
     std::cout << std::endl;
 
     auto timings = simulate_frame_synchronized_commands(kNumFrames);
@@ -167,11 +166,13 @@ void test_command_rate_accuracy() {
     const double rate_avg = 1000.0 / period_avg;
 
     // Compute overall rate from total time
-    const double total_time_ms = static_cast<double>(timings.back().timestamp_ns - timings.front().timestamp_ns) / 1e6;
+    const double total_time_ms =
+        static_cast<double>(timings.back().timestamp_ns - timings.front().timestamp_ns) / 1e6;
     const double overall_rate = static_cast<double>(kNumFrames - 1) * 1000.0 / total_time_ms;
 
     std::cout << "Results:" << std::endl;
-    std::cout << "  Average period: " << period_avg << " ms (target: " << kTargetPeriodMs << " ms)" << std::endl;
+    std::cout << "  Average period: " << period_avg << " ms (target: " << kTargetPeriodMs << " ms)"
+              << std::endl;
     std::cout << "  Average rate:   " << rate_avg << " Hz" << std::endl;
     std::cout << "  Overall rate:   " << overall_rate << " Hz" << std::endl;
     std::cout << "  Period min/max: " << period_min << " / " << period_max << " ms" << std::endl;
@@ -179,12 +180,15 @@ void test_command_rate_accuracy() {
 
     // Verify rate is within tolerance
     const double rate_error_percent = std::abs(rate_avg - kTargetRateHz) / kTargetRateHz * 100.0;
-    
+
 #ifdef AURORE_LAPTOP_BUILD
     // Laptop build: warn but don't fail if slightly out of tolerance due to scheduling
-    const bool rate_pass = (rate_error_percent <= kRateTolerancePercent * 500.0); // 5% tolerance on laptop
+    const bool rate_pass =
+        (rate_error_percent <= kRateTolerancePercent * 500.0);  // 5% tolerance on laptop
     if (rate_error_percent > kRateTolerancePercent * 100.0) {
-        std::cout << "  WARNING: Rate outside strict ±1% tolerance, but within laptop tolerance (±5%)" << std::endl;
+        std::cout
+            << "  WARNING: Rate outside strict ±1% tolerance, but within laptop tolerance (±5%)"
+            << std::endl;
     }
 #else
     const bool rate_pass = (rate_error_percent <= kRateTolerancePercent * 100.0);
@@ -220,7 +224,8 @@ void test_frame_sync_jitter() {
     }
 
     const double jitter_avg = jitter_sum / static_cast<double>(timings.size());
-    const double variance = (jitter_sq_sum / static_cast<double>(timings.size())) - (jitter_avg * jitter_avg);
+    const double variance =
+        (jitter_sq_sum / static_cast<double>(timings.size())) - (jitter_avg * jitter_avg);
     const double jitter_rms = std::sqrt(std::max(0.0, variance));
 
     std::cout << "Results:" << std::endl;
@@ -233,7 +238,8 @@ void test_frame_sync_jitter() {
     const bool jitter_pass = (jitter_rms <= kMaxJitterUs);
 
     std::cout << "Verification:" << std::endl;
-    std::cout << "  AM7-L2-ACT-001 (jitter budget): " << (jitter_pass ? "PASS" : "FAIL") << std::endl;
+    std::cout << "  AM7-L2-ACT-001 (jitter budget): " << (jitter_pass ? "PASS" : "FAIL")
+              << std::endl;
     std::cout << "    Measured RMS: " << jitter_rms << " μs" << std::endl;
 
     if (!jitter_pass) throw std::runtime_error("AM7-L2-ACT-001: Frame sync jitter exceeds budget");
@@ -270,7 +276,8 @@ void test_command_continuity() {
     std::cout << "Verification:" << std::endl;
     std::cout << "  Command continuity: " << (continuity_pass ? "PASS" : "FAIL") << std::endl;
 
-    if (!continuity_pass) throw std::runtime_error("Command continuity test failed - commands dropped");
+    if (!continuity_pass)
+        throw std::runtime_error("Command continuity test failed - commands dropped");
 
     std::cout << "  PASS" << std::endl;
 }
@@ -287,7 +294,7 @@ void test_phase_offset_stability() {
     period_diffs.reserve(timings.size() - 2);
 
     for (size_t i = 2; i < timings.size(); ++i) {
-        double diff = timings[i].period_ms - timings[i-1].period_ms;
+        double diff = timings[i].period_ms - timings[i - 1].period_ms;
         period_diffs.push_back(diff);
     }
 
@@ -321,13 +328,15 @@ void test_phase_offset_stability() {
 int main() {
     // Attempt to set real-time scheduling for the test thread
     struct sched_param param;
-    param.sched_priority = 98; // High priority, just below safety monitor (99)
+    param.sched_priority = 98;  // High priority, just below safety monitor (99)
     if (sched_setscheduler(0, SCHED_FIFO, &param) == -1) {
         std::cerr << "WARNING: Failed to set SCHED_FIFO priority for test thread: "
                   << strerror(errno) << ". Test results may be less stable.\n"
-                  << "         Run with sudo or ensure CAP_SYS_NICE is set for accurate real-time testing.\n";
+                  << "         Run with sudo or ensure CAP_SYS_NICE is set for accurate real-time "
+                     "testing.\n";
     } else {
-        std::cout << "INFO: Test thread running with SCHED_FIFO priority " << param.sched_priority << "\n";
+        std::cout << "INFO: Test thread running with SCHED_FIFO priority " << param.sched_priority
+                  << "\n";
     }
 
     std::cout << "========================================" << std::endl;

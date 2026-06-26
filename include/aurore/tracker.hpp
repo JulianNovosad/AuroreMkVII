@@ -1,10 +1,10 @@
 #pragma once
 
-#include <optional>
 #include <opencv2/tracking.hpp>
+#include <optional>
 
-#include "aurore/state_machine.hpp"
 #include "aurore/camera_wrapper.hpp"
+#include "aurore/state_machine.hpp"
 
 namespace aurore {
 
@@ -23,7 +23,7 @@ namespace aurore {
  * (DMA buffer reference), not as pixel copy. This complies with AM7-L3-VIS-001.
  */
 class KcfTracker {
-public:
+   public:
     KcfTracker();
 
     /**
@@ -48,7 +48,7 @@ public:
      * @param bbox ROI within the frame to use as template
      */
     void capture_reference_template(const ZeroCopyFrame& frame, const cv::Rect2d& bbox);
-    
+
     /**
      * @brief Attempt redetection using stored reference template
      *
@@ -60,7 +60,7 @@ public:
      */
     float redetect(const cv::Mat& bgr_frame) const;
 
-private:
+   private:
     cv::Ptr<cv::TrackerKCF> tracker_;
     bool valid_{false};
     cv::Rect2d last_bbox_{};
@@ -69,14 +69,14 @@ private:
     bool have_prev_{false};
 
     // Zero-copy reference template storage
-    ZeroCopyFrame ref_frame_;      ///< DMA buffer descriptor (no pixel copy)
-    cv::Rect2d ref_roi_{};         ///< ROI within the reference frame
+    ZeroCopyFrame ref_frame_;         ///< DMA buffer descriptor (no pixel copy)
+    cv::Rect2d ref_roi_{};            ///< ROI within the reference frame
     CameraWrapper* camera_{nullptr};  ///< Camera for wrap_as_mat() during redetection
 
     // INT-006: KCF does not provide PSR. This constant is unused.
     // PSR field in TrackSolution is set to -1.0f to indicate "not available".
     // Use correlation peak ratio from matchTemplate if redetection is needed.
-    static constexpr float kPsrFailThreshold   = 0.0f;  // Unused for KCF
+    static constexpr float kPsrFailThreshold = 0.0f;  // Unused for KCF
     static constexpr float kAreaChangeMaxRatio = 0.50f;
 };
 

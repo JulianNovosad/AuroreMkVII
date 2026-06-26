@@ -6,14 +6,15 @@
  */
 
 #include "aurore/telemetry_writer.hpp"
-#include "aurore/telemetry_types.hpp"
 
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
 #include <thread>
-#include <chrono>
+
+#include "aurore/telemetry_types.hpp"
 
 namespace {
 
@@ -24,13 +25,14 @@ namespace {
 static int g_tests_run = 0;
 static int g_tests_passed = 0;
 
-#define ASSERT_TRUE(expr) do { \
-    if (!(expr)) { \
-        std::cerr << "FAIL [" << __func__ << " line " << __LINE__ << "]: " \
-                  << #expr << " is false\n"; \
-        return false; \
-    } \
-} while (0)
+#define ASSERT_TRUE(expr)                                                               \
+    do {                                                                                \
+        if (!(expr)) {                                                                  \
+            std::cerr << "FAIL [" << __func__ << " line " << __LINE__ << "]: " << #expr \
+                      << " is false\n";                                                 \
+            return false;                                                               \
+        }                                                                               \
+    } while (0)
 
 #define ASSERT_FALSE(expr) ASSERT_TRUE(!(expr))
 
@@ -48,9 +50,7 @@ static bool run_test(const char* name, bool (*fn)()) {
 }
 
 // Ensure the log directory exists before tests that write to it.
-static void ensure_log_dir() {
-    std::filesystem::create_directories("/tmp/aurore_test_logs");
-}
+static void ensure_log_dir() { std::filesystem::create_directories("/tmp/aurore_test_logs"); }
 
 // ---------------------------------------------------------------------------
 // Test 1 — writer starts and stops cleanly
@@ -130,7 +130,7 @@ static bool test_backpressure_drop_policy() {
     aurore::SystemHealthData health{};
 
     writer.log_frame(det, track, act, health);  // fills queue (depth 1 == max)
-    
+
     // Flood with entries to guarantee some drops even if writer drains occasionally
     for (int i = 0; i < 10; i++) {
         writer.log_frame(det, track, act, health);
@@ -166,7 +166,7 @@ static bool test_queue_stats_accessible() {
     return true;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 // ---------------------------------------------------------------------------
 // main
@@ -174,10 +174,10 @@ static bool test_queue_stats_accessible() {
 int main() {
     std::cout << "=== TelemetryWriterTest ===\n";
 
-    run_test("test_writer_starts_and_stops",         test_writer_starts_and_stops);
-    run_test("test_log_frame_increments_counter",    test_log_frame_increments_counter);
-    run_test("test_backpressure_drop_policy",        test_backpressure_drop_policy);
-    run_test("test_queue_stats_accessible",          test_queue_stats_accessible);
+    run_test("test_writer_starts_and_stops", test_writer_starts_and_stops);
+    run_test("test_log_frame_increments_counter", test_log_frame_increments_counter);
+    run_test("test_backpressure_drop_policy", test_backpressure_drop_policy);
+    run_test("test_queue_stats_accessible", test_queue_stats_accessible);
 
     std::cout << "\nResults: " << g_tests_passed << "/" << g_tests_run << " passed\n";
 

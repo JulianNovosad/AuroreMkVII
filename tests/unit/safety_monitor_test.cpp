@@ -380,7 +380,8 @@ TEST(test_safety_monitor_concurrent_access) {
     // Monitoring thread
     threads.emplace_back([&]() {
         for (int i = 0; i < 500; i++) {
-            (void)monitor.run_cycle();  // Don't assert - run_cycle may return false on deadline miss
+            (void)
+                monitor.run_cycle();  // Don't assert - run_cycle may return false on deadline miss
             std::this_thread::yield();
         }
     });
@@ -665,7 +666,7 @@ TEST(test_stage_stats_reset) {
     aurore::SafetyMonitor monitor(config);
 
     // Record latencies across all stages
-    monitor.record_stage_latency(aurore::PipelineStage::VISION, 15000000u);   // above threshold
+    monitor.record_stage_latency(aurore::PipelineStage::VISION, 15000000u);  // above threshold
     monitor.record_stage_latency(aurore::PipelineStage::TRACK, 15000000u);
     monitor.record_stage_latency(aurore::PipelineStage::ACTUATION, 15000000u);
     monitor.record_frame_complete(45000000u);

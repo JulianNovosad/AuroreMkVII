@@ -18,12 +18,13 @@
  * - Falls back to NEON (ARM) or pure software (x86)
  */
 
-#include "aurore/camera_wrapper.hpp"
+#include <sys/stat.h>
 
 #include <atomic>
 #include <cstdio>
 #include <cstring>
-#include <sys/stat.h>
+
+#include "aurore/camera_wrapper.hpp"
 
 // OpenCV headers (must be included after camera_wrapper.hpp for cv::Mat definition)
 #include <opencv2/opencv.hpp>
@@ -40,29 +41,36 @@ bool g_gpu_available = false;
 bool g_gpu_compile_enabled = false;
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::printf("  PASS: %s\n", #name); \
-    } \
-    catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::fprintf(stderr, "  FAIL: %s - %s\n", #name, e.what()); \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                  \
+    do {                                                                \
+        g_tests_run.fetch_add(1);                                       \
+        try {                                                           \
+            name();                                                     \
+            g_tests_passed.fetch_add(1);                                \
+            std::printf("  PASS: %s\n", #name);                         \
+        } catch (const std::exception& e) {                             \
+            g_tests_failed.fetch_add(1);                                \
+            std::fprintf(stderr, "  FAIL: %s - %s\n", #name, e.what()); \
+        }                                                               \
+    } while (0)
 
-#define SKIP_TEST(reason) do { \
-    std::printf("  SKIP: %s (%s)\n", #reason, __func__); \
-    g_tests_run.fetch_add(1); \
-    g_tests_passed.fetch_add(1); \
-    return; \
-} while(0)
+#define SKIP_TEST(reason)                                    \
+    do {                                                     \
+        std::printf("  SKIP: %s (%s)\n", #reason, __func__); \
+        g_tests_run.fetch_add(1);                            \
+        g_tests_passed.fetch_add(1);                         \
+        return;                                              \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
 
 }  // anonymous namespace
 
@@ -151,8 +159,7 @@ TEST(test_camera_config_gpu_flag) {
 
     // Default should have GPU acceleration enabled
     ASSERT_TRUE(cfg.enable_hw_accel);
-    std::printf("  CameraConfig::enable_hw_accel: %s\n",
-                cfg.enable_hw_accel ? "true" : "false");
+    std::printf("  CameraConfig::enable_hw_accel: %s\n", cfg.enable_hw_accel ? "true" : "false");
 
     // Test disabling GPU
     cfg.enable_hw_accel = false;
@@ -165,9 +172,9 @@ TEST(test_camera_config_gpu_flag) {
 
 TEST(test_camera_init_with_gpu) {
     aurore::CameraConfig cfg;
-    cfg.width  = 1536;
+    cfg.width = 1536;
     cfg.height = 864;
-    cfg.fps    = 120;
+    cfg.fps = 120;
     cfg.enable_hw_accel = true;  // Request GPU acceleration
 
     aurore::CameraWrapper cam(cfg);
@@ -211,9 +218,9 @@ TEST(test_gpu_acceleration_performance) {
     }
 
     aurore::CameraConfig cfg;
-    cfg.width  = 1536;
+    cfg.width = 1536;
     cfg.height = 864;
-    cfg.fps    = 120;
+    cfg.fps = 120;
     cfg.enable_hw_accel = true;
 
     aurore::CameraWrapper cam(cfg);
@@ -249,8 +256,7 @@ TEST(test_gpu_acceleration_performance) {
     cam.stop();
 
     double mean_gpu_ms = static_cast<double>(total_gpu_ns) / kNumFrames / 1000000.0;
-    std::printf("  GPU conversion latency: %.2fms (mean, n=%d)\n",
-                mean_gpu_ms, kNumFrames);
+    std::printf("  GPU conversion latency: %.2fms (mean, n=%d)\n", mean_gpu_ms, kNumFrames);
 
     // AM7-L2-VIS-003: GPU path should be < 0.5ms
     // Relaxed to < 1.0ms for initial implementation
@@ -264,9 +270,9 @@ TEST(test_gpu_acceleration_performance) {
 TEST(test_fallback_to_neon_cpu) {
     // This test verifies that the pipeline works even without GPU
     aurore::CameraConfig cfg;
-    cfg.width  = 1536;
+    cfg.width = 1536;
     cfg.height = 864;
-    cfg.fps    = 120;
+    cfg.fps = 120;
     cfg.enable_hw_accel = true;  // Request GPU, but fall back if unavailable
 
     aurore::CameraWrapper cam(cfg);

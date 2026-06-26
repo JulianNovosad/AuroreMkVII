@@ -10,7 +10,7 @@ namespace aurore {
 // Non-copyable, movable. All reads/writes return std::optional<T>;
 // nullopt indicates a bus or OS error.
 class I2cDevice {
-public:
+   public:
     I2cDevice() = default;
     ~I2cDevice();
 
@@ -36,7 +36,7 @@ public:
     // Write one byte to the given register.
     bool write_byte(uint8_t reg, uint8_t val) const;
 
-private:
+   private:
     int fd_{-1};
 };
 

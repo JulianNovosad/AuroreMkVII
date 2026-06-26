@@ -35,10 +35,10 @@ struct UsbCameraConfig {
     int width = 640;
     int height = 480;
     int fps = 30;
-    int device_index = -1;              ///< V4L2 device index (-1 = auto-detect)
-    std::string device_path;            ///< Explicit /dev/videoN path (overrides device_index)
+    int device_index = -1;    ///< V4L2 device index (-1 = auto-detect)
+    std::string device_path;  ///< Explicit /dev/videoN path (overrides device_index)
     PixelFormat format = PixelFormat::BGR888;  ///< Output format (BGR888 for OpenCV)
-    int buffer_count = 4;               ///< V4L2 buffer count hint
+    int buffer_count = 4;                      ///< V4L2 buffer count hint
 
     bool validate() const noexcept {
         return width > 0 && height > 0 && fps > 0 && fps <= 120 && buffer_count >= 2;
@@ -49,7 +49,7 @@ struct UsbCameraConfig {
  * @brief Camera source selector for vision pipeline switching
  */
 enum class CameraSource : uint8_t {
-    MIPI_CSI2 = 0,  ///< Primary MIPI CSI-2 camera (CameraWrapper)
+    MIPI_CSI2 = 0,   ///< Primary MIPI CSI-2 camera (CameraWrapper)
     USB_WEBCAM = 1,  ///< Secondary USB webcam (UsbCamera)
 };
 

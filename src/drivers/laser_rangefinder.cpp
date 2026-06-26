@@ -16,18 +16,19 @@
  */
 
 #include "aurore/drivers/laser_rangefinder.hpp"
-#include "aurore/timing.hpp"
 
-#include <cerrno>
-#include <cstring>
 #include <fcntl.h>
 #include <poll.h>
 #include <termios.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <chrono>
+#include <cstring>
 #include <iostream>
 #include <thread>
+
+#include "aurore/timing.hpp"
 
 namespace aurore {
 
@@ -48,7 +49,8 @@ constexpr char kSingleShotAscii[] = "Q\r";
 constexpr char kWakeupAscii[] = "\r";
 
 // Modbus RTU: Read 1 Holding Register at address 0x0000 from slave 0x01
-// Frame: [addr=01] [func=03] [start_hi=00] [start_lo=00] [count_hi=00] [count_lo=01] [CRC_lo] [CRC_hi]
+// Frame: [addr=01] [func=03] [start_hi=00] [start_lo=00] [count_hi=00] [count_lo=01] [CRC_lo]
+// [CRC_hi]
 constexpr uint8_t kModbusPollCmd[] = {0x01, 0x03, 0x00, 0x00, 0x00, 0x01, 0x84, 0x0A};
 
 // M01 frame reassembly ring buffer size (holds ~4 frames worth of data)
@@ -56,11 +58,16 @@ constexpr size_t kM01RingBufSize = 64;
 
 speed_t baud_to_speed(int baud) noexcept {
     switch (baud) {
-        case 9600:   return B9600;
-        case 19200:  return B19200;
-        case 38400:  return B38400;
-        case 115200: return B115200;
-        default:     return B9600;
+        case 9600:
+            return B9600;
+        case 19200:
+            return B19200;
+        case 38400:
+            return B38400;
+        case 115200:
+            return B115200;
+        default:
+            return B9600;
     }
 }
 
@@ -117,11 +124,11 @@ uint32_t LaserRangefinder::m01_bcd_to_mm(const uint8_t* bcd) noexcept {
 
 size_t LaserRangefinder::parse_m01_frame(const uint8_t* buf, size_t len, uint32_t& out_mm) {
     out_mm = 0;
-    
+
     // Scan for sync byte
     for (size_t i = 0; i < len; ++i) {
         const uint8_t sync = buf[i];
-        
+
         // Show every sync byte found
         if (sync != 0xAA && sync != 0xEE) {
             continue;
@@ -220,8 +227,8 @@ bool LaserRangefinder::init(const std::string& uart_device, int baud, LrfProtoco
 
     fd_ = ::open(uart_device.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (fd_ < 0) {
-        std::cerr << "FAIL: LRF UART open(" << uart_device << ") failed: "
-                  << std::strerror(errno) << "\n"
+        std::cerr << "FAIL: LRF UART open(" << uart_device << ") failed: " << std::strerror(errno)
+                  << "\n"
                   << " Check: UART device path and permissions.\n"
                   << " Fix: Verify /dev/ttyAMA* exists and user is in dialout group.\n";
         return false;
@@ -259,7 +266,7 @@ bool LaserRangefinder::init(const std::string& uart_device, int baud, LrfProtoco
 
     // Non-blocking reads: VMIN=0, VTIME=1 (100ms timeout)
     // Actual timeout control is via poll() in the reader loops
-    tty.c_cc[VMIN]  = 0;
+    tty.c_cc[VMIN] = 0;
     tty.c_cc[VTIME] = 1;
 
     if (::tcsetattr(fd_, TCSANOW, &tty) != 0) {
@@ -275,8 +282,8 @@ bool LaserRangefinder::init(const std::string& uart_device, int baud, LrfProtoco
     ::tcflush(fd_, TCIOFLUSH);
 
     const char* proto_name = (protocol_ == LrfProtocol::MODBUS_RTU) ? "Modbus RTU" : "M01";
-    std::cout << "[LaserRangefinder] UART " << uart_device << " open OK ("
-              << baud << " baud, " << proto_name << ")\n";
+    std::cout << "[LaserRangefinder] UART " << uart_device << " open OK (" << baud << " baud, "
+              << proto_name << ")\n";
     return true;
 }
 
@@ -420,8 +427,7 @@ void LaserRangefinder::reader_loop_m01() {
             // If a valid distance was extracted, update the atomic
             if (mm >= 50u && mm <= 50000u) {
                 range_mm_.store(mm, std::memory_order_release);
-                last_ts_ns_.store(get_timestamp(ClockId::MonotonicRaw),
-                                  std::memory_order_release);
+                last_ts_ns_.store(get_timestamp(ClockId::MonotonicRaw), std::memory_order_release);
             }
 
             // Shift unconsumed data to the front of the ring buffer
@@ -430,8 +436,8 @@ void LaserRangefinder::reader_loop_m01() {
             }
             ring_len -= consumed;
         }
-        }
-        }
+    }
+}
 // ============================================================================
 // Modbus RTU reader loop (active poll/response)
 // ============================================================================
@@ -503,8 +509,8 @@ void LaserRangefinder::reader_loop_modbus() {
 
         // Validate CRC-16 over first 5 bytes (addr + func + byte_count + 2 data bytes)
         const uint16_t calc_crc = modbus_crc16(resp, 5);
-        const uint16_t recv_crc = static_cast<uint16_t>(resp[5]) |
-                                  (static_cast<uint16_t>(resp[6]) << 8);
+        const uint16_t recv_crc =
+            static_cast<uint16_t>(resp[5]) | (static_cast<uint16_t>(resp[6]) << 8);
         if (calc_crc != recv_crc) {
             crc_errors_.fetch_add(1, std::memory_order_relaxed);
             std::cerr << "FAIL: LRF CRC mismatch.\n"

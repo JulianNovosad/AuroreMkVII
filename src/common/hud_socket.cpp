@@ -26,7 +26,7 @@ HudSocket::HudSocket(const HudSocketConfig& config)
     : socket_path_(config.socket_path),
       config_(config),
       tokens_(config.rate_limit_msgs_per_sec),  // Start with full bucket
-      last_refill_ns_(get_timestamp()) {}  // Initialize refill timestamp
+      last_refill_ns_(get_timestamp()) {}       // Initialize refill timestamp
 
 HudSocket::~HudSocket() { stop(); }
 
@@ -53,7 +53,7 @@ bool HudSocket::start() {
 
     // SEC-008: Set socket file permissions before bind
     // Create socket with restrictive permissions (0600 = owner read/write only)
-    struct sockaddr_un addr {};
+    struct sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
     std::strncpy(addr.sun_path, socket_path_.c_str(), sizeof(addr.sun_path) - 1);
 
@@ -111,7 +111,7 @@ void HudSocket::stop() {
 
 // SEC-008: Peer credential validation using SO_PEERCRED
 SocketAuthStatus HudSocket::validate_peer_credentials(int client_fd) {
-    struct ucred peer_cred {};
+    struct ucred peer_cred{};
     socklen_t peer_cred_len = sizeof(peer_cred);
 
     // Get peer credentials
@@ -141,7 +141,7 @@ SocketAuthStatus HudSocket::validate_peer_credentials(int client_fd) {
 
 void HudSocket::accept_loop() {
     while (running_.load(std::memory_order_acquire)) {
-        struct sockaddr_un client_addr {};
+        struct sockaddr_un client_addr{};
         socklen_t client_addr_len = sizeof(client_addr);
 
         int client = ::accept(server_fd_, reinterpret_cast<struct sockaddr*>(&client_addr),
@@ -151,7 +151,7 @@ void HudSocket::accept_loop() {
             // EAGAIN/EWOULDBLOCK expected for non-blocking socket
             if (errno == EAGAIN || errno == EINTR) {
                 // PERF-007: Use clock_nanosleep instead of sleep_for
-                struct timespec ts {};
+                struct timespec ts{};
                 ts.tv_sec = 0;
                 ts.tv_nsec = 5000000;  // 5ms
                 clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, nullptr);
@@ -282,25 +282,22 @@ bool HudSocket::is_message_fresh(uint64_t timestamp_ns) const {
 std::string HudSocket::frame_to_json(const HudFrame& f) const {
     char buf[512];
     std::snprintf(buf, sizeof(buf),
-        "{\"state\":%u,\"az\":%.2f,\"el\":%.2f,"
-        "\"cx\":%.1f,\"cy\":%.1f,\"w\":%.1f,\"h\":%.1f,"
-        "\"conf\":%.3f,\"range\":%.1f,\"vx\":%.3f,\"vy\":%.3f,"
-        "\"az_lead_mrad\":%.3f,\"el_lead_mrad\":%.3f,\"p_hit\":%.3f,"
-        "\"deadline_misses\":%u,\"cpu_temp\":%.1f,"
-        "\"interlock\":%u,\"target_lock\":%u,\"fault\":%u}\n",
-        static_cast<unsigned>(f.state),
-        static_cast<double>(f.az_deg), static_cast<double>(f.el_deg),
-        static_cast<double>(f.target_cx), static_cast<double>(f.target_cy),
-        static_cast<double>(f.target_w), static_cast<double>(f.target_h),
-        static_cast<double>(f.confidence), static_cast<double>(f.range_m),
-        static_cast<double>(f.velocity_x), static_cast<double>(f.velocity_y),
-        static_cast<double>(f.az_lead_mrad), static_cast<double>(f.el_lead_mrad),
-        static_cast<double>(f.p_hit),
-        f.deadline_misses,
-        static_cast<double>(f.cpu_temp_c) / 10.0,
-        static_cast<unsigned>(f.interlock),
-        static_cast<unsigned>(f.target_lock),
-        static_cast<unsigned>(f.fault_active));
+                  "{\"state\":%u,\"az\":%.2f,\"el\":%.2f,"
+                  "\"cx\":%.1f,\"cy\":%.1f,\"w\":%.1f,\"h\":%.1f,"
+                  "\"conf\":%.3f,\"range\":%.1f,\"vx\":%.3f,\"vy\":%.3f,"
+                  "\"az_lead_mrad\":%.3f,\"el_lead_mrad\":%.3f,\"p_hit\":%.3f,"
+                  "\"deadline_misses\":%u,\"cpu_temp\":%.1f,"
+                  "\"interlock\":%u,\"target_lock\":%u,\"fault\":%u}\n",
+                  static_cast<unsigned>(f.state), static_cast<double>(f.az_deg),
+                  static_cast<double>(f.el_deg), static_cast<double>(f.target_cx),
+                  static_cast<double>(f.target_cy), static_cast<double>(f.target_w),
+                  static_cast<double>(f.target_h), static_cast<double>(f.confidence),
+                  static_cast<double>(f.range_m), static_cast<double>(f.velocity_x),
+                  static_cast<double>(f.velocity_y), static_cast<double>(f.az_lead_mrad),
+                  static_cast<double>(f.el_lead_mrad), static_cast<double>(f.p_hit),
+                  f.deadline_misses, static_cast<double>(f.cpu_temp_c) / 10.0,
+                  static_cast<unsigned>(f.interlock), static_cast<unsigned>(f.target_lock),
+                  static_cast<unsigned>(f.fault_active));
     return std::string(buf);
 }
 

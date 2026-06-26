@@ -385,26 +385,19 @@ class FusionHat {
      *
      * @param path Custom sysfs base path
      */
-    void set_sysfs_base_for_test(const std::string& path) {
-        sysfs_base_ = path;
-    }
+    void set_sysfs_base_for_test(const std::string& path) { sysfs_base_ = path; }
 
     /**
      * @brief Set proc base path (test only)
      */
-    void set_proc_base_for_test(const std::string& path) {
-        proc_base_ = path;
-    }
+    void set_proc_base_for_test(const std::string& path) { proc_base_ = path; }
 
    private:
     /**
      * @brief Internal command structure for asynchronous processing
      */
     struct ServoCommand {
-        enum class Type {
-            SET_PULSE_WIDTH,
-            SET_ENABLED
-        } type;
+        enum class Type { SET_PULSE_WIDTH, SET_ENABLED } type;
         int channel;
         int value;  // pulse_width_us or enable (0/1)
     };
@@ -500,7 +493,7 @@ class FusionHat {
     // Per-channel state
     struct ChannelState {
         std::atomic<bool> enabled{false};
-        std::atomic<float> current_angle{90.0f};  // Center position (0-180 range)
+        std::atomic<float> current_angle{90.0f};     // Center position (0-180 range)
         std::atomic<int> current_pulse_width{1500};  // Center pulse width
         std::atomic<uint64_t> last_update_ns{0};
         float min_angle{0.0f};

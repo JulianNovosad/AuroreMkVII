@@ -7,45 +7,55 @@
  * are correctly mapped according to ICD-002 and ICD-003.
  */
 
-#include "aurore/fusion_hat.hpp"
-#include "aurore/gimbal_controller.hpp"
-#include "aurore/interlock_controller.hpp"
-#include "aurore/timing.hpp"
-
 #include <cassert>
 #include <cmath>
 #include <iostream>
 #include <string>
 
+#include "aurore/fusion_hat.hpp"
+#include "aurore/gimbal_controller.hpp"
+#include "aurore/interlock_controller.hpp"
+#include "aurore/timing.hpp"
+
 static int g_pass = 0;
 static int g_fail = 0;
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    std::cout << "Running " << #name << "... "; \
-    try { name(); std::cout << "PASS\n"; ++g_pass; } \
-    catch (const std::exception& e) { \
-        std::cout << "FAIL: " << e.what() << "\n"; ++g_fail; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                 \
+    do {                                               \
+        std::cout << "Running " << #name << "... ";    \
+        try {                                          \
+            name();                                    \
+            std::cout << "PASS\n";                     \
+            ++g_pass;                                  \
+        } catch (const std::exception& e) {            \
+            std::cout << "FAIL: " << e.what() << "\n"; \
+            ++g_fail;                                  \
+        }                                              \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { \
-    if (!(x)) { \
-        throw std::runtime_error("Assertion failed: " #x); \
-    } \
-} while(0)
+#define ASSERT_TRUE(x)                                         \
+    do {                                                       \
+        if (!(x)) {                                            \
+            throw std::runtime_error("Assertion failed: " #x); \
+        }                                                      \
+    } while (0)
 
-#define ASSERT_NEAR(expected, actual, eps) do { \
-    if (std::abs((expected) - (actual)) > (eps)) { \
-        throw std::runtime_error("Assertion failed: " + std::to_string(expected) + " ~= " + std::to_string(actual)); \
-    } \
-} while(0)
+#define ASSERT_NEAR(expected, actual, eps)                                             \
+    do {                                                                               \
+        if (std::abs((expected) - (actual)) > (eps)) {                                 \
+            throw std::runtime_error("Assertion failed: " + std::to_string(expected) + \
+                                     " ~= " + std::to_string(actual));                 \
+        }                                                                              \
+    } while (0)
 
-#define ASSERT_EQ(expected, actual) do { \
-    if ((expected) != (actual)) { \
-        throw std::runtime_error("Assertion failed: " + std::to_string(expected) + " == " + std::to_string(actual)); \
-    } \
-} while(0)
+#define ASSERT_EQ(expected, actual)                                                    \
+    do {                                                                               \
+        if ((expected) != (actual)) {                                                  \
+            throw std::runtime_error("Assertion failed: " + std::to_string(expected) + \
+                                     " == " + std::to_string(actual));                 \
+        }                                                                              \
+    } while (0)
 
 using namespace aurore;
 
@@ -59,18 +69,21 @@ TEST(test_azimuth_coupling) {
     config.max_angle_deg = 90.0f;
     config.min_pulse_width_us = 1000;
     config.max_pulse_width_us = 2000;
-    
+
     FusionHat hat(config);
-    hat.init();
-    
+    if (!hat.init()) {
+        std::cerr << "Hardware not available, skipping test" << std::endl;
+        exit(77);
+    }
+
     // Test center (0°)
     hat.set_servo_angle(0, 0.0f);
     ASSERT_EQ(1500, hat.get_pulse_width(0));
-    
+
     // Test full left (-90°)
     hat.set_servo_angle(0, -90.0f);
     ASSERT_EQ(1000, hat.get_pulse_width(0));
-    
+
     // Test full right (+90°)
     hat.set_servo_angle(0, 90.0f);
     ASSERT_EQ(2000, hat.get_pulse_width(0));
@@ -86,25 +99,28 @@ TEST(test_azimuth_coupling) {
 TEST(test_elevation_coupling) {
     // To support -10 to +45, we would need to configure FusionHat with those limits.
     // But if we already configured it for Azimuth ±90, we have a conflict.
-    
+
     // For this test, we assume a FusionHat configured specifically for Elevation
     FusionHatConfig config;
     config.min_angle_deg = -10.0f;
     config.max_angle_deg = 45.0f;
     config.min_pulse_width_us = 1000;
     config.max_pulse_width_us = 2000;
-    
+
     FusionHat hat(config);
-    hat.init();
-    
+    if (!hat.init()) {
+        std::cerr << "Hardware not available, skipping test" << std::endl;
+        exit(77);
+    }
+
     // Test bottom limit (-10°)
     hat.set_servo_angle(1, -10.0f);
     ASSERT_EQ(1000, hat.get_pulse_width(1));
-    
+
     // Test top limit (+45°)
     hat.set_servo_angle(1, 45.0f);
     ASSERT_EQ(2000, hat.get_pulse_width(1));
-    
+
     // Test horizontal (0°)
     // ratio = (0 - (-10)) / (45 - (-10)) = 10 / 55 = 0.1818...
     // pulse = 1000 + 0.1818 * 1000 = 1181
@@ -119,11 +135,14 @@ TEST(test_elevation_coupling) {
 TEST(test_interlock_coupling) {
     FusionHatConfig hat_config;
     FusionHat hat(hat_config);
-    hat.init();
-    
+    if (!hat.init()) {
+        std::cerr << "Hardware not available, skipping test" << std::endl;
+        exit(77);
+    }
+
     InterlockConfig il_config;
     il_config.inhibit_channel = 2;
-    
+
     InterlockController interlock(&hat, il_config);
     // init() may fail if GPIO is unavailable; servo must still reach INHIBIT (fail-safe)
     interlock.init();
@@ -150,15 +169,18 @@ TEST(test_safety_clamping_coupling) {
     config.max_angle_deg = 45.0f;
     config.min_pulse_width_us = 1000;
     config.max_pulse_width_us = 2000;
-    
+
     FusionHat hat(config);
-    hat.init();
-    
+    if (!hat.init()) {
+        std::cerr << "Hardware not available, skipping test" << std::endl;
+        exit(77);
+    }
+
     // Request angle outside limits
     hat.set_servo_angle(0, -100.0f);
     ASSERT_EQ(1000, hat.get_pulse_width(0));
     ASSERT_NEAR(-45.0f, *hat.get_servo_angle(0), 0.001f);
-    
+
     hat.set_servo_angle(0, 100.0f);
     ASSERT_EQ(2000, hat.get_pulse_width(0));
     ASSERT_NEAR(45.0f, *hat.get_servo_angle(0), 0.001f);
@@ -166,15 +188,15 @@ TEST(test_safety_clamping_coupling) {
 
 int main() {
     std::cout << "=== Coupling Control-Actuation Tests ===\n" << std::endl;
-    
+
     RUN_TEST(test_azimuth_coupling);
     RUN_TEST(test_elevation_coupling);
     RUN_TEST(test_interlock_coupling);
     RUN_TEST(test_safety_clamping_coupling);
-    
+
     std::cout << "\n=== Results ===\n";
     std::cout << "Passed: " << g_pass << "\n";
     std::cout << "Failed: " << g_fail << "\n";
-    
+
     return g_fail > 0 ? 1 : 0;
 }

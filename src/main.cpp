@@ -26,12 +26,12 @@
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
-#include <filesystem>
 #include <thread>
 
 // libcap for privilege drop (optional - requires libcap-dev)
@@ -43,26 +43,26 @@
 #include "aurore/aurore_link_server.hpp"
 #include "aurore/ballistic_solver.hpp"
 #include "aurore/camera_wrapper.hpp"
+#include "aurore/command_socket.hpp"
 #include "aurore/config_loader.hpp"
 #include "aurore/detector.hpp"  // For OrbDetector
+#include "aurore/drivers/laser_rangefinder.hpp"
+#include "aurore/dual_camera_manager.hpp"
 #include "aurore/fusion_hat.hpp"
 #include "aurore/gimbal_controller.hpp"
 #include "aurore/hud_socket.hpp"
 #include "aurore/interlock_controller.hpp"
+#include "aurore/mjpeg_streamer.hpp"
 #include "aurore/ring_buffer.hpp"
 #include "aurore/safety_monitor.hpp"
+#include "aurore/security.hpp"
 #include "aurore/state_machine.hpp"  // For TrackSolution
+#include "aurore/sweep_pattern.hpp"
 #include "aurore/telemetry_writer.hpp"
 #include "aurore/timing.hpp"
 #include "aurore/tracker.hpp"  // For KcfTracker
-#include "aurore/dual_camera_manager.hpp"
 #include "aurore/usb_camera.hpp"
-#include "aurore/command_socket.hpp"
-#include "aurore/drivers/laser_rangefinder.hpp"
 #include "aurore/yolo26_detector.hpp"
-#include "aurore/sweep_pattern.hpp"
-#include "aurore/mjpeg_streamer.hpp"
-#include "aurore/security.hpp"
 
 namespace {
 
@@ -148,8 +148,8 @@ bool set_resource_limits() {
 
     // Set stack size limit for new threads (e.g., 8MB)
     // Required for some real-time threads to avoid stack overflow
-    rl.rlim_cur = 8 * 1024 * 1024; // 8MB
-    rl.rlim_max = 8 * 1024 * 1024; // 8MB
+    rl.rlim_cur = 8 * 1024 * 1024;  // 8MB
+    rl.rlim_max = 8 * 1024 * 1024;  // 8MB
 
     if (setrlimit(RLIMIT_STACK, &rl) != 0) {
         std::cerr << "Warning: Failed to set stack limit: " << strerror(errno) << std::endl;
@@ -287,7 +287,9 @@ int main(int argc, char* argv[]) {
 
     // Lock memory (skip in dry-run — no RT guarantees needed)
     if (!dry_run && !lock_memory()) {
-        std::cerr << "FATAL: Failed to lock memory (mlockall). System cannot guarantee real-time performance." << std::endl;
+        std::cerr << "FATAL: Failed to lock memory (mlockall). System cannot guarantee real-time "
+                     "performance."
+                  << std::endl;
         return 1;
     }
 
@@ -304,12 +306,13 @@ int main(int argc, char* argv[]) {
                              "(key/sig absent or invalid) — continuing in dry-run\n";
             } else {
                 std::cerr << "[security] ERROR: Binary signature verification FAILED "
-                             "— set up signing key at " << pub_path
-                          << " and signature at " << sig_path << "\n"
+                             "— set up signing key at "
+                          << pub_path << " and signature at " << sig_path << "\n"
                           << "           Generate keypair: openssl ecparam -name prime256v1 "
                              "-genkey -noout | openssl pkey -out /etc/aurore/signing_key.pem\n"
                           << "           Extract pubkey:   openssl pkey -in "
-                             "/etc/aurore/signing_key.pem -pubout -out " << pub_path << "\n"
+                             "/etc/aurore/signing_key.pem -pubout -out "
+                          << pub_path << "\n"
                           << "           Sign binary:      <see scripts/sign_binary.sh>\n"
                           << "           Continuing without signature verification.\n";
             }
@@ -365,7 +368,8 @@ int main(int argc, char* argv[]) {
     // This reduces attack surface by running as non-root
     if (!dry_run) {
         if (!drop_privileges(true)) {
-            std::cerr << "FATAL: Failed to drop privileges (drop_privileges). Exiting for safety." << std::endl;
+            std::cerr << "FATAL: Failed to drop privileges (drop_privileges). Exiting for safety."
+                      << std::endl;
             return 1;
         }
     }
@@ -375,13 +379,12 @@ int main(int argc, char* argv[]) {
 
     // Declare cam_config here so its dimensions are accessible for streamer construction below.
     aurore::CameraConfig cam_config;
-    cam_config.width  = config.get_int("camera.width",  aurore::DEFAULT_WIDTH);
+    cam_config.width = config.get_int("camera.width", aurore::DEFAULT_WIDTH);
     cam_config.height = config.get_int("camera.height", aurore::DEFAULT_HEIGHT);
-    cam_config.fps    = config.get_int("camera.fps",    aurore::DEFAULT_FPS);
+    cam_config.fps = config.get_int("camera.fps", aurore::DEFAULT_FPS);
 
     // Initialize camera (test pattern in dry-run, real camera otherwise)
     try {
-
         camera = std::make_unique<aurore::CameraWrapper>(cam_config);
         camera->init();
         camera->start();
@@ -432,13 +435,12 @@ int main(int argc, char* argv[]) {
     hud_cfg.socket_permissions = 0666;  // aurore-link (pi user) must always connect
     // Ensure socket directory exists before binding
     {
-        std::filesystem::path sock_dir =
-            std::filesystem::path(hud_cfg.socket_path).parent_path();
+        std::filesystem::path sock_dir = std::filesystem::path(hud_cfg.socket_path).parent_path();
         std::error_code ec;
         std::filesystem::create_directories(sock_dir, ec);
         if (ec) {
-            std::cerr << "Warning: Could not create socket dir " << sock_dir
-                      << ": " << ec.message() << std::endl;
+            std::cerr << "Warning: Could not create socket dir " << sock_dir << ": " << ec.message()
+                      << std::endl;
         }
     }
     aurore::HudSocket hud_socket(hud_cfg);
@@ -452,8 +454,8 @@ int main(int argc, char* argv[]) {
     // We push ISP stream 1 (640x360) to avoid a 3.8MB cold-cache DMA copy on the RT path.
     // The encode thread upscales to kStreamWidth x kStreamHeight (1280x720).
     aurore::MjpegStreamer mjpeg_streamer(
-        config.get_string("network.mjpeg_stream.socket_path", "/run/aurore/mjpeg_stream.sock"),
-        640, 360);
+        config.get_string("network.mjpeg_stream.socket_path", "/run/aurore/mjpeg_stream.sock"), 640,
+        360);
     if (mjpeg_streamer.start()) {
         std::cout << "MJPEG streamer listening: /run/aurore/mjpeg_stream.sock" << std::endl;
     } else {
@@ -486,8 +488,10 @@ int main(int argc, char* argv[]) {
     const float az_max = config.get_float("gimbal.azimuth.max_deg", 90.0f);
     const float el_min = config.get_float("gimbal.elevation.min_deg", -10.0f);
     const float el_max = config.get_float("gimbal.elevation.max_deg", 45.0f);
-    fusion_hat.set_endstop_limits(10, az_min, az_max);  // Channel 10 = azimuth (matches servo output)
-    fusion_hat.set_endstop_limits(11, el_min, el_max);  // Channel 11 = elevation (matches servo output)
+    fusion_hat.set_endstop_limits(10, az_min,
+                                  az_max);  // Channel 10 = azimuth (matches servo output)
+    fusion_hat.set_endstop_limits(11, el_min,
+                                  el_max);  // Channel 11 = elevation (matches servo output)
 
     // GimbalController for AUTO/FREECAM gimbal targeting
     aurore::GimbalController gimbal_ctrl;
@@ -558,7 +562,7 @@ int main(int argc, char* argv[]) {
     // Dual-stream camera manager (MIPI + USB)
     aurore::DualCameraManager dual_camera;
     dual_camera.init_mipi(camera.get());
-    
+
     aurore::UsbCameraConfig usb_config;
     usb_config.width = 640;
     usb_config.height = 480;
@@ -572,9 +576,8 @@ int main(int argc, char* argv[]) {
     }
 
     // Push every USB frame to the web preview socket (non-RT callback, safe to capture by ref)
-    dual_camera.set_usb_frame_callback([&](const cv::Mat& bgr) {
-        mjpeg_usb_streamer.push_frame(bgr);
-    });
+    dual_camera.set_usb_frame_callback(
+        [&](const cv::Mat& bgr) { mjpeg_usb_streamer.push_frame(bgr); });
 
     // State machine for FCS mode management
     aurore::StateMachine state_machine;
@@ -582,15 +585,15 @@ int main(int argc, char* argv[]) {
     // AM7-L2-LOG-OP-001: Log all state transitions to telemetry with context
     state_machine.set_state_change_callback(
         [&telemetry](aurore::FcsState from, aurore::FcsState to) {
-            const aurore::TelemetrySeverity sev =
-                (to == aurore::FcsState::FAULT) ? aurore::TelemetrySeverity::kCritical
-                                                : aurore::TelemetrySeverity::kInfo;
-            const aurore::TelemetryEventId evt =
-                (to == aurore::FcsState::FAULT) ? aurore::TelemetryEventId::SAFETY_FAULT
-                                                : aurore::TelemetryEventId::SYSTEM_BOOT;
+            const aurore::TelemetrySeverity sev = (to == aurore::FcsState::FAULT)
+                                                      ? aurore::TelemetrySeverity::kCritical
+                                                      : aurore::TelemetrySeverity::kInfo;
+            const aurore::TelemetryEventId evt = (to == aurore::FcsState::FAULT)
+                                                     ? aurore::TelemetryEventId::SAFETY_FAULT
+                                                     : aurore::TelemetryEventId::SYSTEM_BOOT;
             telemetry.log_event(evt, sev,
-                std::string("State: ") + aurore::fcs_state_name(from) +
-                " -> " + aurore::fcs_state_name(to));
+                                std::string("State: ") + aurore::fcs_state_name(from) + " -> " +
+                                    aurore::fcs_state_name(to));
             std::cout << "State: " << aurore::fcs_state_name(from) << " -> "
                       << aurore::fcs_state_name(to) << std::endl;
         });
@@ -644,20 +647,19 @@ int main(int argc, char* argv[]) {
     });
 
     // AM7-L3-SEC-001/AM7-L3-SEC-004: Security event callback — log and fault on attacks
-    link_server.set_security_event_callback(
-        [&](const std::string& event_type, uint32_t sequence) {
-            telemetry.log_event(aurore::TelemetryEventId::SAFETY_FAULT,
-                                aurore::TelemetrySeverity::kCritical,
-                                "AuroreLink security event: " + event_type);
-            if (event_type == "HMAC_VERIFY_FAIL") {
-                state_machine.on_fault(aurore::FaultCode::AUTH_FAILURE);
-            } else if (event_type == "SEQ_GAP_FAULT") {
-                // AM7-L3-SEC-004: sequence gap > 1000 triggers security fault
-                std::cerr << "AuroreLink: SEQ_GAP_FAULT seq=" << sequence
-                          << " — triggering security FAULT\n";
-                state_machine.on_fault(aurore::FaultCode::SEQUENCE_GAP);
-            }
-        });
+    link_server.set_security_event_callback([&](const std::string& event_type, uint32_t sequence) {
+        telemetry.log_event(aurore::TelemetryEventId::SAFETY_FAULT,
+                            aurore::TelemetrySeverity::kCritical,
+                            "AuroreLink security event: " + event_type);
+        if (event_type == "HMAC_VERIFY_FAIL") {
+            state_machine.on_fault(aurore::FaultCode::AUTH_FAILURE);
+        } else if (event_type == "SEQ_GAP_FAULT") {
+            // AM7-L3-SEC-004: sequence gap > 1000 triggers security fault
+            std::cerr << "AuroreLink: SEQ_GAP_FAULT seq=" << sequence
+                      << " — triggering security FAULT\n";
+            state_machine.on_fault(aurore::FaultCode::SEQUENCE_GAP);
+        }
+    });
 
     // AM7-L3-ACT-002: Gimbal command sequence gap detection — reject out-of-order commands.
     // The link protocol sends angular RATES (deg/s); integrate over dt to get absolute target.
@@ -666,10 +668,9 @@ int main(int argc, char* argv[]) {
                                          uint32_t seq_num) {
         const uint64_t now_ns = aurore::get_timestamp();
         const uint64_t prev_ns = freecam_last_ns.exchange(now_ns, std::memory_order_acq_rel);
-        const float dt_s = (prev_ns == 0)
-                           ? (1.0f / 120.0f)
-                           : std::clamp(static_cast<float>(now_ns - prev_ns) * 1e-9f,
-                                        0.001f, 0.1f);
+        const float dt_s =
+            (prev_ns == 0) ? (1.0f / 120.0f)
+                           : std::clamp(static_cast<float>(now_ns - prev_ns) * 1e-9f, 0.001f, 0.1f);
 
         // Integrate rate onto current gimbal position to get absolute target.
         const float new_az = gimbal_ctrl.current_az() + az_dps * dt_s;
@@ -710,7 +711,7 @@ int main(int argc, char* argv[]) {
         telemetry.log_event(aurore::TelemetryEventId::DETECTION_VALID,
                             aurore::TelemetrySeverity::kInfo,
                             "Operator target select @ (" + std::to_string(cx) + "," +
-                            std::to_string(cy) + ") conf=" + std::to_string(confidence));
+                                std::to_string(cy) + ") conf=" + std::to_string(confidence));
     });
     link_server.set_target_confirm_callback([&](uint32_t target_id) {
         telemetry.log_event(aurore::TelemetryEventId::TRACK_ACQUIRED,
@@ -722,7 +723,7 @@ int main(int argc, char* argv[]) {
         telemetry.log_event(aurore::TelemetryEventId::DETECTION_INVALID,
                             aurore::TelemetrySeverity::kInfo,
                             "Operator rejected target id=" + std::to_string(target_id) +
-                            " reason=" + std::to_string(reason));
+                                " reason=" + std::to_string(reason));
         // Return to SEARCH — tracker.reset() is deferred to vision thread via atomic flag
         aurore::FcsState cur = state_machine.state();
         if (cur == aurore::FcsState::TRACKING || cur == aurore::FcsState::ARMED) {
@@ -735,8 +736,10 @@ int main(int argc, char* argv[]) {
         telemetry.log_event(aurore::TelemetryEventId::DETECTION_VALID,
                             aurore::TelemetrySeverity::kInfo,
                             std::string("Zoom ") +
-                            (direction > 0 ? "in" : direction < 0 ? "out" : "stop") +
-                            " rate=" + std::to_string(rate));
+                                (direction > 0   ? "in"
+                                 : direction < 0 ? "out"
+                                                 : "stop") +
+                                " rate=" + std::to_string(rate));
     });
 
     // Command socket callbacks: browser UI → state machine
@@ -752,9 +755,8 @@ int main(int argc, char* argv[]) {
             state_machine.request_cancel();
         }
     });
-    cmd_socket.set_freecam_callback([&](float az_deg, float el_deg) {
-        gimbal_ctrl.command_absolute(az_deg, el_deg);
-    });
+    cmd_socket.set_freecam_callback(
+        [&](float az_deg, float el_deg) { gimbal_ctrl.command_absolute(az_deg, el_deg); });
     cmd_socket.set_reset_callback([&]() {
         std::cout << "CommandSocket: reset" << std::endl;
         state_machine.on_manual_reset();
@@ -776,15 +778,15 @@ int main(int argc, char* argv[]) {
     // Uses mutex+cv (non-blocking try_lock in RT thread) to avoid heap alloc in RT.
     // ---------------------------------------------------------------------------
     struct DetectShared {
-        std::mutex         frame_mtx;
-        cv::Mat            frame;           // latest BGR frame for detection
-        bool               frame_ready{false};
+        std::mutex frame_mtx;
+        cv::Mat frame;  // latest BGR frame for detection
+        bool frame_ready{false};
         std::condition_variable frame_cv;
 
-        std::mutex         result_mtx;
-        aurore::Detection  latest;          // latest detection result
-        bool               result_valid{false};
-        std::atomic<bool>  result_fresh{false};  // set by detect thread, cleared by track_compute
+        std::mutex result_mtx;
+        aurore::Detection latest;  // latest detection result
+        bool result_valid{false};
+        std::atomic<bool> result_fresh{false};  // set by detect thread, cleared by track_compute
     };
     DetectShared detect_shared;
 
@@ -793,8 +795,8 @@ int main(int argc, char* argv[]) {
 #ifdef AURORE_HAS_ONNXRUNTIME
     std::unique_ptr<aurore::Yolo26Detector> yolo_detector;
     aurore::Yolo26Detector::Config yolo_cfg;
-    yolo_cfg.model_path = config.get_string("vision.yolo_model_path",
-                                             "/home/pi/AuroreMkVII/models/yolo26n.onnx");
+    yolo_cfg.model_path =
+        config.get_string("vision.yolo_model_path", "/home/pi/AuroreMkVII/models/yolo26n.onnx");
     yolo_cfg.num_threads = 1;  // pinned to CPU 0; no benefit from extra ORT threads
     yolo_detector = std::make_unique<aurore::Yolo26Detector>(yolo_cfg);
     yolo_loaded = yolo_detector->load();
@@ -830,9 +832,10 @@ int main(int argc, char* argv[]) {
             cv::Mat local_frame;
             {
                 std::unique_lock<std::mutex> lk(detect_shared.frame_mtx);
-                detect_shared.frame_cv.wait_for(lk, std::chrono::milliseconds(100),
-                    [&]{ return detect_shared.frame_ready ||
-                              g_shutdown_requested.load(std::memory_order_acquire); });
+                detect_shared.frame_cv.wait_for(lk, std::chrono::milliseconds(100), [&] {
+                    return detect_shared.frame_ready ||
+                           g_shutdown_requested.load(std::memory_order_acquire);
+                });
                 if (!detect_shared.frame_ready) continue;
                 local_frame = detect_shared.frame.clone();
                 detect_shared.frame_ready = false;
@@ -848,7 +851,7 @@ int main(int argc, char* argv[]) {
 #endif
             if (det.has_value()) {
                 std::lock_guard<std::mutex> lk(detect_shared.result_mtx);
-                detect_shared.latest     = *det;
+                detect_shared.latest = *det;
                 detect_shared.result_valid = true;
                 detect_shared.result_fresh.store(true, std::memory_order_release);
             }
@@ -875,8 +878,10 @@ int main(int argc, char* argv[]) {
             return;
         }
 
-        aurore::ThreadTiming timing(8333333, 0);    // 120Hz target, hardware achieves ~70fps at 1536x864
-        aurore::DeadlineMonitor deadline(25000000);  // 25ms WCET: ISP delivers at ~17ms, headroom for jitter
+        aurore::ThreadTiming timing(8333333,
+                                    0);  // 120Hz target, hardware achieves ~70fps at 1536x864
+        aurore::DeadlineMonitor deadline(
+            25000000);  // 25ms WCET: ISP delivers at ~17ms, headroom for jitter
 
         vision_running.store(true, std::memory_order_release);
 
@@ -950,7 +955,7 @@ int main(int argc, char* argv[]) {
         // Once a first detection is found, hold gimbal, run tracker for 3-frame
         // stability confirmation. Tracker is only (re-)initialised when no candidate
         // is pending.
-        bool candidate_found = false;      // true = first detection in progress
+        bool candidate_found = false;  // true = first detection in progress
 
         // Frame counter for detect thread feed rate (every 4th frame → ~30fps detection)
         uint64_t detect_frame_count = 0;
@@ -995,7 +1000,8 @@ int main(int argc, char* argv[]) {
                         if (!candidate_found) {
                             // --- Phase 1: sweep + detect until first hit ---
                             uint64_t now_tick = aurore::get_timestamp();
-                            const float dt_sec = static_cast<float>(now_tick - last_tick_ns) * 1e-9f;
+                            const float dt_sec =
+                                static_cast<float>(now_tick - last_tick_ns) * 1e-9f;
                             last_tick_ns = now_tick;
                             auto sweep_pt = sweep.tick(dt_sec);
                             gimbal_ctrl.command_absolute(sweep_pt.az_deg, sweep_pt.el_deg);
@@ -1008,8 +1014,8 @@ int main(int argc, char* argv[]) {
                             // after release_frame().  No software resize on the RT thread.
                             if (yolo_loaded && (++detect_frame_count % kDetectEveryN == 0)) {
                                 if (detect_shared.frame_mtx.try_lock()) {
-                                    cv::Mat yolo_src = camera->wrap_as_mat(
-                                        frame, aurore::PixelFormat::BGR888, 1);
+                                    cv::Mat yolo_src =
+                                        camera->wrap_as_mat(frame, aurore::PixelFormat::BGR888, 1);
                                     if (!yolo_src.empty()) {
                                         yolo_src.copyTo(detect_shared.frame);
                                         detect_shared.frame_ready = true;
@@ -1060,10 +1066,10 @@ int main(int argc, char* argv[]) {
                                 // position history in the state machine.
                                 aurore::Detection synth;
                                 synth.confidence = 0.96f;
-                                synth.bbox.x     = static_cast<int>(track_sol.centroid_x);
-                                synth.bbox.y     = static_cast<int>(track_sol.centroid_y);
-                                synth.bbox.w     = static_cast<int>(tracker.last_bbox().width);
-                                synth.bbox.h     = static_cast<int>(tracker.last_bbox().height);
+                                synth.bbox.x = static_cast<int>(track_sol.centroid_x);
+                                synth.bbox.y = static_cast<int>(track_sol.centroid_y);
+                                synth.bbox.w = static_cast<int>(tracker.last_bbox().width);
+                                synth.bbox.h = static_cast<int>(tracker.last_bbox().height);
                                 state_machine.on_detection(synth);
                                 // state_machine may have just transitioned to TRACKING —
                                 // that's fine; next frame reads state == TRACKING.
@@ -1182,8 +1188,7 @@ int main(int argc, char* argv[]) {
                 // Preview frame for web interface — use ISP stream 1 (640x360) to avoid
                 // a 3.8MB DMA cold-cache copy on the RT path.  Encode thread upscales.
                 if (!bgr_frame.empty()) {
-                    cv::Mat preview = camera->wrap_as_mat(
-                        frame, aurore::PixelFormat::BGR888, 1);
+                    cv::Mat preview = camera->wrap_as_mat(frame, aurore::PixelFormat::BGR888, 1);
                     if (!preview.empty()) {
                         mjpeg_streamer.push_frame(preview);
                     } else {
@@ -1238,8 +1243,7 @@ int main(int argc, char* argv[]) {
             } else {
                 // No frame available - check vision watchdog (only after first frame arrives
                 // and only if not already in FAULT to prevent telemetry flooding).
-                if (last_frame_ns != 0 &&
-                    state_machine.state() != aurore::FcsState::FAULT) {
+                if (last_frame_ns != 0 && state_machine.state() != aurore::FcsState::FAULT) {
                     uint64_t elapsed = now_ns - last_frame_ns;
                     if (elapsed > kVisionWatchdogNs) {
                         state_machine.on_fault(aurore::FaultCode::CAMERA_TIMEOUT);
@@ -1358,10 +1362,9 @@ int main(int argc, char* argv[]) {
                 const float live_m = lrf.latest_range_m();
                 if (live_m > 0.0f) {
                     aurore::RangeData rd;
-                    rd.range_m      = live_m;
+                    rd.range_m = live_m;
                     rd.timestamp_ns = aurore::get_timestamp();
-                    rd.checksum     = aurore::StateMachine::compute_crc16(rd.range_m,
-                                                                           rd.timestamp_ns);
+                    rd.checksum = aurore::StateMachine::compute_crc16(rd.range_m, rd.timestamp_ns);
                     state_machine.on_lrf_range(rd);  // validates age, CRC, bounds
                     if (state_machine.has_valid_range()) {
                         effective_range_m = live_m;
@@ -1400,13 +1403,11 @@ int main(int argc, char* argv[]) {
                 gimbal_status.el_error_deg = std::abs(*el_opt - gimbal_cmd.el_deg);
             }
             if (prev_gimbal_ts > 0 && az_opt && el_opt) {
-                const float dt_s =
-                    static_cast<float>(gimbal_ts - prev_gimbal_ts) * 1e-9f;
+                const float dt_s = static_cast<float>(gimbal_ts - prev_gimbal_ts) * 1e-9f;
                 if (dt_s > 0.0f) {
                     const float daz = *az_opt - prev_az_deg;
                     const float del = *el_opt - prev_el_deg;
-                    gimbal_status.velocity_deg_s =
-                        std::sqrt(daz * daz + del * del) / dt_s;
+                    gimbal_status.velocity_deg_s = std::sqrt(daz * daz + del * del) / dt_s;
                 }
             }
             if (az_opt) prev_az_deg = *az_opt;
@@ -1418,8 +1419,7 @@ int main(int argc, char* argv[]) {
             // AM7-L3-ACT-003: Detect and log gimbal position limit violations
             if (gimbal_ctrl.check_and_clear_limit_violation()) {
                 std::cerr << "GimbalCtrl: WARN position limit violation clamped"
-                          << " (az=" << gimbal_cmd.az_deg
-                          << " el=" << gimbal_cmd.el_deg << ")\n";
+                          << " (az=" << gimbal_cmd.az_deg << " el=" << gimbal_cmd.el_deg << ")\n";
                 telemetry.log_event(aurore::TelemetryEventId::SAFETY_FAULT,
                                     aurore::TelemetrySeverity::kWarning,
                                     "Gimbal position limit violation (AM7-L3-ACT-003)");
@@ -1477,7 +1477,7 @@ int main(int argc, char* argv[]) {
                         telemetry.log_event(aurore::TelemetryEventId::TEMPERATURE_CRITICAL,
                                             aurore::TelemetrySeverity::kCritical,
                                             "CPU over-temperature: " +
-                                            std::to_string(last_temp_milli / 1000) + "C");
+                                                std::to_string(last_temp_milli / 1000) + "C");
                         state_machine.on_fault(aurore::FaultCode::TEMPERATURE_CRITICAL);
                     }
                 } else {
@@ -1631,9 +1631,12 @@ int main(int argc, char* argv[]) {
         if (!t.joinable()) return;
         struct timespec ts{};
         clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec  += timeout_ms / 1000;
+        ts.tv_sec += timeout_ms / 1000;
         ts.tv_nsec += static_cast<long>(timeout_ms % 1000) * 1000000L;
-        if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
+        if (ts.tv_nsec >= 1000000000L) {
+            ts.tv_sec++;
+            ts.tv_nsec -= 1000000000L;
+        }
         const int rc = pthread_timedjoin_np(t.native_handle(), nullptr, &ts);
         if (rc == 0) {
             t.detach();  // Native handle already joined; detach to avoid double-join in destructor

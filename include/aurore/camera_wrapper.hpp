@@ -425,8 +425,7 @@ class CameraWrapper {
      * @param stream_index 0 for primary, 1 for secondary
      * @return cv::Mat OpenCV Mat header (references DMA buffer, no copy)
      */
-    cv::Mat wrap_as_mat(const ZeroCopyFrame& frame,
-                        PixelFormat target_format = PixelFormat::BGR888,
+    cv::Mat wrap_as_mat(const ZeroCopyFrame& frame, PixelFormat target_format = PixelFormat::BGR888,
                         int stream_index = 0);
 
     /**

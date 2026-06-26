@@ -8,6 +8,12 @@
 
 #include "aurore/fusion_hat.hpp"
 
+#include <dirent.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -17,12 +23,6 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-
-#include <dirent.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <time.h>
-#include <unistd.h>
 
 #include "aurore/timing.hpp"
 
@@ -73,16 +73,17 @@ bool FusionHat::write_sysfs_with_retry(const std::string& path, int value) {
                 i2c_timeout_count_.fetch_add(1, std::memory_order_relaxed);
                 error_count_.fetch_add(1, std::memory_order_relaxed);
                 std::cerr << "FusionHat: I2C timeout on write to " << path
-                          << " (elapsed: " << (elapsed_ns / 1000000) << "ms, attempt: "
-                          << (attempt + 1) << "/" << (config_.max_i2c_retries + 1) << ")" << std::endl;
+                          << " (elapsed: " << (elapsed_ns / 1000000)
+                          << "ms, attempt: " << (attempt + 1) << "/"
+                          << (config_.max_i2c_retries + 1) << ")" << std::endl;
                 return false;
             }
 
             i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
             attempt++;
             if (attempt <= config_.max_i2c_retries) {
-                std::cerr << "FusionHat: I2C NACK on write to " << path
-                          << " (attempt: " << attempt << "/" << (config_.max_i2c_retries + 1) << ")" << std::endl;
+                std::cerr << "FusionHat: I2C NACK on write to " << path << " (attempt: " << attempt
+                          << "/" << (config_.max_i2c_retries + 1) << ")" << std::endl;
                 // Short delay before retry to avoid bus hammering
                 struct timespec ts = {0, 500000L};  // 500µs
                 nanosleep(&ts, nullptr);
@@ -102,8 +103,9 @@ bool FusionHat::write_sysfs_with_retry(const std::string& path, int value) {
                 i2c_timeout_count_.fetch_add(1, std::memory_order_relaxed);
                 error_count_.fetch_add(1, std::memory_order_relaxed);
                 std::cerr << "FusionHat: I2C timeout on write to " << path
-                          << " (elapsed: " << (elapsed_ns / 1000000) << "ms, attempt: "
-                          << (attempt + 1) << "/" << (config_.max_i2c_retries + 1) << ")" << std::endl;
+                          << " (elapsed: " << (elapsed_ns / 1000000)
+                          << "ms, attempt: " << (attempt + 1) << "/"
+                          << (config_.max_i2c_retries + 1) << ")" << std::endl;
                 return false;
             }
 
@@ -150,12 +152,13 @@ int FusionHat::read_sysfs_with_retry(const std::string& path) {
                 i2c_timeout_count_.fetch_add(1, std::memory_order_relaxed);
                 error_count_.fetch_add(1, std::memory_order_relaxed);
                 std::cerr << "FusionHat: I2C timeout on read from " << path
-                          << " (elapsed: " << (elapsed_ns / 1000000) << "ms, attempt: "
-                          << (attempt + 1) << "/" << (config_.max_i2c_retries + 1) << ")" << std::endl;
+                          << " (elapsed: " << (elapsed_ns / 1000000)
+                          << "ms, attempt: " << (attempt + 1) << "/"
+                          << (config_.max_i2c_retries + 1) << ")" << std::endl;
                 return -1;
             }
 
-        i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
+            i2c_nack_count_.fetch_add(1, std::memory_order_relaxed);
             attempt++;
             if (attempt <= config_.max_i2c_retries) {
                 struct timespec ts = {0, 500000L};  // 500µs
@@ -177,8 +180,9 @@ int FusionHat::read_sysfs_with_retry(const std::string& path) {
                 i2c_timeout_count_.fetch_add(1, std::memory_order_relaxed);
                 error_count_.fetch_add(1, std::memory_order_relaxed);
                 std::cerr << "FusionHat: I2C timeout on read from " << path
-                          << " (elapsed: " << (elapsed_ns / 1000000) << "ms, attempt: "
-                          << (attempt + 1) << "/" << (config_.max_i2c_retries + 1) << ")" << std::endl;
+                          << " (elapsed: " << (elapsed_ns / 1000000)
+                          << "ms, attempt: " << (attempt + 1) << "/"
+                          << (config_.max_i2c_retries + 1) << ")" << std::endl;
                 return -1;
             }
 
@@ -216,7 +220,7 @@ std::string FusionHat::read_sysfs_string(const std::string& path) {
     std::stringstream buffer;
     buffer << file.rdbuf();
     std::string result = buffer.str();
-    
+
     // Remove trailing newline/null
     while (!result.empty() && (result.back() == '\n' || result.back() == '\0')) {
         result.pop_back();
@@ -228,9 +232,7 @@ std::string FusionHat::read_sysfs_string(const std::string& path) {
 // Constructor/Destructor
 // ============================================================================
 
-FusionHat::FusionHat(const FusionHatConfig& config)
-    : config_(config) {
-    
+FusionHat::FusionHat(const FusionHatConfig& config) : config_(config) {
     if (!config_.validate()) {
         std::cerr << "FusionHat: Invalid configuration" << std::endl;
     }
@@ -256,16 +258,16 @@ bool FusionHat::is_connected() const noexcept {
     if (!dir) {
         return false;
     }
-    
+
     bool found = false;
     struct dirent* entry;
-    
+
     while ((entry = readdir(dir)) != nullptr) {
         std::string name = entry->d_name;
         if (name.find("hat") != std::string::npos) {
             std::string uuid_path = std::string(proc_base_.c_str()) + "/" + name + "/uuid";
             std::string uuid = read_sysfs_string(uuid_path);
-            
+
             // UUID format: 9daeea78-0000-0774-000a-582369ac3e02
             // Product ID is in the third segment (0774)
             if (uuid.find("0774") != std::string::npos) {
@@ -274,9 +276,9 @@ bool FusionHat::is_connected() const noexcept {
             }
         }
     }
-    
+
     closedir(dir);
-    
+
     // Also check sysfs path exists
     if (found) {
         struct stat st;
@@ -284,7 +286,7 @@ bool FusionHat::is_connected() const noexcept {
             found = false;
         }
     }
-    
+
     return found;
 }
 
@@ -293,7 +295,7 @@ bool FusionHat::init() {
         std::cerr << "FusionHat: Device not connected" << std::endl;
         return false;
     }
-    
+
     // Initialize all PWM channels
     for (int ch = 0; ch < 12; ch++) {
         std::string pwm_path = get_pwm_path(ch);
@@ -321,7 +323,8 @@ bool FusionHat::init() {
         }
 
         channels_[static_cast<size_t>(ch)].enabled.store(false, std::memory_order_release);
-        channels_[static_cast<size_t>(ch)].current_pulse_width.store(1500, std::memory_order_release);  // Center
+        channels_[static_cast<size_t>(ch)].current_pulse_width.store(
+            1500, std::memory_order_release);  // Center
         channels_[static_cast<size_t>(ch)].current_angle.store(0.0f, std::memory_order_release);
         // Sync per-channel endstop limits from global config so set_servo_angle works correctly
         channels_[static_cast<size_t>(ch)].min_angle = config_.min_angle_deg;
@@ -334,7 +337,8 @@ bool FusionHat::init() {
     // Initialize fire interlock to INHIBIT state (ICD-003)
     // This ensures fire is disabled by default until explicitly enabled
     if (!setInterlock(false)) {
-        std::cerr << "FusionHat: Warning - failed to initialize interlock to INHIBIT state" << std::endl;
+        std::cerr << "FusionHat: Warning - failed to initialize interlock to INHIBIT state"
+                  << std::endl;
     }
 
     // Start background command processor thread
@@ -345,10 +349,10 @@ bool FusionHat::init() {
 #ifdef __linux__
     pthread_setname_np(command_thread_.native_handle(), "fusion_hat_io");
 #endif
-    
-    std::cout << "FusionHat: Initialized (" << get_driver_version() 
-              << ", firmware " << get_firmware_version() << ")" << std::endl;
-    
+
+    std::cout << "FusionHat: Initialized (" << get_driver_version() << ", firmware "
+              << get_firmware_version() << ")" << std::endl;
+
     return true;
 }
 
@@ -374,7 +378,7 @@ void FusionHat::push_command(const ServoCommand& cmd) {
             while (!command_queue_.empty()) {
                 auto pending = command_queue_.front();
                 command_queue_.pop();
-                if (!(pending.channel == cmd.channel && 
+                if (!(pending.channel == cmd.channel &&
                       pending.type == ServoCommand::Type::SET_PULSE_WIDTH)) {
                     new_queue.push(pending);
                 }
@@ -395,15 +399,15 @@ void FusionHat::command_processor() {
         {
             std::unique_lock<std::mutex> lock(queue_mutex_);
             queue_cv_.wait(lock, [this] { return !command_queue_.empty() || stop_thread_; });
-            
+
             if (stop_thread_ && command_queue_.empty()) {
                 break;
             }
-            
+
             cmd = command_queue_.front();
             command_queue_.pop();
         }
-        
+
         std::string pwm_path = get_pwm_path(cmd.channel);
         if (cmd.type == ServoCommand::Type::SET_PULSE_WIDTH) {
             write_sysfs_with_retry(pwm_path + "/duty_cycle", cmd.value);
@@ -472,9 +476,12 @@ bool FusionHat::set_servo_angle(int channel, float angle_deg) {
     }
 
     // Update channel state
-    channels_[static_cast<size_t>(channel)].current_angle.store(angle_deg, std::memory_order_release);
-    channels_[static_cast<size_t>(channel)].current_pulse_width.store(pulse_width, std::memory_order_release);
-    channels_[static_cast<size_t>(channel)].last_update_ns.store(get_timestamp(), std::memory_order_release);
+    channels_[static_cast<size_t>(channel)].current_angle.store(angle_deg,
+                                                                std::memory_order_release);
+    channels_[static_cast<size_t>(channel)].current_pulse_width.store(pulse_width,
+                                                                      std::memory_order_release);
+    channels_[static_cast<size_t>(channel)].last_update_ns.store(get_timestamp(),
+                                                                 std::memory_order_release);
     channels_[static_cast<size_t>(channel)].enabled.store(true, std::memory_order_release);
 
     command_count_.fetch_add(1, std::memory_order_relaxed);
@@ -507,7 +514,8 @@ bool FusionHat::set_servo_pulse_width(int channel, int pulse_width_us) {
 
     push_command({ServoCommand::Type::SET_PULSE_WIDTH, channel, pulse_width_us});
 
-    channels_[static_cast<size_t>(channel)].current_pulse_width.store(pulse_width_us, std::memory_order_release);
+    channels_[static_cast<size_t>(channel)].current_pulse_width.store(pulse_width_us,
+                                                                      std::memory_order_release);
     command_count_.fetch_add(1, std::memory_order_relaxed);
     return true;
 }
@@ -517,7 +525,8 @@ int FusionHat::get_pulse_width(int channel) const {
         return -1;
     }
 
-    return channels_[static_cast<size_t>(channel)].current_pulse_width.load(std::memory_order_acquire);
+    return channels_[static_cast<size_t>(channel)].current_pulse_width.load(
+        std::memory_order_acquire);
 }
 
 bool FusionHat::set_servo_enabled(int channel, bool enable) {
@@ -541,17 +550,18 @@ bool FusionHat::is_servo_enabled(int channel) const {
 ServoStatus FusionHat::get_servo_status(int channel) const {
     ServoStatus status{};
     status.channel = channel;
-    
+
     if (channel >= 0 && channel < 12) {
         const auto& ch = channels_[static_cast<size_t>(channel)];
         status.angle_deg = ch.current_angle.load(std::memory_order_acquire);
         status.pulse_width_us = ch.current_pulse_width.load(std::memory_order_acquire);
         status.enabled = ch.enabled.load(std::memory_order_acquire);
         status.last_update_ns = ch.last_update_ns.load(std::memory_order_acquire);
-        status.endstop_active = (status.angle_deg <= channels_[static_cast<size_t>(channel)].min_angle ||
-                                 status.angle_deg >= channels_[static_cast<size_t>(channel)].max_angle);
+        status.endstop_active =
+            (status.angle_deg <= channels_[static_cast<size_t>(channel)].min_angle ||
+             status.angle_deg >= channels_[static_cast<size_t>(channel)].max_angle);
     }
-    
+
     return status;
 }
 
@@ -611,7 +621,7 @@ bool FusionHat::set_pwm_freq(int channel, int freq_hz) {
     if (channel < 0 || channel >= 12 || freq_hz <= 0 || freq_hz > 1000) {
         return false;
     }
-    
+
     int period_us = 1000000 / freq_hz;
     return set_pwm_period(channel, period_us);
 }
@@ -688,28 +698,27 @@ int FusionHat::angle_to_pulse_width(float angle_deg) const noexcept {
     // Linear mapping: angle -> pulse_width
     // min_angle -> min_pulse_width
     // max_angle -> max_pulse_width
-    
-    float ratio = (angle_deg - config_.min_angle_deg) / 
-                  (config_.max_angle_deg - config_.min_angle_deg);
-    
+
+    float ratio =
+        (angle_deg - config_.min_angle_deg) / (config_.max_angle_deg - config_.min_angle_deg);
+
     ratio = std::clamp(ratio, 0.0f, 1.0f);
-    
-    int pulse_width = static_cast<int>(
-        static_cast<float>(config_.min_pulse_width_us) + 
-        ratio * (static_cast<float>(config_.max_pulse_width_us) - static_cast<float>(config_.min_pulse_width_us))
-    );
-    
+
+    int pulse_width = static_cast<int>(static_cast<float>(config_.min_pulse_width_us) +
+                                       ratio * (static_cast<float>(config_.max_pulse_width_us) -
+                                                static_cast<float>(config_.min_pulse_width_us)));
+
     return std::clamp(pulse_width, config_.min_pulse_width_us, config_.max_pulse_width_us);
 }
 
 float FusionHat::pulse_width_to_angle(int pulse_width_us) const noexcept {
     // Linear mapping: pulse_width -> angle
-    
+
     float ratio = static_cast<float>(pulse_width_us - config_.min_pulse_width_us) /
                   static_cast<float>(config_.max_pulse_width_us - config_.min_pulse_width_us);
-    
+
     ratio = std::clamp(ratio, 0.0f, 1.0f);
-    
+
     return config_.min_angle_deg + ratio * (config_.max_angle_deg - config_.min_angle_deg);
 }
 

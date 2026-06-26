@@ -11,34 +11,33 @@
  * - Tampered data detection
  */
 
-#include "aurore/camera_wrapper.hpp"
-#include "aurore/security.hpp"
-
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <chrono>
 #include <random>
 #include <vector>
+
+#include "aurore/camera_wrapper.hpp"
+#include "aurore/security.hpp"
 
 // ---------------------------------------------------------------------------
 // Test harness
 // ---------------------------------------------------------------------------
 
-static int g_tests_run    = 0;
+static int g_tests_run = 0;
 static int g_tests_passed = 0;
 static int g_tests_failed = 0;
 
-#define CHECK(expr)                                                         \
-    do {                                                                    \
-        ++g_tests_run;                                                      \
-        if (!(expr)) {                                                      \
-            std::fprintf(stderr, "  FAIL [%s:%d]: %s\n",                   \
-                         __FILE__, __LINE__, #expr);                        \
-            ++g_tests_failed;                                               \
-        } else {                                                            \
-            ++g_tests_passed;                                               \
-        }                                                                   \
+#define CHECK(expr)                                                                  \
+    do {                                                                             \
+        ++g_tests_run;                                                               \
+        if (!(expr)) {                                                               \
+            std::fprintf(stderr, "  FAIL [%s:%d]: %s\n", __FILE__, __LINE__, #expr); \
+            ++g_tests_failed;                                                        \
+        } else {                                                                     \
+            ++g_tests_passed;                                                        \
+        }                                                                            \
     } while (0)
 
 [[maybe_unused]] static void run_test(const char* name, void (*fn)()) {
@@ -54,9 +53,9 @@ static void test_sha256_hash_computation() {
     // Known test vector
     const char* test_data = "Hello, Aurore MkVII!";
     unsigned char hash[32];
-    
+
     aurore::security::compute_sha256_raw_threadsafe(test_data, strlen(test_data), hash);
-    
+
     // Note: We can't check exact hash without computing expected offline,
     // so we just verify hash is non-zero and deterministic
     bool non_zero = false;
@@ -67,7 +66,7 @@ static void test_sha256_hash_computation() {
         }
     }
     CHECK(non_zero);
-    
+
     // Verify determinism - same input produces same hash
     unsigned char hash2[32];
     aurore::security::compute_sha256_raw_threadsafe(test_data, strlen(test_data), hash2);
@@ -80,17 +79,19 @@ static void test_sha256_hash_computation() {
 static void test_hmac_computation_and_verification() {
     const std::string key = "test_hmac_key_256bit_secret_value!";
     const char* message = "Test message for HMAC";
-    
+
     unsigned char hmac[32];
     aurore::security::compute_hmac_sha256_raw(key, message, std::strlen(message), hmac);
-    
+
     // Verify with correct key
-    bool verified = aurore::security::verify_hmac_sha256_raw(key, message, std::strlen(message), hmac);
+    bool verified =
+        aurore::security::verify_hmac_sha256_raw(key, message, std::strlen(message), hmac);
     CHECK(verified);
-    
+
     // Verify with wrong key should fail
     const std::string wrong_key = "wrong_key_value";
-    bool wrong_verified = aurore::security::verify_hmac_sha256_raw(wrong_key, message, std::strlen(message), hmac);
+    bool wrong_verified =
+        aurore::security::verify_hmac_sha256_raw(wrong_key, message, std::strlen(message), hmac);
     CHECK(!wrong_verified);
 }
 
@@ -99,9 +100,9 @@ static void test_hmac_computation_and_verification() {
 // ---------------------------------------------------------------------------
 static void test_frame_authentication_e2e() {
     aurore::CameraConfig cfg;
-    cfg.width  = 320;
+    cfg.width = 320;
     cfg.height = 240;
-    cfg.fps    = 30;
+    cfg.fps = 30;
 
     aurore::CameraWrapper cam(cfg);
     cam.init();
@@ -109,26 +110,26 @@ static void test_frame_authentication_e2e() {
 
     aurore::ZeroCopyFrame frame;
     // Use capture_frame with a timeout to allow libcamera to provide a frame
-    bool ok = cam.capture_frame(frame, 1000); // 1 second timeout
+    bool ok = cam.capture_frame(frame, 1000);  // 1 second timeout
     CHECK(ok);
     CHECK(frame.valid);
-    
+
     // Authenticate the frame after capture (driver doesn't auto-authenticate in test mode)
     aurore::authenticate_frame(frame, nullptr, 0);
-    
+
     // Frame should have authentication data after auth
     CHECK(frame.has_authentication());
-    
+
     // Verify authentication with default key (must match kDefaultHmacKey in camera_wrapper.cpp)
     const char* default_key = "AURORE_MK7_FRAME_AUTH_KEY_256BIT_SECRET";
     bool verified = frame.verify_authentication(default_key, std::strlen(default_key));
     CHECK(verified);
-    
+
     // Verify with wrong key should fail
     const char* wrong_key = "wrong_key";
     bool wrong_verified = frame.verify_authentication(wrong_key, std::strlen(wrong_key));
     CHECK(!wrong_verified);
-    
+
     // Clean up
     cam.release_frame(frame);
 }
@@ -138,9 +139,9 @@ static void test_frame_authentication_e2e() {
 // ---------------------------------------------------------------------------
 static void test_tampered_frame_detection() {
     aurore::CameraConfig cfg;
-    cfg.width  = 320;
+    cfg.width = 320;
     cfg.height = 240;
-    cfg.fps    = 30;
+    cfg.fps = 30;
 
     aurore::CameraWrapper cam(cfg);
     cam.init();
@@ -148,20 +149,21 @@ static void test_tampered_frame_detection() {
 
     aurore::ZeroCopyFrame frame;
     // Use capture_frame with a timeout
-    bool ok = cam.capture_frame(frame, 1000); // 1 second timeout
+    bool ok = cam.capture_frame(frame, 1000);  // 1 second timeout
     CHECK(ok);
-    
+
     // Authenticate the frame after capture
     aurore::authenticate_frame(frame, nullptr, 0);
-    
+
     // Verify original frame
     const char* default_key = "AURORE_MK7_FRAME_AUTH_KEY_256BIT_SECRET";
     bool verified_before = frame.verify_authentication(default_key, strlen(default_key));
     CHECK(verified_before);
-    
+
     // Tamper with frame data (modify pixel data)
     if (frame.plane_data[0] != nullptr && frame.plane_size[0] > 0) {
-        // Create a copy of the pixel data to tamper with, avoiding direct modification of libcamera's DMA buffer
+        // Create a copy of the pixel data to tamper with, avoiding direct modification of
+        // libcamera's DMA buffer
         std::vector<uint8_t> tampered_data(frame.plane_size[0]);
         std::memcpy(tampered_data.data(), frame.plane_data[0], frame.plane_size[0]);
 
@@ -176,7 +178,7 @@ static void test_tampered_frame_detection() {
         // Temporarily modify the frame to point to the tampered data
         frame.plane_data[0] = tampered_data.data();
         frame.plane_size[0] = tampered_data.size();
-        frame.error[0] = 1; // Mark as heap-allocated for internal logic if needed
+        frame.error[0] = 1;  // Mark as heap-allocated for internal logic if needed
 
         // Verification should now fail
         bool verified_after = frame.verify_authentication(default_key, strlen(default_key));
@@ -187,7 +189,7 @@ static void test_tampered_frame_detection() {
         frame.plane_size[0] = original_plane_size;
         frame.error[0] = original_error_flag;
     }
-    
+
     // Clean up
     cam.release_frame(frame);
 }
@@ -225,21 +227,26 @@ static void test_async_frame_authenticator() {
     // For async auth, we pass the header that will be used for HMAC
     uint8_t frame_header[64];
     size_t offset = 0;
-    std::memcpy(frame_header + offset, &out_frame.sequence, sizeof(out_frame.sequence)); offset += 8;
-    std::memcpy(frame_header + offset, &out_frame.timestamp_ns, sizeof(out_frame.timestamp_ns)); offset += 8;
-    std::memcpy(frame_header + offset, &out_frame.exposure_us, sizeof(out_frame.exposure_us)); offset += 8;
-    std::memcpy(frame_header + offset, &out_frame.gain, sizeof(out_frame.gain)); offset += 4;
-    std::memcpy(frame_header + offset, &out_frame.width, sizeof(out_frame.width)); offset += 4;
-    std::memcpy(frame_header + offset, &out_frame.height, sizeof(out_frame.height)); offset += 4;
-    std::memcpy(frame_header + offset, &out_frame.format, sizeof(out_frame.format)); offset += 4;
-    std::memcpy(frame_header + offset, &out_frame.buffer_id, sizeof(out_frame.buffer_id)); offset += 4;
+    std::memcpy(frame_header + offset, &out_frame.sequence, sizeof(out_frame.sequence));
+    offset += 8;
+    std::memcpy(frame_header + offset, &out_frame.timestamp_ns, sizeof(out_frame.timestamp_ns));
+    offset += 8;
+    std::memcpy(frame_header + offset, &out_frame.exposure_us, sizeof(out_frame.exposure_us));
+    offset += 8;
+    std::memcpy(frame_header + offset, &out_frame.gain, sizeof(out_frame.gain));
+    offset += 4;
+    std::memcpy(frame_header + offset, &out_frame.width, sizeof(out_frame.width));
+    offset += 4;
+    std::memcpy(frame_header + offset, &out_frame.height, sizeof(out_frame.height));
+    offset += 4;
+    std::memcpy(frame_header + offset, &out_frame.format, sizeof(out_frame.format));
+    offset += 4;
+    std::memcpy(frame_header + offset, &out_frame.buffer_id, sizeof(out_frame.buffer_id));
+    offset += 4;
 
     // Submit for async authentication — write directly into frame fields
-    auth.authenticate_frame(
-        pixel_data.data(), pixel_data.size(),
-        frame_header, offset,
-        out_frame.frame_hash, out_frame.hmac
-    );
+    auth.authenticate_frame(pixel_data.data(), pixel_data.size(), frame_header, offset,
+                            out_frame.frame_hash, out_frame.hmac);
 
     // Wait for completion (timeout 100ms)
     bool completed = auth.wait_for_completion(std::chrono::milliseconds(100));
@@ -268,7 +275,7 @@ static void test_async_authenticator_destructor_safety() {
         out_frame.plane_size[0] = pixel_data.size();
 
         auth.authenticate_frame(pixel_data.data(), pixel_data.size(), header, sizeof(header),
-                               out_frame.frame_hash, out_frame.hmac);
+                                out_frame.frame_hash, out_frame.hmac);
         // Deliberately do NOT call wait_for_completion() — destructor must block until done.
     }
     // If we reach here without a crash or sanitizer error, the destructor correctly waited.
@@ -290,7 +297,7 @@ static void test_async_authenticator_timeout_returns_false() {
     out_frame.plane_size[0] = pixel_data.size();
 
     auth.authenticate_frame(pixel_data.data(), pixel_data.size(), header, sizeof(header),
-                           out_frame.frame_hash, out_frame.hmac);
+                            out_frame.frame_hash, out_frame.hmac);
 
     // 0ms wait — may already be ready (fast task) or may timeout; both are acceptable.
     bool immediate = auth.wait_for_completion(std::chrono::milliseconds(0));
@@ -307,37 +314,38 @@ static void test_async_authenticator_timeout_returns_false() {
 static void test_hash_computation_overhead() {
     const size_t frame_size = 1536 * 864 * 2;  // RAW10 frame size
     std::vector<uint8_t> frame_data(frame_size);
-    
+
     // Fill with random data
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(0, 255);
     for (auto& byte : frame_data) byte = static_cast<uint8_t>(dis(gen));
-    
+
     unsigned char hash[32];
-    
+
     // Warmup
     aurore::security::compute_sha256_raw_threadsafe(frame_data.data(), frame_data.size(), hash);
-    
+
     // Benchmark
     const int iterations = 100;
     auto start = std::chrono::high_resolution_clock::now();
-    
+
     for (int i = 0; i < iterations; i++) {
         aurore::security::compute_sha256_raw_threadsafe(frame_data.data(), frame_data.size(), hash);
     }
-    
+
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    
-    double avg_time_us = static_cast<double>(duration) / iterations;
-    double throughput_mbps = (static_cast<double>(frame_size) / (1024 * 1024)) / (avg_time_us / 1e6);
-    
-    std::printf("  SHA256 performance: %.2f us per frame (%.2f MB/s)\n",
-                avg_time_us, throughput_mbps);
 
-    // Should complete within 10ms per frame (spec allows async hash within one frame period of 8.33ms)
-    // Note: Synchronous SHA256 of 2.5MB frame takes ~6ms on typical hardware
+    double avg_time_us = static_cast<double>(duration) / iterations;
+    double throughput_mbps =
+        (static_cast<double>(frame_size) / (1024 * 1024)) / (avg_time_us / 1e6);
+
+    std::printf("  SHA256 performance: %.2f us per frame (%.2f MB/s)\n", avg_time_us,
+                throughput_mbps);
+
+    // Should complete within 10ms per frame (spec allows async hash within one frame period
+    // of 8.33ms) Note: Synchronous SHA256 of 2.5MB frame takes ~6ms on typical hardware
     CHECK(avg_time_us < 10000.0);
 }
 
@@ -348,36 +356,38 @@ static void test_hmac_computation_overhead() {
     const size_t header_size = 44;  // Frame header size
     const size_t hash_size = 32;    // SHA256 hash size
     const size_t total_size = header_size + hash_size;
-    
+
     std::vector<uint8_t> hmac_input(total_size);
     std::string key = "test_key_256bit";
-    
+
     // Fill with random data
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(0, 255);
     for (auto& byte : hmac_input) byte = static_cast<uint8_t>(dis(gen));
-    
+
     unsigned char hmac[32];
-    
+
     // Warmup
-    aurore::security::compute_hmac_sha256_raw_threadsafe(key, hmac_input.data(), hmac_input.size(), hmac);
-    
+    aurore::security::compute_hmac_sha256_raw_threadsafe(key, hmac_input.data(), hmac_input.size(),
+                                                         hmac);
+
     // Benchmark
     const int iterations = 1000;
     auto start = std::chrono::high_resolution_clock::now();
-    
+
     for (int i = 0; i < iterations; i++) {
-        aurore::security::compute_hmac_sha256_raw_threadsafe(key, hmac_input.data(), hmac_input.size(), hmac);
+        aurore::security::compute_hmac_sha256_raw_threadsafe(key, hmac_input.data(),
+                                                             hmac_input.size(), hmac);
     }
-    
+
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    
+
     double avg_time_us = static_cast<double>(duration) / iterations;
-    
+
     std::printf("  HMAC-SHA256 performance: %.2f us per computation\n", avg_time_us);
-    
+
     // Should complete within 100us (minimal overhead)
     CHECK(avg_time_us < 100.0);
 }
@@ -388,13 +398,13 @@ static void test_hmac_computation_overhead() {
 static void test_full_authentication_overhead() {
     const size_t frame_size = 1536 * 864 * 2;  // RAW10 frame size
     std::vector<uint8_t> frame_data(frame_size);
-    
+
     // Fill with random data
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(0, 255);
     for (auto& byte : frame_data) byte = static_cast<uint8_t>(dis(gen));
-    
+
     // Create frame struct
     aurore::ZeroCopyFrame frame;
     frame.valid = true;
@@ -405,24 +415,24 @@ static void test_full_authentication_overhead() {
     frame.plane_size[0] = frame_data.size();
     frame.sequence = 1;
     frame.buffer_id = 0;
-    
+
     // Warmup
     aurore::authenticate_frame(frame);
-    
+
     // Benchmark
     const int iterations = 100;
     auto start = std::chrono::high_resolution_clock::now();
-    
+
     for (int i = 0; i < iterations; i++) {
         aurore::authenticate_frame(frame);
     }
-    
+
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    
+
     double avg_time_us = static_cast<double>(duration) / iterations;
     double overhead_percent = (avg_time_us / 8333.0) * 100.0;  // 8.333ms = 120Hz frame period
-    
+
     std::printf("  Full auth performance: %.2f us per frame (%.2f%% of 120Hz budget)\n",
                 avg_time_us, overhead_percent);
 
@@ -440,7 +450,7 @@ int main() {
 
     std::printf("Frame Authentication Tests (ICD-001 / AM7-L2-SEC-001)\n");
     std::printf("=====================================================\n\n");
-    
+
     int prev_failed = 0;
 
     auto run = [&](const char* name, void (*fn)()) {
@@ -460,7 +470,8 @@ int main() {
     run("test_tampered_frame_detection", test_tampered_frame_detection);
     run("test_async_frame_authenticator", test_async_frame_authenticator);
     run("test_async_authenticator_destructor_safety", test_async_authenticator_destructor_safety);
-    run("test_async_authenticator_timeout_returns_false", test_async_authenticator_timeout_returns_false);
+    run("test_async_authenticator_timeout_returns_false",
+        test_async_authenticator_timeout_returns_false);
     run("test_hash_computation_overhead", test_hash_computation_overhead);
     run("test_hmac_computation_overhead", test_hmac_computation_overhead);
     run("test_full_authentication_overhead", test_full_authentication_overhead);

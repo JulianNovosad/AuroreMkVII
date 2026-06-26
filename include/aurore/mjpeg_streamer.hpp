@@ -2,11 +2,10 @@
 
 #include <atomic>
 #include <mutex>
+#include <opencv2/core.hpp>
 #include <string>
 #include <thread>
 #include <vector>
-
-#include <opencv2/core.hpp>
 
 namespace aurore {
 
@@ -21,19 +20,19 @@ namespace aurore {
  * encode thread is busy, so the RT track thread is never blocked.
  */
 class MjpegStreamer {
-public:
+   public:
     static constexpr const char* kDefaultSocketPath = "/run/aurore/mjpeg_stream.sock";
-    static constexpr int kStreamWidth  = 1280;
+    static constexpr int kStreamWidth = 1280;
     static constexpr int kStreamHeight = 720;
-    static constexpr int kJpegQuality  = 75;
+    static constexpr int kJpegQuality = 75;
     // Absolute-timer encode interval: actual FPS = 1000/kEncodeIntervalMs as long as
     // encode completes within the interval.  16ms → up to 62fps.
     static constexpr int kEncodeIntervalMs = 16;
 
     // input_width/height: expected resolution of frames passed to push_frame().
     // Staging buffer is pre-allocated at this size so push_frame() never heap-allocates.
-explicit MjpegStreamer(const std::string& socket_path = kDefaultSocketPath,
-                            int input_width = 1280, int input_height = 720);
+    explicit MjpegStreamer(const std::string& socket_path = kDefaultSocketPath,
+                           int input_width = 1280, int input_height = 720);
     ~MjpegStreamer();
 
     bool start();
@@ -48,7 +47,7 @@ explicit MjpegStreamer(const std::string& socket_path = kDefaultSocketPath,
 
     bool has_clients() const;
 
-private:
+   private:
     void accept_loop();
     void encode_loop();
     void broadcast(const std::vector<uchar>& jpeg);
@@ -63,14 +62,14 @@ private:
 
     // Staging buffer shared between RT thread (writer) and encode thread (reader).
     // Stored at full input resolution; encode thread resizes to stream resolution.
-    std::mutex   staging_mtx_;
-    cv::Mat      staging_frame_;   // pre-allocated input_height_ × input_width_ BGR
-    uint64_t     staging_seq_{0};
-    uint64_t     last_encoded_seq_{0};
+    std::mutex staging_mtx_;
+    cv::Mat staging_frame_;  // pre-allocated input_height_ × input_width_ BGR
+    uint64_t staging_seq_{0};
+    uint64_t last_encoded_seq_{0};
 
     // Connected client file descriptors
-    mutable std::mutex    clients_mtx_;
-    std::vector<int>      clients_;
+    mutable std::mutex clients_mtx_;
+    std::vector<int> clients_;
 
     std::thread accept_thread_;
     std::thread encode_thread_;

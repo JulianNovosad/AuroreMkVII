@@ -10,14 +10,13 @@
  */
 
 #define BOOST_TEST_MODULE RingBufferTest
-#include <boost/test/unit_test.hpp>
+#include "aurore/ring_buffer.hpp"
 
 #include <atomic>
+#include <boost/test/unit_test.hpp>
 #include <cstdint>
 #include <thread>
 #include <vector>
-
-#include "aurore/ring_buffer.hpp"
 
 // ============================================================================
 // LockFreeRingBuffer Tests
@@ -154,8 +153,7 @@ BOOST_AUTO_TEST_CASE(test_ring_buffer_spsc_stress) {
                 last_value = value;
                 count++;
                 consumed.fetch_add(1, std::memory_order_relaxed);
-            }
-            else {
+            } else {
                 std::this_thread::yield();
             }
         }
@@ -193,8 +191,7 @@ BOOST_AUTO_TEST_CASE(test_ring_buffer_no_lost_elements) {
         while (!done.load(std::memory_order_acquire) || !buffer.empty()) {
             if (buffer.pop(value)) {
                 sum_consumed.fetch_add(value, std::memory_order_relaxed);
-            }
-            else {
+            } else {
                 std::this_thread::yield();
             }
         }
@@ -312,8 +309,7 @@ BOOST_AUTO_TEST_CASE(test_mpmc_ring_buffer_concurrent) {
             if (buffer.pop(value)) {
                 sum.fetch_add(value, std::memory_order_relaxed);
                 count++;
-            }
-            else {
+            } else {
                 std::this_thread::yield();
             }
         }

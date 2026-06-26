@@ -21,8 +21,7 @@
 
 namespace aurore {
 
-SpatialResolver::SpatialResolver(const SpatialResolverConfig& config)
-    : config_(config) {}
+SpatialResolver::SpatialResolver(const SpatialResolverConfig& config) : config_(config) {}
 
 bool SpatialResolver::init() {
     // Validate configuration ranges
@@ -45,9 +44,8 @@ bool SpatialResolver::init() {
     calibrated_usb_offset_ = config_.usb_offset;
 
     initialized_.store(true, std::memory_order_release);
-    std::cout << "[SpatialResolver] Initialized — MIPI offset ("
-              << config_.mipi_offset.x << ", " << config_.mipi_offset.y << ", "
-              << config_.mipi_offset.z << ") mm, USB offset ("
+    std::cout << "[SpatialResolver] Initialized — MIPI offset (" << config_.mipi_offset.x << ", "
+              << config_.mipi_offset.y << ", " << config_.mipi_offset.z << ") mm, USB offset ("
               << config_.usb_offset.x << ", " << config_.usb_offset.y << ", "
               << config_.usb_offset.z << ") mm\n";
     return true;
@@ -191,8 +189,7 @@ TargetVector SpatialResolver::resolve_from_usb(float range_mm, const PixelCoord&
 // Fused resolution: combine MIPI + USB for cross-validated target vector
 // ============================================================================
 
-TargetVector SpatialResolver::resolve_fused(float range_mm,
-                                            const PixelCoord& mipi_px,
+TargetVector SpatialResolver::resolve_fused(float range_mm, const PixelCoord& mipi_px,
                                             const PixelCoord& usb_px) const {
     const TargetVector mipi_tv = resolve_from_mipi(range_mm, mipi_px);
     const TargetVector usb_tv = resolve_from_usb(range_mm, usb_px);
@@ -344,9 +341,8 @@ PixelCoord SpatialResolver::project_to_usb(const TargetVector& target) const {
 // Convergence zone validation
 // ============================================================================
 
-bool SpatialResolver::is_in_convergence_zone(const PixelCoord& mipi_px,
-                                              const PixelCoord& usb_px,
-                                              float range_mm) const {
+bool SpatialResolver::is_in_convergence_zone(const PixelCoord& mipi_px, const PixelCoord& usb_px,
+                                             float range_mm) const {
     const ConvergenceZone zone = calculate_convergence_zone(range_mm);
 
     const float mipi_err = std::sqrt((mipi_px.u - zone.mipi_x) * (mipi_px.u - zone.mipi_x) +
@@ -362,8 +358,8 @@ bool SpatialResolver::is_in_convergence_zone(const PixelCoord& mipi_px,
 // ============================================================================
 
 void SpatialResolver::calibrate_with_known_target(float measured_range_mm,
-                                                   const PixelCoord& mipi_px,
-                                                   const PixelCoord& usb_px) {
+                                                  const PixelCoord& mipi_px,
+                                                  const PixelCoord& usb_px) {
     // Resolve current estimate from each camera
     const TargetVector mipi_tv = resolve_from_mipi(measured_range_mm, mipi_px);
     const TargetVector usb_tv = resolve_from_usb(measured_range_mm, usb_px);
@@ -383,9 +379,8 @@ void SpatialResolver::calibrate_with_known_target(float measured_range_mm,
     }
 
     std::cout << "[SpatialResolver] Calibrated at " << range_m << "m — MIPI correction ("
-              << calibrated_mipi_offset_.yaw_offset << "°, "
-              << calibrated_mipi_offset_.pitch_offset << "°), USB correction ("
-              << calibrated_usb_offset_.yaw_offset << "°, "
+              << calibrated_mipi_offset_.yaw_offset << "°, " << calibrated_mipi_offset_.pitch_offset
+              << "°), USB correction (" << calibrated_usb_offset_.yaw_offset << "°, "
               << calibrated_usb_offset_.pitch_offset << "°)\n";
 }
 

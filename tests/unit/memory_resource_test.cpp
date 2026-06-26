@@ -16,17 +16,18 @@
  * @copyright Aurore MkVII Project - Educational/Personal Use Only
  */
 
+#include <malloc.h>
+
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <functional>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <stdexcept>
 #include <thread>
 #include <vector>
-#include <chrono>
-#include <malloc.h>
 
 #include "aurore/ring_buffer.hpp"
 #include "aurore/test_utils.hpp"
@@ -39,31 +40,53 @@ std::atomic<size_t> g_tests_passed(0);
 std::atomic<size_t> g_tests_failed(0);
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    aurore::test::TestEnvironment::reset_trackers(); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::cout << "  PASS: " << #name << std::endl; \
-    } catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                          \
+    do {                                                                        \
+        g_tests_run.fetch_add(1);                                               \
+        aurore::test::TestEnvironment::reset_trackers();                        \
+        try {                                                                   \
+            name();                                                             \
+            g_tests_passed.fetch_add(1);                                        \
+            std::cout << "  PASS: " << #name << std::endl;                      \
+        } catch (const std::exception& e) {                                     \
+            g_tests_failed.fetch_add(1);                                        \
+            std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
+        }                                                                       \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_NE(a, b) do { if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " == " #b); } while(0)
-#define ASSERT_GT(a, b) do { if (!((a) > (b))) throw std::runtime_error("Assertion failed: " #a " > " #b); } while(0)
-#define ASSERT_GE(a, b) do { if (!((a) >= (b))) throw std::runtime_error("Assertion failed: " #a " >= " #b); } while(0)
-#define ASSERT_LT(a, b) do { if (!((a) < (b))) throw std::runtime_error("Assertion failed: " #a " < " #b); } while(0)
-#define ASSERT_LE(a, b) do { if (!((a) <= (b))) throw std::runtime_error("Assertion failed: " #a " <= " #b); } while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_NE(a, b)                                                              \
+    do {                                                                             \
+        if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " == " #b); \
+    } while (0)
+#define ASSERT_GT(a, b)                                                               \
+    do {                                                                              \
+        if (!((a) > (b))) throw std::runtime_error("Assertion failed: " #a " > " #b); \
+    } while (0)
+#define ASSERT_GE(a, b)                                                                 \
+    do {                                                                                \
+        if (!((a) >= (b))) throw std::runtime_error("Assertion failed: " #a " >= " #b); \
+    } while (0)
+#define ASSERT_LT(a, b)                                                               \
+    do {                                                                              \
+        if (!((a) < (b))) throw std::runtime_error("Assertion failed: " #a " < " #b); \
+    } while (0)
+#define ASSERT_LE(a, b)                                                                 \
+    do {                                                                                \
+        if (!((a) <= (b))) throw std::runtime_error("Assertion failed: " #a " <= " #b); \
+    } while (0)
 
-constexpr size_t kStackSafetyMarginKb = 128; // Example safety threshold
-constexpr uint64_t kMaxStackSizeKb = 8192; // Max stack size for StackTracker
-constexpr size_t kHeapBaselineEnvelopeBytes = 1024 * 1024; // 1MB heap baseline
+constexpr size_t kStackSafetyMarginKb = 128;                // Example safety threshold
+constexpr uint64_t kMaxStackSizeKb = 8192;                  // Max stack size for StackTracker
+constexpr size_t kHeapBaselineEnvelopeBytes = 1024 * 1024;  // 1MB heap baseline
 
 }  // anonymous namespace
 
@@ -194,7 +217,11 @@ TEST(test_ring_buffer_no_heap_alloc_on_push_pop) {
     aurore::LockFreeRingBuffer<int, 16> buf;
 
     // Warm up the allocator so any internal glibc bookkeeping is done.
-    { int dummy; buf.push(0); buf.pop(dummy); }
+    {
+        int dummy;
+        buf.push(0);
+        buf.pop(dummy);
+    }
 
     struct mallinfo2 mi_before = mallinfo2();
 
@@ -241,11 +268,13 @@ TEST(test_ring_buffer_spsc_ordering_preserved) {
     // Producer/consumer thread — FIFO ordering must hold.
     aurore::LockFreeRingBuffer<int, 32> buf;
     std::atomic<bool> done(false);
-    std::atomic<int>  errors(0);
+    std::atomic<int> errors(0);
 
     std::thread producer([&]() {
         for (int i = 0; i < 1000; i++) {
-            while (!buf.push(i)) { std::this_thread::yield(); }
+            while (!buf.push(i)) {
+                std::this_thread::yield();
+            }
         }
     });
 
@@ -269,7 +298,11 @@ TEST(test_ring_buffer_no_heap_alloc_sustained) {
     aurore::LockFreeRingBuffer<int, 8> buf;
 
     // Warm up
-    { int dummy; buf.push(0); buf.pop(dummy); }
+    {
+        int dummy;
+        buf.push(0);
+        buf.pop(dummy);
+    }
 
     struct mallinfo2 mi_before = mallinfo2();
 
@@ -301,7 +334,10 @@ TEST(test_ring_buffer_push_returns_false_when_full) {
 
     bool first_fail = false;
     for (int i = 0; i < 10; i++) {
-        if (!buf.push(i)) { first_fail = true; break; }
+        if (!buf.push(i)) {
+            first_fail = true;
+            break;
+        }
     }
     ASSERT_TRUE(first_fail);
 }
@@ -315,13 +351,13 @@ TEST(test_ring_buffer_pop_returns_false_when_empty) {
 // New long-run stack test
 TEST(test_stack_long_run_worst_case_usage) {
     aurore::test::StackTracker& tracker = aurore::test::TestEnvironment::get_stack_tracker();
-    constexpr int kMaxDepth = 500; // Deep recursion to simulate worst-case
-    constexpr size_t kStackFrameSize = 128; // Bytes per recursive call
+    constexpr int kMaxDepth = 500;           // Deep recursion to simulate worst-case
+    constexpr size_t kStackFrameSize = 128;  // Bytes per recursive call
 
     std::function<void(int)> deep_recursive_func = [&](int depth) {
         if (depth <= 0) return;
         volatile char local_data[kStackFrameSize];
-        (void)local_data; // Prevent optimization
+        (void)local_data;  // Prevent optimization
         std::memset(const_cast<char*>(local_data), 0xAA, sizeof(local_data));
         tracker.record_sample();
         deep_recursive_func(depth - 1);
@@ -334,30 +370,32 @@ TEST(test_stack_long_run_worst_case_usage) {
     ASSERT_GT(stats.high_water_bytes, static_cast<uint64_t>(kMaxDepth) * kStackFrameSize / 2U);
     // Check against a reasonable safety threshold, e.g., 256KB margin for an 8MB stack
     ASSERT_TRUE(tracker.check_safety_threshold(256));
-    std::cout << "  High water mark for deep recursion: " << stats.high_water_bytes / 1024 << " KB" << std::endl;
+    std::cout << "  High water mark for deep recursion: " << stats.high_water_bytes / 1024 << " KB"
+              << std::endl;
 }
 
 // New long-run heap test
 TEST(test_heap_long_run_unbounded_growth_detection) {
     aurore::test::HeapTracker& tracker = aurore::test::TestEnvironment::get_heap_tracker();
-    tracker.set_baseline_envelope(256 * 1024); // 256KB envelope — growth of ~750KB triggers this
+    tracker.set_baseline_envelope(256 * 1024);  // 256KB envelope — growth of ~750KB triggers this
     std::vector<char*> allocated_blocks;
-    constexpr size_t kBlockSize = 1024; // 1KB blocks
-    constexpr int kIterations = 2000; // Allocate 2MB over time without freeing
+    constexpr size_t kBlockSize = 1024;  // 1KB blocks
+    constexpr int kIterations = 2000;    // Allocate 2MB over time without freeing
 
     for (int i = 0; i < kIterations; ++i) {
         char* block = new char[kBlockSize];
         allocated_blocks.push_back(block);
         tracker.record_allocation(kBlockSize);
-        if (i % 100 == 0) { // Record samples periodically
-            tracker.get_stats(); // Force update internal stats
+        if (i % 100 == 0) {       // Record samples periodically
+            tracker.get_stats();  // Force update internal stats
         }
     }
 
     auto stats = tracker.get_stats();
-    ASSERT_TRUE(stats.has_leak); // Should detect a leak
-    ASSERT_TRUE(stats.growth_trend_exceeds_baseline); // Should detect unbounded growth
-    ASSERT_GT(stats.current_allocated_bytes, kIterations * kBlockSize / 2); // Significant allocation remaining
+    ASSERT_TRUE(stats.has_leak);                       // Should detect a leak
+    ASSERT_TRUE(stats.growth_trend_exceeds_baseline);  // Should detect unbounded growth
+    ASSERT_GT(stats.current_allocated_bytes,
+              kIterations * kBlockSize / 2);  // Significant allocation remaining
 
     // Clean up to prevent actual memory leak in test runner
     for (char* block : allocated_blocks) {
@@ -365,7 +403,7 @@ TEST(test_heap_long_run_unbounded_growth_detection) {
         tracker.record_deallocation(kBlockSize);
     }
     allocated_blocks.clear();
-    ASSERT_FALSE(tracker.get_stats().has_leak); // Should be clean after freeing
+    ASSERT_FALSE(tracker.get_stats().has_leak);  // Should be clean after freeing
 }
 
 // ============================================================================
@@ -373,8 +411,7 @@ TEST(test_heap_long_run_unbounded_growth_detection) {
 // ============================================================================
 
 TEST(test_resource_monitor_file_descriptor) {
-    aurore::test::ResourceMonitor monitor(
-        aurore::test::ResourceType::Descriptors, 100);
+    aurore::test::ResourceMonitor monitor(aurore::test::ResourceType::Descriptors, 100);
 
     ASSERT_TRUE(monitor.acquire());
     ASSERT_TRUE(monitor.acquire());
@@ -389,8 +426,7 @@ TEST(test_resource_monitor_file_descriptor) {
 }
 
 TEST(test_resource_monitor_exhaustion) {
-    aurore::test::ResourceMonitor monitor(
-        aurore::test::ResourceType::Descriptors, 2);
+    aurore::test::ResourceMonitor monitor(aurore::test::ResourceType::Descriptors, 2);
 
     ASSERT_TRUE(monitor.acquire());
     ASSERT_TRUE(monitor.acquire());
@@ -404,8 +440,7 @@ TEST(test_resource_monitor_exhaustion) {
 }
 
 TEST(test_resource_monitor_peak_tracking) {
-    aurore::test::ResourceMonitor monitor(
-        aurore::test::ResourceType::MemoryBlocks, 10);
+    aurore::test::ResourceMonitor monitor(aurore::test::ResourceType::MemoryBlocks, 10);
 
     for (int i = 0; i < 5; i++) {
         monitor.acquire();
@@ -417,10 +452,8 @@ TEST(test_resource_monitor_peak_tracking) {
 }
 
 TEST(test_resource_monitor_different_types) {
-    aurore::test::ResourceMonitor fd_monitor(
-        aurore::test::ResourceType::Descriptors, 50);
-    aurore::test::ResourceMonitor dma_monitor(
-        aurore::test::ResourceType::DmaChannels, 8);
+    aurore::test::ResourceMonitor fd_monitor(aurore::test::ResourceType::Descriptors, 50);
+    aurore::test::ResourceMonitor dma_monitor(aurore::test::ResourceType::DmaChannels, 8);
 
     fd_monitor.acquire();
     dma_monitor.acquire();
@@ -437,8 +470,7 @@ TEST(test_resource_monitor_different_types) {
 // ============================================================================
 
 TEST(test_queue_stress_basic) {
-    aurore::test::QueueStressTest queue(10,
-        aurore::test::BackpressurePolicy::ReturnFalse);
+    aurore::test::QueueStressTest queue(10, aurore::test::BackpressurePolicy::ReturnFalse);
 
     for (int i = 0; i < 5; i++) {
         ASSERT_TRUE(queue.push(nullptr, 100));
@@ -450,8 +482,7 @@ TEST(test_queue_stress_basic) {
 }
 
 TEST(test_queue_stress_saturation) {
-    aurore::test::QueueStressTest queue(4,
-        aurore::test::BackpressurePolicy::ReturnFalse);
+    aurore::test::QueueStressTest queue(4, aurore::test::BackpressurePolicy::ReturnFalse);
 
     for (int i = 0; i < 4; i++) {
         ASSERT_TRUE(queue.push(nullptr, 100));
@@ -465,8 +496,7 @@ TEST(test_queue_stress_saturation) {
 }
 
 TEST(test_queue_stress_producer_consumer) {
-    aurore::test::QueueStressTest queue(100,
-        aurore::test::BackpressurePolicy::ReturnFalse);
+    aurore::test::QueueStressTest queue(100, aurore::test::BackpressurePolicy::ReturnFalse);
 
     std::atomic<size_t> produced(0);
     std::atomic<size_t> consumed(0);
@@ -497,8 +527,7 @@ TEST(test_queue_stress_producer_consumer) {
 }
 
 TEST(test_queue_depth_tracking) {
-    aurore::test::QueueStressTest queue(10,
-        aurore::test::BackpressurePolicy::ReturnFalse);
+    aurore::test::QueueStressTest queue(10, aurore::test::BackpressurePolicy::ReturnFalse);
 
     for (int i = 0; i < 5; i++) {
         queue.push(nullptr, 100);
@@ -637,12 +666,12 @@ TEST(test_ring_buffer_large_struct_transfer) {
     struct Frame {
         uint32_t id;
         uint64_t timestamp_ns;
-        uint8_t  payload[64];
+        uint8_t payload[64];
     };
 
     aurore::LockFreeRingBuffer<Frame, 4> buf;
     Frame f{};
-    f.id           = 42;
+    f.id = 42;
     f.timestamp_ns = 123456789ULL;
     memset(f.payload, 0xAA, sizeof(f.payload));
 
@@ -680,7 +709,9 @@ TEST(test_ring_buffer_throughput_spsc) {
 
     std::thread producer([&]() {
         for (int i = 0; i < kOps; i++) {
-            while (!buf.push(i)) { std::this_thread::yield(); }
+            while (!buf.push(i)) {
+                std::this_thread::yield();
+            }
         }
     });
 
@@ -709,7 +740,9 @@ TEST(test_ring_buffer_throughput_spsc) {
 
 static int read_sysfs_temp_millidegrees() {
     std::ifstream f("/sys/class/thermal/thermal_zone0/temp");
-    if (!f.is_open()) throw std::runtime_error("Cannot open /sys/class/thermal/thermal_zone0/temp — no thermal sensor");
+    if (!f.is_open())
+        throw std::runtime_error(
+            "Cannot open /sys/class/thermal/thermal_zone0/temp — no thermal sensor");
     int millidegrees;
     f >> millidegrees;
     if (!f) throw std::runtime_error("Failed to read thermal zone temperature");
@@ -733,7 +766,7 @@ TEST(test_system_not_critically_overheated) {
 TEST(test_system_above_freezing) {
     // Sanity check: sensor isn't stuck at 0 or returning garbage.
     int temp_mc = read_sysfs_temp_millidegrees();
-    ASSERT_GT(temp_mc, 5000);   // > 5°C
+    ASSERT_GT(temp_mc, 5000);  // > 5°C
 }
 
 TEST(test_system_temperature_stable) {
@@ -752,28 +785,29 @@ TEST(test_system_temperature_stable) {
 
 TEST(test_dma_buffer_exhaustion_recovery) {
     aurore::test::DmaHealthMonitor monitor;
-    
+
     for (size_t i = 0; i < 100; i++) {
         monitor.record_transfer(4096, 1000);
     }
-    
+
     auto stats = monitor.get_stats();
-    ASSERT_EQ(stats.transfer_count, 100); // Fixed: was 101, should be 100 as the loop runs 100 times
-    
+    ASSERT_EQ(stats.transfer_count,
+              100);  // Fixed: was 101, should be 100 as the loop runs 100 times
+
     monitor.record_error();
-    
+
     bool recovered = monitor.recover();
     ASSERT_TRUE(recovered);
 }
 
 TEST(test_dma_multiple_fault_recovery) {
     aurore::test::DmaHealthMonitor monitor;
-    
+
     monitor.record_transfer(4096, 1000);
     monitor.simulate_fault();
     bool recover1 = monitor.recover();
     ASSERT_TRUE(recover1);
-    
+
     monitor.record_transfer(4096, 1000);
     monitor.simulate_fault();
     bool recover2 = monitor.recover();
@@ -782,23 +816,23 @@ TEST(test_dma_multiple_fault_recovery) {
 
 TEST(test_dma_alignment_boundary) {
     aurore::test::DmaHealthMonitor monitor;
-    
+
     bool page_aligned = monitor.check_alignment(4096);
     ASSERT_TRUE(page_aligned);
-    
+
     bool cache_aligned = monitor.check_alignment(64);
     ASSERT_TRUE(cache_aligned);
 }
 
 TEST(test_dma_error_state_transition) {
     aurore::test::DmaHealthMonitor monitor;
-    
+
     monitor.record_transfer(4096, 1000);
     ASSERT_EQ(monitor.get_stats().state, aurore::test::DmaState::Active);
-    
+
     monitor.record_error();
     ASSERT_EQ(monitor.get_stats().state, aurore::test::DmaState::Error);
-    
+
     bool recovered = monitor.recover();
     ASSERT_TRUE(recovered);
     ASSERT_EQ(monitor.get_stats().state, aurore::test::DmaState::Idle);
@@ -810,16 +844,16 @@ TEST(test_dma_error_state_transition) {
 
 TEST(test_thermal_rapid_transitions) {
     aurore::test::ThermalHealthMonitor monitor(80.0);
-    
+
     for (int i = 0; i < 10; i++) {
         monitor.update_temperature(45.0);
         // Do not record_throttle_event here, it's checked by update_temperature
     }
-    
+
     // Simulate a transition to throttling
     monitor.simulate_throttling_transition();
     auto stats = monitor.get_stats();
-    ASSERT_EQ(stats.throttle_count, 1); // Should be 1 from simulate_throttling_transition
+    ASSERT_EQ(stats.throttle_count, 1);  // Should be 1 from simulate_throttling_transition
 
     monitor.update_temperature(85.0);
     stats = monitor.get_stats();
@@ -828,22 +862,23 @@ TEST(test_thermal_rapid_transitions) {
 
 TEST(test_thermal_recovery_from_critical) {
     aurore::test::ThermalHealthMonitor monitor(80.0);
-    
+
     monitor.update_temperature(90.0);
     ASSERT_EQ(monitor.check_throttle_state(), aurore::test::ThrottleState::Critical);
-    
+
     monitor.update_temperature(50.0);
     ASSERT_EQ(monitor.check_throttle_state(), aurore::test::ThrottleState::Nominal);
 }
 
 TEST(test_thermal_frequency_scaling_detection) {
     aurore::test::ThermalHealthMonitor monitor(80.0);
-    
+
     monitor.update_temperature(75.0);
     auto stats = monitor.get_stats();
-    
+
     // Updated logic: check if it's throttling or critical based on update_temperature
-    ASSERT_TRUE(stats.throttle_state == aurore::test::ThrottleState::Throttling || stats.throttle_state == aurore::test::ThrottleState::Nominal);
+    ASSERT_TRUE(stats.throttle_state == aurore::test::ThrottleState::Throttling ||
+                stats.throttle_state == aurore::test::ThrottleState::Nominal);
 }
 
 // ============================================================================
@@ -852,11 +887,11 @@ TEST(test_thermal_frequency_scaling_detection) {
 
 TEST(test_queue_message_ordering) {
     aurore::LockFreeRingBuffer<int, 8> buffer;
-    
+
     for (int i = 0; i < 4; i++) {
         buffer.push(i);
     }
-    
+
     int val;
     for (int i = 0; i < 4; i++) {
         ASSERT_TRUE(buffer.pop(val));
@@ -882,7 +917,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     RUN_TEST(test_stack_recursion_detection);
     RUN_TEST(test_stack_multi_thread_independent);
     RUN_TEST(test_stack_alignment_check);
-    RUN_TEST(test_stack_long_run_worst_case_usage); // New test
+    RUN_TEST(test_stack_long_run_worst_case_usage);  // New test
 
     std::cout << "\n--- Heap Integrity Tests ---" << std::endl;
     RUN_TEST(test_heap_long_run_unbounded_growth_detection);

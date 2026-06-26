@@ -2,34 +2,36 @@
 // AM7-L3-SEC-005: Firmware update verification flow
 // Implements: (a) ECDSA signature check, (b) version monotonicity, (c) dual-bank integrity.
 
-#include "aurore/security.hpp"
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <cerrno>
 #include <cstdint>
-#include <string>
+#include <cstring>
 #include <fstream>
 #include <sstream>
-#include <cerrno>
-#include <cstring>
-#include <unistd.h>
-#include <sys/stat.h>
+#include <string>
+
+#include "aurore/security.hpp"
 
 namespace aurore {
 
 class FirmwareUpdater {
-public:
+   public:
     struct Config {
-        std::string slot_a_path    = "/opt/aurore/slot_a/aurore_main";
-        std::string slot_b_path    = "/opt/aurore/slot_b/aurore_main";
-        std::string active_link    = "/opt/aurore/current";      // symlink → active slot dir
-        std::string pubkey_path    = "/etc/aurore/signing_key.pub";
-        std::string version_path   = "/etc/aurore/version";      // text file: uint32
+        std::string slot_a_path = "/opt/aurore/slot_a/aurore_main";
+        std::string slot_b_path = "/opt/aurore/slot_b/aurore_main";
+        std::string active_link = "/opt/aurore/current";  // symlink → active slot dir
+        std::string pubkey_path = "/etc/aurore/signing_key.pub";
+        std::string version_path = "/etc/aurore/version";  // text file: uint32
     };
 
     enum class UpdateResult : int {
-        SUCCESS           = 0,
+        SUCCESS = 0,
         SIGNATURE_INVALID = 1,
         VERSION_DOWNGRADE = 2,  // new_version <= current_version
-        INTEGRITY_FAIL    = 3,  // SHA-256 of staged binary != source
-        IO_ERROR          = 4,
+        INTEGRITY_FAIL = 3,     // SHA-256 of staged binary != source
+        IO_ERROR = 4,
     };
 
     explicit FirmwareUpdater(Config cfg) : cfg_(std::move(cfg)) {}
@@ -65,7 +67,7 @@ public:
         const std::string active_bin = resolve_active_binary();
         if (active_bin.empty()) return false;
         const std::string hash_file = active_bin + ".sha256";
-        const std::string recorded  = read_text_file(hash_file);
+        const std::string recorded = read_text_file(hash_file);
         if (recorded.empty()) return false;
         const std::string actual = sha256_hex_file(active_bin);
         return !actual.empty() && actual == trim(recorded);
@@ -75,9 +77,8 @@ public:
     // new_binary: path to the new binary file
     // new_sig:    path to DER-encoded ECDSA P-256 signature file
     // new_version: version number embedded in the update package (must be > current)
-    UpdateResult apply(const std::string& new_binary,
-                       const std::string& new_sig,
-                       uint32_t           new_version) {
+    UpdateResult apply(const std::string& new_binary, const std::string& new_sig,
+                       uint32_t new_version) {
         // (a) ECDSA signature verification
         const std::string pubkey_pem = read_text_file(cfg_.pubkey_path);
         if (pubkey_pem.empty()) {
@@ -108,7 +109,7 @@ public:
         }
 
         // Verify the staged copy matches the source (integrity check)
-        const std::string src_hash  = sha256_hex_file(new_binary);
+        const std::string src_hash = sha256_hex_file(new_binary);
         const std::string dest_hash = sha256_hex_file(target_path);
         if (src_hash.empty() || dest_hash.empty() || src_hash != dest_hash) {
             std::fprintf(stderr, "[FirmwareUpdater] dual-bank integrity FAIL: src=%s staged=%s\n",
@@ -124,12 +125,12 @@ public:
         write_text_file(target_path + ".sha256", dest_hash + "\n");
 
         // Atomic symlink swap: create a new temp link then rename over the old one
-        const std::string target_dir  = parent_dir(target_path);
-        const std::string tmp_link    = cfg_.active_link + ".tmp";
+        const std::string target_dir = parent_dir(target_path);
+        const std::string tmp_link = cfg_.active_link + ".tmp";
         ::unlink(tmp_link.c_str());
         if (::symlink(target_dir.c_str(), tmp_link.c_str()) != 0) {
-            std::fprintf(stderr, "[FirmwareUpdater] symlink(%s) failed: %s\n",
-                         target_dir.c_str(), std::strerror(errno));
+            std::fprintf(stderr, "[FirmwareUpdater] symlink(%s) failed: %s\n", target_dir.c_str(),
+                         std::strerror(errno));
             return UpdateResult::IO_ERROR;
         }
         if (::rename(tmp_link.c_str(), cfg_.active_link.c_str()) != 0) {
@@ -146,12 +147,12 @@ public:
                          cfg_.version_path.c_str());
         }
 
-        std::fprintf(stderr, "[FirmwareUpdater] update applied: v%u → v%u slot=%s\n",
-                     cur_ver, new_version, target_path.c_str());
+        std::fprintf(stderr, "[FirmwareUpdater] update applied: v%u → v%u slot=%s\n", cur_ver,
+                     new_version, target_path.c_str());
         return UpdateResult::SUCCESS;
     }
 
-private:
+   private:
     Config cfg_;
 
     static std::string parent_dir(const std::string& path) {
@@ -229,10 +230,10 @@ private:
 
     static std::string trim(const std::string& s) {
         size_t start = s.find_first_not_of(" \t\r\n");
-        size_t end   = s.find_last_not_of(" \t\r\n");
+        size_t end = s.find_last_not_of(" \t\r\n");
         if (start == std::string::npos) return {};
         return s.substr(start, end - start + 1);
     }
 };
 
-} // namespace aurore
+}  // namespace aurore

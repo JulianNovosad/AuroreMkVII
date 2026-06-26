@@ -1,13 +1,14 @@
 #pragma once
 
-#include <cstdint>
-#include <optional>
 #include <array>
 #include <atomic>
-#include <string>
-#include <vector>
+#include <cstdint>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <optional>
+#include <string>
+#include <vector>
+
 #include "aurore/state_machine.hpp"
 
 namespace aurore {
@@ -21,11 +22,11 @@ enum class EngagementMode : uint8_t { KINETIC = 0, DROP = 1 };
  * Multiple profiles can be loaded from config.json and selected at runtime.
  */
 struct BallisticProfile {
-    std::string name{};                    ///< Human-readable profile name
-    float muzzle_velocity_m_s{900.0f};     ///< Muzzle velocity in m/s
-    float ballistic_coefficient{0.300f};   ///< Ballistic coefficient (G1 model)
-    float sight_height_mm{50.0f};          ///< Sight height above bore in mm
-    float zero_range_m{100.0f};            ///< Zero range in meters
+    std::string name{};                   ///< Human-readable profile name
+    float muzzle_velocity_m_s{900.0f};    ///< Muzzle velocity in m/s
+    float ballistic_coefficient{0.300f};  ///< Ballistic coefficient (G1 model)
+    float sight_height_mm{50.0f};         ///< Sight height above bore in mm
+    float zero_range_m{100.0f};           ///< Zero range in meters
 
     /**
      * @brief Validate profile parameters
@@ -70,15 +71,15 @@ struct DropSolution {
 // Transonic (Mach 0.8-1.2): cd = 0.4
 // Supersonic (Mach 1.2-2.5): cd = 0.25
 // Hypersonic (Mach 2.5-10): cd = 0.18
-static constexpr float kMachSubsonicMax   = 0.8f;
-static constexpr float kMachTransonicMax  = 1.2f;
+static constexpr float kMachSubsonicMax = 0.8f;
+static constexpr float kMachTransonicMax = 1.2f;
 static constexpr float kMachSupersonicMax = 2.5f;
 static constexpr float kMachHypersonicMax = 10.0f;
-static constexpr float kCdSubsonic        = 0.2f;
-static constexpr float kCdTransonic       = 0.4f;
-static constexpr float kCdSupersonic      = 0.25f;
-static constexpr float kCdHypersonic      = 0.18f;
-static constexpr float kSpeedOfSound      = 343.0f;  // m/s at sea level, 15°C
+static constexpr float kCdSubsonic = 0.2f;
+static constexpr float kCdTransonic = 0.4f;
+static constexpr float kCdSupersonic = 0.25f;
+static constexpr float kCdHypersonic = 0.18f;
+static constexpr float kSpeedOfSound = 343.0f;  // m/s at sea level, 15°C
 
 // RK4 State vector: [x, y, z, vx, vy, vz]
 struct Rk4State {
@@ -88,8 +89,8 @@ struct Rk4State {
 
 // RK4 Derivative vector: [vx, vy, vz, ax, ay, az]
 struct Rk4Derivative {
-    float dx{0.f}, dy{0.f}, dz{0.f};   // Velocity components
-    float dvx{0.f}, dvy{0.f}, dvz{0.f}; // Acceleration components
+    float dx{0.f}, dy{0.f}, dz{0.f};     // Velocity components
+    float dvx{0.f}, dvy{0.f}, dvz{0.f};  // Acceleration components
 };
 
 // PERF-005: Lookup table dimensions for pre-computed solutions
@@ -107,7 +108,7 @@ static constexpr float kLookupTableMinTargetVel = 0.0f;
 static constexpr float kLookupTableMaxTargetVel = 20.0f;
 
 class BallisticSolver {
-public:
+   public:
     BallisticSolver();
 
     // PERF-005: Initialize lookup table (call once at startup)
@@ -121,18 +122,15 @@ public:
 
     EngagementMode select_mode(float range_m, float gimbal_el_deg, float target_aspect) const;
 
-    std::optional<KineticSolution> solve_kinetic(float range_m,
-                                                  float height_offset_m,
-                                                  float muzzle_velocity_m_s,
-                                                  float target_velocity_m_s = 0.f) const;
+    std::optional<KineticSolution> solve_kinetic(float range_m, float height_offset_m,
+                                                 float muzzle_velocity_m_s,
+                                                 float target_velocity_m_s = 0.f) const;
 
     std::optional<DropSolution> solve_drop(float range_m, float height_m,
                                            float target_velocity_m_s = 0.f) const;
 
-    std::optional<FireControlSolution> solve(float range_m,
-                                             float gimbal_el_deg,
-                                             float target_aspect,
-                                             float muzzle_velocity_m_s,
+    std::optional<FireControlSolution> solve(float range_m, float gimbal_el_deg,
+                                             float target_aspect, float muzzle_velocity_m_s,
                                              float target_velocity_m_s = 0.f) const;
 
     // PERF-005: Fast lookup table based p_hit calculation
@@ -145,7 +143,8 @@ public:
     float get_el_lead_from_table(float range_m, float velocity_m_s) const;
 
     // PERF-005: Fast lead angle lookup (moving targets)
-    float get_az_lead_from_table(float range_m, float velocity_m_s, float target_velocity_m_s) const;
+    float get_az_lead_from_table(float range_m, float velocity_m_s,
+                                 float target_velocity_m_s) const;
 
     // Legacy method kept for compatibility
     float monte_carlo_p_hit(const FireControlSolution& nominal, int n_sims = 50) const;
@@ -153,46 +152,51 @@ public:
     // G1 Drag + RK4 integration methods (public for testing)
     float get_drag_coefficient(float mach_number) const;
     Rk4Derivative compute_derivative(const Rk4State& state, float air_density,
-                                      float cross_section_m2, float mass_kg) const;
-    Rk4State rk4_step(const Rk4State& state, float dt, float air_density,
-                      float cross_section_m2, float mass_kg) const;
+                                     float cross_section_m2, float mass_kg) const;
+    Rk4State rk4_step(const Rk4State& state, float dt, float air_density, float cross_section_m2,
+                      float mass_kg) const;
 
     // Trajectory simulation using RK4 + G1 drag
     struct TrajectoryPoint {
-        float x{0.f}, y{0.f}, z{0.f};    // Position (m)
-        float vx{0.f}, vy{0.f}, vz{0.f}; // Velocity (m/s)
+        float x{0.f}, y{0.f}, z{0.f};     // Position (m)
+        float vx{0.f}, vy{0.f}, vz{0.f};  // Velocity (m/s)
         float time{0.f};                  // Time since launch (s)
     };
-    std::vector<TrajectoryPoint> simulate_trajectory(
-        float muzzle_velocity_m_s, float launch_angle_rad,
-        float air_density, float cross_section_m2, float mass_kg,
-        float max_distance_m, float dt = 0.0005f) const;
+    std::vector<TrajectoryPoint> simulate_trajectory(float muzzle_velocity_m_s,
+                                                     float launch_angle_rad, float air_density,
+                                                     float cross_section_m2, float mass_kg,
+                                                     float max_distance_m,
+                                                     float dt = 0.0005f) const;
 
-private:
+   private:
     // PERF-005: Pre-computed lookup tables [range_bin][velocity_bin]
     // Stored as 2D array for cache-friendly access (L3-cached, ~85KB total)
-    std::array<std::array<float, kLookupTableVelocityBins>, kLookupTableRangeBins> p_hit_table_kinetic_;
-    std::array<std::array<float, kLookupTableVelocityBins>, kLookupTableRangeBins> p_hit_table_drop_;
+    std::array<std::array<float, kLookupTableVelocityBins>, kLookupTableRangeBins>
+        p_hit_table_kinetic_;
+    std::array<std::array<float, kLookupTableVelocityBins>, kLookupTableRangeBins>
+        p_hit_table_drop_;
     std::array<std::array<float, kLookupTableVelocityBins>, kLookupTableRangeBins> tof_table_;
     std::array<std::array<float, kLookupTableVelocityBins>, kLookupTableRangeBins> el_lead_table_;
-    std::array<std::array<std::array<float, kLookupTableTargetVelBins>, kLookupTableVelocityBins>, kLookupTableRangeBins> az_lead_table_;
+    std::array<std::array<std::array<float, kLookupTableTargetVelBins>, kLookupTableVelocityBins>,
+               kLookupTableRangeBins>
+        az_lead_table_;
     std::atomic<bool> lookup_table_initialized_{false};
 
     // AM7-L2-BALL-002: Ballistic profile storage
     std::vector<BallisticProfile> profiles_;
     int active_profile_idx_{-1};  // -1 indicates no active profile
 
-    static constexpr float kGravity           =  9.81f;
-    static constexpr float kDefaultDensity    =  1.225f;
-    static constexpr float kAspectDropThresh  =  2.0f;
-    static constexpr float kElevDropThresh    = 45.0f;
-    static constexpr float kRangeDropThresh   =  1.5f;
+    static constexpr float kGravity = 9.81f;
+    static constexpr float kDefaultDensity = 1.225f;
+    static constexpr float kAspectDropThresh = 2.0f;
+    static constexpr float kElevDropThresh = 45.0f;
+    static constexpr float kRangeDropThresh = 1.5f;
 
-    static constexpr float kRangeSigmaM       = 0.010f;
-    static constexpr float kVelocitySigmaMps  = 5.0f;
-    static constexpr float kDensitySigma      = 0.02f;
-    static constexpr float kAlignSigmaDeg     = 0.1f;
-    static constexpr float kTargetHalfSizeM   = 0.040f;
+    static constexpr float kRangeSigmaM = 0.010f;
+    static constexpr float kVelocitySigmaMps = 5.0f;
+    static constexpr float kDensitySigma = 0.02f;
+    static constexpr float kAlignSigmaDeg = 0.1f;
+    static constexpr float kTargetHalfSizeM = 0.040f;
 
     // PERF-005: Helper to convert continuous values to table indices
     int range_to_index(float range_m) const;

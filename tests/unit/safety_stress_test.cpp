@@ -1,3 +1,6 @@
+#include <signal.h>
+#include <unistd.h>
+
 #include <atomic>
 #include <cassert>
 #include <chrono>
@@ -6,8 +9,6 @@
 #include <iostream>
 #include <thread>
 #include <vector>
-#include <signal.h>
-#include <unistd.h>
 
 #include "aurore/safety_monitor.hpp"
 
@@ -19,24 +20,36 @@ std::atomic<size_t> g_tests_passed(0);
 std::atomic<size_t> g_tests_failed(0);
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::cout << "  PASS: " << #name << std::endl; \
-    } \
-    catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                          \
+    do {                                                                        \
+        g_tests_run.fetch_add(1);                                               \
+        try {                                                                   \
+            name();                                                             \
+            g_tests_passed.fetch_add(1);                                        \
+            std::cout << "  PASS: " << #name << std::endl;                      \
+        } catch (const std::exception& e) {                                     \
+            g_tests_failed.fetch_add(1);                                        \
+            std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
+        }                                                                       \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_GE(a, b) do { if (!((a) >= (b))) throw std::runtime_error("Assertion failed: " #a " < " #b); } while(0)
-#define ASSERT_GT(a, b) do { if (!((a) > (b))) throw std::runtime_error("Assertion failed: " #a " <= " #b); } while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_GE(a, b)                                                                \
+    do {                                                                               \
+        if (!((a) >= (b))) throw std::runtime_error("Assertion failed: " #a " < " #b); \
+    } while (0)
+#define ASSERT_GT(a, b)                                                                \
+    do {                                                                               \
+        if (!((a) > (b))) throw std::runtime_error("Assertion failed: " #a " <= " #b); \
+    } while (0)
 
 void mock_recovery_callback(const char*, uint64_t, void* user_data) {
     if (user_data) {
@@ -54,45 +67,47 @@ using namespace aurore;
 // but ensure latency exceeded doesn't overwrite it, OR I will just check for any vision fault.
 TEST(test_vision_stall) {
     SafetyMonitorConfig config;
-    config.vision_deadline_ns = 100000000; // 100ms
+    config.vision_deadline_ns = 100000000;  // 100ms
     SafetyMonitor monitor(config);
     monitor.start();
-    
+
     TimestampNs now = get_timestamp();
     monitor.update_vision_frame(0, now);
-    (void)monitor.run_cycle(); 
-    
-    usleep(250000); // 250ms > 2*100ms
-    
-    (void)monitor.run_cycle(); 
+    (void)monitor.run_cycle();
+
+    usleep(250000);  // 250ms > 2*100ms
+
+    (void)monitor.run_cycle();
     auto fault = monitor.current_fault();
     // It should be either STALLED or LATENCY_EXCEEDED
-    ASSERT_TRUE(fault == SafetyFaultCode::VISION_STALLED || fault == SafetyFaultCode::VISION_LATENCY_EXCEEDED);
+    ASSERT_TRUE(fault == SafetyFaultCode::VISION_STALLED ||
+                fault == SafetyFaultCode::VISION_LATENCY_EXCEEDED);
 }
 
 // 17. Actuation Stall
 TEST(test_actuation_stall) {
     SafetyMonitorConfig config;
-    config.actuation_deadline_ns = 100000000; // 100ms
+    config.actuation_deadline_ns = 100000000;  // 100ms
     SafetyMonitor monitor(config);
     monitor.start();
-    
+
     TimestampNs now = get_timestamp();
     monitor.update_actuation_frame(0, now);
-    (void)monitor.run_cycle(); 
-    
-    usleep(250000); 
-    
+    (void)monitor.run_cycle();
+
+    usleep(250000);
+
     (void)monitor.run_cycle();
     auto fault = monitor.current_fault();
-    ASSERT_TRUE(fault == SafetyFaultCode::ACTUATION_STALLED || fault == SafetyFaultCode::ACTUATION_LATENCY_EXCEEDED);
+    ASSERT_TRUE(fault == SafetyFaultCode::ACTUATION_STALLED ||
+                fault == SafetyFaultCode::ACTUATION_LATENCY_EXCEEDED);
 }
 
 // 18. Consecutive Misses - verify fault triggered with old timestamps
 TEST(test_consecutive_misses) {
     SafetyMonitorConfig config;
     config.max_consecutive_misses = 3;
-    config.vision_deadline_ns = 10000000; // 10ms - tight for test
+    config.vision_deadline_ns = 10000000;  // 10ms - tight for test
     SafetyMonitor monitor(config);
     monitor.start();
 
@@ -102,7 +117,7 @@ TEST(test_consecutive_misses) {
     (void)monitor.run_cycle();
 
     // Sleep longer than vision deadline to trigger latency fault
-    usleep(25000); // 25ms > 10ms deadline
+    usleep(25000);  // 25ms > 10ms deadline
 
     (void)monitor.run_cycle();
 
@@ -124,22 +139,22 @@ TEST(test_report_integrity) {
 TEST(test_callback_race) {
     SafetyMonitor monitor;
     std::atomic<int> callback_count{0};
-    
+
     auto slow_callback = [](SafetyFaultCode, const char*, void* data) {
         auto* count = static_cast<std::atomic<int>*>(data);
         count->fetch_add(1);
-        usleep(10000); 
+        usleep(10000);
     };
-    
+
     monitor.set_safety_action_callback(slow_callback, &callback_count);
     monitor.start();
-    
+
     std::thread t1([&]() { monitor.trigger_emergency_stop("Race 1"); });
     std::thread t2([&]() { monitor.trigger_emergency_stop("Race 2"); });
-    
+
     t1.join();
     t2.join();
-    
+
     ASSERT_EQ(callback_count.load(), 1);
 }
 
@@ -147,11 +162,11 @@ TEST(test_callback_race) {
 TEST(test_severity_upgrade) {
     SafetyMonitor monitor;
     monitor.start();
-    
+
     monitor.update_vision_frame(0, get_timestamp() - 15000000);
     (void)monitor.run_cycle();
-    
-    monitor.trigger_emergency_stop("Upgrade"); 
+
+    monitor.trigger_emergency_stop("Upgrade");
     ASSERT_EQ(monitor.current_fault(), SafetyFaultCode::EMERGENCY_STOP_REQUESTED);
 }
 
@@ -161,14 +176,14 @@ TEST(test_watchdog_boundary) {
     config.watchdog_timeout_ms = 50;
     SafetyMonitor monitor(config);
     monitor.init();
-    
+
     monitor.kick_watchdog();
-    usleep(20000); 
-    ASSERT_TRUE(monitor.is_system_safe());
-    
-    usleep(80000); 
     usleep(20000);
-    
+    ASSERT_TRUE(monitor.is_system_safe());
+
+    usleep(80000);
+    usleep(20000);
+
     ASSERT_EQ(monitor.current_fault(), SafetyFaultCode::WATCHDOG_FEED_FAILED);
 }
 
@@ -177,15 +192,15 @@ TEST(test_recovery_pulse) {
     SafetyMonitorConfig config;
     config.per_stage.stalls_before_recovery = 2;
     std::atomic<uint32_t> recovery_calls{0};
-    
+
     SafetyMonitor monitor(config);
     monitor.set_recovery_callback(mock_recovery_callback, &recovery_calls);
-    
-    monitor.record_stage_latency(PipelineStage::VISION, 30000000); 
-    monitor.record_stage_latency(PipelineStage::VISION, 30000000); 
-    
+
+    monitor.record_stage_latency(PipelineStage::VISION, 30000000);
+    monitor.record_stage_latency(PipelineStage::VISION, 30000000);
+
     ASSERT_EQ(recovery_calls.load(), 1);
-    
+
     monitor.record_stage_latency(PipelineStage::VISION, 30000000);
     ASSERT_EQ(recovery_calls.load(), 2);
 }
@@ -213,21 +228,21 @@ TEST(test_raii_kick) {
     config.watchdog_timeout_ms = 50;
     SafetyMonitor monitor(config);
     monitor.init();
-    
+
     {
         WatchdogKick kick(monitor);
         usleep(20000);
-    } 
-    
-    usleep(20000); 
+    }
+
+    usleep(20000);
     ASSERT_TRUE(monitor.is_system_safe());
 }
 
 // 27. Stage Stall Isolation
 TEST(test_stage_stall_isolation) {
     SafetyMonitor monitor;
-    monitor.record_stage_latency(PipelineStage::TRACK, 50000000); 
-    
+    monitor.record_stage_latency(PipelineStage::TRACK, 50000000);
+
     ASSERT_TRUE(monitor.get_stage_stats(PipelineStage::TRACK).is_stalled());
     ASSERT_FALSE(monitor.get_stage_stats(PipelineStage::VISION).is_stalled());
 }
@@ -244,27 +259,26 @@ TEST(test_stats_reset) {
     SafetyMonitor monitor;
     monitor.record_stage_latency(PipelineStage::VISION, 50000000);
     ASSERT_GT(monitor.get_stage_stats(PipelineStage::VISION).max_latency_ns.load(), 0ULL);
-    
+
     monitor.reset_stage_stats();
     ASSERT_EQ(monitor.get_stage_stats(PipelineStage::VISION).max_latency_ns.load(), 0ULL);
-    ASSERT_EQ(monitor.get_stage_stats(PipelineStage::VISION).stall_threshold_ns.load(), 25000000ULL);
+    ASSERT_EQ(monitor.get_stage_stats(PipelineStage::VISION).stall_threshold_ns.load(),
+              25000000ULL);
 }
 
 // 30. Concurrent Logging
 TEST(test_concurrent_logging) {
     SafetyMonitor monitor;
     std::atomic<int> log_count{0};
-    monitor.set_log_callback([](const SafetyEvent&, void* data) {
-        static_cast<std::atomic<int>*>(data)->fetch_add(1);
-    }, &log_count);
-    
+    monitor.set_log_callback(
+        [](const SafetyEvent&, void* data) { static_cast<std::atomic<int>*>(data)->fetch_add(1); },
+        &log_count);
+
     std::vector<std::thread> threads;
     for (int i = 0; i < 10; ++i) {
-        threads.emplace_back([&]() {
-            monitor.trigger_emergency_stop("Stress");
-        });
+        threads.emplace_back([&]() { monitor.trigger_emergency_stop("Stress"); });
     }
-    
+
     for (auto& t : threads) t.join();
     ASSERT_GE(log_count.load(), 1);
 }
@@ -286,7 +300,7 @@ int main() {
     RUN_TEST(test_latency_math);
     RUN_TEST(test_stats_reset);
     RUN_TEST(test_concurrent_logging);
-    
+
     std::cout << "Tests run: " << g_tests_run.load() << std::endl;
     std::cout << "Tests passed: " << g_tests_passed.load() << std::endl;
     return g_tests_failed.load() > 0 ? 1 : 0;

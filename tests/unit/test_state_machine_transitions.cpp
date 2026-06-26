@@ -635,7 +635,8 @@ TEST(test_transition_table_coverage) {
     auto make_tracking = []() {
         aurore::StateMachine sm;
         sm.force_state_for_test(S::TRACKING);
-        sm.clear_fault_latch_for_test();  // clear latched fault from BOOT so TRACKING→ARMED is possible
+        sm.clear_fault_latch_for_test();  // clear latched fault from BOOT so TRACKING→ARMED is
+                                          // possible
         sm.set_operator_authorization(true);
         sm.on_redetection_score(0.96f);
         return sm;
@@ -643,7 +644,8 @@ TEST(test_transition_table_coverage) {
 
     // ----------------------------------------------------------------
     // BOOT: valid → IDLE_SAFE (init_complete), FAULT (fault)
-    // BOOT: invalid — request_freecam, request_search, request_cancel, request_disarm, on_manual_reset
+    // BOOT: invalid — request_freecam, request_search, request_cancel, request_disarm,
+    // on_manual_reset
     // ----------------------------------------------------------------
     {
         aurore::StateMachine sm;
@@ -713,9 +715,9 @@ TEST(test_transition_table_coverage) {
         sm.force_state_for_test(S::FREECAM);
 
         sm.request_disarm();
-        ASSERT_EQ(sm.state(), S::FREECAM);   // rejected
+        ASSERT_EQ(sm.state(), S::FREECAM);  // rejected
         sm.on_manual_reset();
-        ASSERT_EQ(sm.state(), S::FREECAM);   // rejected — not FAULT
+        ASSERT_EQ(sm.state(), S::FREECAM);  // rejected — not FAULT
     }
     {
         aurore::StateMachine sm;
@@ -745,9 +747,9 @@ TEST(test_transition_table_coverage) {
         sm.force_state_for_test(S::SEARCH);
 
         sm.request_disarm();
-        ASSERT_EQ(sm.state(), S::SEARCH);    // rejected
+        ASSERT_EQ(sm.state(), S::SEARCH);  // rejected
         sm.on_manual_reset();
-        ASSERT_EQ(sm.state(), S::SEARCH);    // rejected — not FAULT
+        ASSERT_EQ(sm.state(), S::SEARCH);  // rejected — not FAULT
     }
     {
         aurore::StateMachine sm;
@@ -807,10 +809,10 @@ TEST(test_transition_table_coverage) {
         ASSERT_EQ(sm.state(), S::ARMED);
 
         sm.request_freecam();
-        ASSERT_EQ(sm.state(), S::ARMED);    // rejected
-        sm.request_search();                // valid per AM7-L3-MODE-001 table
+        ASSERT_EQ(sm.state(), S::ARMED);  // rejected
+        sm.request_search();              // valid per AM7-L3-MODE-001 table
         ASSERT_EQ(sm.state(), S::SEARCH);
-        sm.request_cancel();               // SEARCH→IDLE_SAFE
+        sm.request_cancel();  // SEARCH→IDLE_SAFE
         ASSERT_EQ(sm.state(), S::IDLE_SAFE);
     }
     {
@@ -842,13 +844,13 @@ TEST(test_transition_table_coverage) {
         ASSERT_EQ(sm.state(), S::FAULT);
 
         sm.request_freecam();
-        ASSERT_EQ(sm.state(), S::FAULT);   // rejected
+        ASSERT_EQ(sm.state(), S::FAULT);  // rejected
         sm.request_search();
-        ASSERT_EQ(sm.state(), S::FAULT);   // rejected
+        ASSERT_EQ(sm.state(), S::FAULT);  // rejected
         sm.request_cancel();
-        ASSERT_EQ(sm.state(), S::FAULT);   // rejected
+        ASSERT_EQ(sm.state(), S::FAULT);  // rejected
         sm.request_disarm();
-        ASSERT_EQ(sm.state(), S::FAULT);   // rejected
+        ASSERT_EQ(sm.state(), S::FAULT);  // rejected
     }
     {
         aurore::StateMachine sm;
@@ -857,7 +859,9 @@ TEST(test_transition_table_coverage) {
         ASSERT_EQ(sm.state(), S::IDLE_SAFE);  // valid: FAULT → IDLE_SAFE
     }
 
-    std::cout << "    State-command matrix: 7 states × all operator commands verified (AM7-L3-IF-004)" << std::endl;
+    std::cout
+        << "    State-command matrix: 7 states × all operator commands verified (AM7-L3-IF-004)"
+        << std::endl;
 }
 
 // ============================================================================

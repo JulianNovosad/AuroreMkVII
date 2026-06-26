@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 
 namespace aurore {
 
@@ -22,7 +22,7 @@ extern const char* kDefaultHmacKey;
 
 /**
  * @brief Compute frame header for HMAC input.
- * 
+ *
  * Packs the frame header fields into a contiguous buffer for HMAC computation.
  * Per ICD-001: HMAC covers header + frame_hash.
  */
@@ -30,7 +30,7 @@ void compute_frame_header(const ZeroCopyFrame& frame, uint8_t* out_header, size_
 
 /**
  * @brief Compute SHA256 hash of frame pixel data.
- * 
+ *
  * @param frame Frame to hash (hash written to frame.frame_hash)
  * @return true if hash computed successfully
  */
@@ -38,7 +38,7 @@ bool compute_frame_hash(ZeroCopyFrame& frame);
 
 /**
  * @brief Compute HMAC-SHA256 over frame header + hash.
- * 
+ *
  * @param frame Frame to authenticate (must have frame_hash computed)
  * @param hmac_key HMAC key (256-bit recommended)
  * @param key_len Length of key in bytes
@@ -48,10 +48,10 @@ bool compute_frame_hmac(ZeroCopyFrame& frame, const void* hmac_key, size_t key_l
 
 /**
  * @brief Authenticate frame (compute hash + HMAC).
- * 
+ *
  * This is the main entry point for frame authentication.
  * Called after frame capture, before releasing to consumer.
- * 
+ *
  * @param frame Frame to authenticate
  * @param hmac_key HMAC key (nullptr uses default key)
  * @param key_len Length of key (0 uses default key length)

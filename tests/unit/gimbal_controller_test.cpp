@@ -1,4 +1,5 @@
 #include "aurore/gimbal_controller.hpp"
+
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -7,47 +8,59 @@ static int g_pass = 0;
 static int g_fail = 0;
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    std::cout << "Running " << #name << "... "; \
-    try { name(); std::cout << "PASS\n"; ++g_pass; } \
-    catch (const std::exception& e) { \
-        std::cout << "FAIL: " << e.what() << "\n"; ++g_fail; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                 \
+    do {                                               \
+        std::cout << "Running " << #name << "... ";    \
+        try {                                          \
+            name();                                    \
+            std::cout << "PASS\n";                     \
+            ++g_pass;                                  \
+        } catch (const std::exception& e) {            \
+            std::cout << "FAIL: " << e.what() << "\n"; \
+            ++g_fail;                                  \
+        }                                              \
+    } while (0)
 
-#define ASSERT_NEAR(expected, actual, eps) do { \
-    if (std::fabs((expected) - (actual)) > (eps)) { \
-        throw std::runtime_error("Assertion failed: " #expected " ~= " #actual \
-            " (expected=" + std::to_string(expected) + \
-            " actual=" + std::to_string(actual) + ")"); \
-    } \
-} while(0)
+#define ASSERT_NEAR(expected, actual, eps)                                                         \
+    do {                                                                                           \
+        if (std::fabs((expected) - (actual)) > (eps)) {                                            \
+            throw std::runtime_error("Assertion failed: " #expected " ~= " #actual " (expected=" + \
+                                     std::to_string(expected) +                                    \
+                                     " actual=" + std::to_string(actual) + ")");                   \
+        }                                                                                          \
+    } while (0)
 
-#define ASSERT_EQ(expected, actual) do { \
-    if ((expected) != (actual)) { \
-        throw std::runtime_error("Assertion failed: " #expected " == " #actual); \
-    } \
-} while(0)
+#define ASSERT_EQ(expected, actual)                                                  \
+    do {                                                                             \
+        if ((expected) != (actual)) {                                                \
+            throw std::runtime_error("Assertion failed: " #expected " == " #actual); \
+        }                                                                            \
+    } while (0)
 
-#define ASSERT_LE(val, bound) do { \
-    if ((val) > (bound)) { \
-        throw std::runtime_error("Assertion failed: " #val " <= " #bound \
-            " (val=" + std::to_string(val) + " bound=" + std::to_string(bound) + ")"); \
-    } \
-} while(0)
+#define ASSERT_LE(val, bound)                                                            \
+    do {                                                                                 \
+        if ((val) > (bound)) {                                                           \
+            throw std::runtime_error(                                                    \
+                "Assertion failed: " #val " <= " #bound " (val=" + std::to_string(val) + \
+                " bound=" + std::to_string(bound) + ")");                                \
+        }                                                                                \
+    } while (0)
 
-#define ASSERT_GE(val, bound) do { \
-    if ((val) < (bound)) { \
-        throw std::runtime_error("Assertion failed: " #val " >= " #bound \
-            " (val=" + std::to_string(val) + " bound=" + std::to_string(bound) + ")"); \
-    } \
-} while(0)
+#define ASSERT_GE(val, bound)                                                            \
+    do {                                                                                 \
+        if ((val) < (bound)) {                                                           \
+            throw std::runtime_error(                                                    \
+                "Assertion failed: " #val " >= " #bound " (val=" + std::to_string(val) + \
+                " bound=" + std::to_string(bound) + ")");                                \
+        }                                                                                \
+    } while (0)
 
-#define ASSERT_TRUE(cond) do { \
-    if (!(cond)) { \
-        throw std::runtime_error("Assertion failed: " #cond " is false"); \
-    } \
-} while(0)
+#define ASSERT_TRUE(cond)                                                     \
+    do {                                                                      \
+        if (!(cond)) {                                                        \
+            throw std::runtime_error("Assertion failed: " #cond " is false"); \
+        }                                                                     \
+    } while (0)
 
 using namespace aurore;
 

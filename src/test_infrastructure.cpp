@@ -5,15 +5,16 @@
 
 #include "aurore/test_infrastructure.hpp"
 
+#include <sys/resource.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <limits>
-#include <sys/resource.h>
-#include <unistd.h>
-#include <stdexcept> // For std::runtime_error
+#include <stdexcept>  // For std::runtime_error
 
 namespace aurore {
 namespace test {
@@ -98,8 +99,7 @@ HeapTracker::HeapStats HeapTracker::get_stats() const {
     stats.peak_allocated_bytes = peak_allocated_bytes_.load();
     stats.total_allocated_bytes = total_allocated_bytes_.load();
     stats.total_freed_bytes = total_freed_bytes_.load();
-    stats.has_leak = (allocation_count_ > deallocation_count_) &&
-                     (current_allocated_bytes_ > 0);
+    stats.has_leak = (allocation_count_ > deallocation_count_) && (current_allocated_bytes_ > 0);
 
     if (size_history_.size() >= 10) {
         size_t first_quarter = size_history_.size() / 4;
@@ -119,8 +119,8 @@ HeapTracker::HeapStats HeapTracker::get_stats() const {
     if (total_allocated_bytes_ > 0) {
         size_t unfreed = total_allocated_bytes_ - total_freed_bytes_;
         if (unfreed > 0 && total_allocated_bytes_ > unfreed) {
-            stats.fragmentation_ratio = static_cast<double>(unfreed) /
-                                        static_cast<double>(total_allocated_bytes_);
+            stats.fragmentation_ratio =
+                static_cast<double>(unfreed) / static_cast<double>(total_allocated_bytes_);
         }
     }
     return stats;
@@ -190,7 +190,8 @@ DmaHealthMonitor::DmaStats DmaHealthMonitor::get_stats() const {
     stats.error_count = error_count_;
     stats.last_transfer_ns = last_transfer_ns_;
     stats.buffer_alignment = buffer_alignment_;
-    stats.alignment_valid = (buffer_alignment_ >= 64) && ((buffer_alignment_ & (buffer_alignment_ - 1)) == 0);
+    stats.alignment_valid =
+        (buffer_alignment_ >= 64) && ((buffer_alignment_ & (buffer_alignment_ - 1)) == 0);
     return stats;
 }
 
@@ -285,9 +286,7 @@ bool ResourceMonitor::acquire() {
     return true;
 }
 
-void ResourceMonitor::release() {
-    active_count_.fetch_sub(1, std::memory_order_acq_rel);
-}
+void ResourceMonitor::release() { active_count_.fetch_sub(1, std::memory_order_acq_rel); }
 
 ResourceMonitor::ResourceStats ResourceMonitor::get_stats() const {
     ResourceStats stats;
@@ -298,17 +297,20 @@ ResourceMonitor::ResourceStats ResourceMonitor::get_stats() const {
     return stats;
 }
 
-bool ResourceMonitor::is_exhausted() const {
-    return get_stats().exhausted;
-}
+bool ResourceMonitor::is_exhausted() const { return get_stats().exhausted; }
 
 // ============================================================================
 // QueueStressTest Implementation
 // ============================================================================
 
 QueueStressTest::QueueStressTest(size_t capacity, BackpressurePolicy policy)
-    : capacity_(capacity), policy_(policy), depth_(0), total_produced_(0),
-      total_consumed_(0), total_dropped_(0), max_depth_(0) {}
+    : capacity_(capacity),
+      policy_(policy),
+      depth_(0),
+      total_produced_(0),
+      total_consumed_(0),
+      total_dropped_(0),
+      max_depth_(0) {}
 
 bool QueueStressTest::push(const void* data, size_t size) {
     (void)data;
@@ -336,8 +338,7 @@ bool QueueStressTest::push(const void* data, size_t size) {
 
     size_t new_max = max_depth_.load(std::memory_order_relaxed);
     while (current_depth + 1 > new_max &&
-           !max_depth_.compare_exchange_weak(new_max, current_depth + 1,
-                                             std::memory_order_relaxed,
+           !max_depth_.compare_exchange_weak(new_max, current_depth + 1, std::memory_order_relaxed,
                                              std::memory_order_relaxed)) {
     }
     return true;
@@ -398,8 +399,7 @@ void ConcurrencyPathologyDetector::release(void* lock_id) {
     }
 }
 
-ConcurrencyPathologyDetector::PathologyReport
-ConcurrencyPathologyDetector::check() {
+ConcurrencyPathologyDetector::PathologyReport ConcurrencyPathologyDetector::check() {
     PathologyReport report;
     if (!lock_chain_.empty() && lock_chain_.size() > 4) {
         report.type = PathologyType::Deadlock;
@@ -435,8 +435,8 @@ TimestampValidator::ValidationReport TimestampValidator::validate() const {
     if (timestamps_.size() < 2) return report;
 
     for (size_t i = 1; i < timestamps_.size(); i++) {
-        int64_t diff = static_cast<int64_t>(timestamps_[i]) -
-                       static_cast<int64_t>(timestamps_[i - 1]);
+        int64_t diff =
+            static_cast<int64_t>(timestamps_[i]) - static_cast<int64_t>(timestamps_[i - 1]);
 
         if (diff < 0) {
             report.type = ViolationType::NonMonotonic;
@@ -468,17 +468,11 @@ void TimestampValidator::reset() {
 // NumericRobustnessTester Implementation
 // ============================================================================
 
-bool NumericRobustnessTester::is_nan(float v) {
-    return std::isnan(v);
-}
+bool NumericRobustnessTester::is_nan(float v) { return std::isnan(v); }
 
-bool NumericRobustnessTester::is_inf(float v) {
-    return std::isinf(v);
-}
+bool NumericRobustnessTester::is_inf(float v) { return std::isinf(v); }
 
-bool NumericRobustnessTester::is_finite(float v) {
-    return std::isfinite(v);
-}
+bool NumericRobustnessTester::is_finite(float v) { return std::isfinite(v); }
 
 int32_t NumericRobustnessTester::float_to_int32_saturating(float v) {
     if (v > static_cast<float>(std::numeric_limits<int32_t>::max())) {
@@ -500,8 +494,8 @@ uint32_t NumericRobustnessTester::float_to_uint32_saturating(float v) {
     return static_cast<uint32_t>(v);
 }
 
-NumericRobustnessTester::NumericTestResult
-NumericRobustnessTester::test_operations(float a, float b, uint32_t iterations) {
+NumericRobustnessTester::NumericTestResult NumericRobustnessTester::test_operations(
+    float a, float b, uint32_t iterations) {
     NumericTestResult result;
 
     float min_val = std::numeric_limits<float>::max();
@@ -540,8 +534,8 @@ NumericRobustnessTester::test_operations(float a, float b, uint32_t iterations) 
     return result;
 }
 
-NumericRobustnessTester::NumericTestResult
-NumericRobustnessTester::test_trig(float v, uint32_t iterations) {
+NumericRobustnessTester::NumericTestResult NumericRobustnessTester::test_trig(float v,
+                                                                              uint32_t iterations) {
     NumericTestResult result;
 
     for (uint32_t i = 0; i < iterations; i++) {
@@ -556,8 +550,8 @@ NumericRobustnessTester::test_trig(float v, uint32_t iterations) {
     return result;
 }
 
-NumericRobustnessTester::NumericTestResult
-NumericRobustnessTester::test_angle_wrapping(float v, uint32_t iterations) {
+NumericRobustnessTester::NumericTestResult NumericRobustnessTester::test_angle_wrapping(
+    float v, uint32_t iterations) {
     NumericTestResult result;
 
     constexpr float kTwoPi = 6.28318530718f;
@@ -643,8 +637,8 @@ bool HostileInputInjector::validate_packets(Packet* packets, size_t count) {
 // ResetScenarioTester Implementation
 // ============================================================================
 
-ResetScenarioTester::RecoveryMetrics
-ResetScenarioTester::test_reset(ResetType type, void* state_context) {
+ResetScenarioTester::RecoveryMetrics ResetScenarioTester::test_reset(ResetType type,
+                                                                     void* state_context) {
     (void)state_context;
     RecoveryMetrics metrics;
     metrics.type = type;
@@ -677,8 +671,7 @@ std::vector<TestResultAggregator::TierResult> TestResultAggregator::tier_results
     {TestTier::Tier1_SafetyState, 0, 0, 0, 0, 0, true},
     {TestTier::Tier2_RealtimeTemporal, 0, 0, 0, 0, 0, true},
     {TestTier::Tier3_StressSoak, 0, 0, 0, 0, 0, false},
-    {TestTier::Tier4_HIL, 0, 0, 0, 0, 0, false}
-};
+    {TestTier::Tier4_HIL, 0, 0, 0, 0, 0, false}};
 
 void TestResultAggregator::record_result(TestTier tier, bool passed, uint64_t duration_ns) {
     size_t idx = static_cast<size_t>(tier);
@@ -693,8 +686,7 @@ void TestResultAggregator::record_result(TestTier tier, bool passed, uint64_t du
     }
 }
 
-TestResultAggregator::TierResult
-TestResultAggregator::get_tier_result(TestTier tier) {
+TestResultAggregator::TierResult TestResultAggregator::get_tier_result(TestTier tier) {
     size_t idx = static_cast<size_t>(tier);
     if (idx < tier_results_.size()) {
         return tier_results_[idx];
@@ -712,19 +704,14 @@ bool TestResultAggregator::should_block_merge() {
 }
 
 void TestResultAggregator::print_summary() {
-    const char* tier_names[] = {
-        "Tier0 (Fast Unit)",
-        "Tier1 (Safety/State)",
-        "Tier2 (RT/Temporal)",
-        "Tier3 (Stress/Soak)",
-        "Tier4 (HIL)"
-    };
+    const char* tier_names[] = {"Tier0 (Fast Unit)", "Tier1 (Safety/State)", "Tier2 (RT/Temporal)",
+                                "Tier3 (Stress/Soak)", "Tier4 (HIL)"};
 
     for (size_t i = 0; i < tier_results_.size(); i++) {
         const auto& r = tier_results_[i];
         printf("=== %s ===\n", tier_names[i]);
-        printf("  Tests: %zu run, %zu passed, %zu failed, %zu skipped\n",
-               r.tests_run, r.tests_passed, r.tests_failed, r.tests_skipped);
+        printf("  Tests: %zu run, %zu passed, %zu failed, %zu skipped\n", r.tests_run,
+               r.tests_passed, r.tests_failed, r.tests_skipped);
         printf("  Time: %.3f ms\n", static_cast<double>(r.total_time_ns) / 1000000.0);
         printf("  Blocks merge: %s\n", r.blocks_merge ? "YES" : "NO");
     }
@@ -808,8 +795,8 @@ void LogTester::log_event(int event_id, const char* event_type) {
     std::lock_guard<std::mutex> lock(mutex_);
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-    uint64_t ts_ns = static_cast<uint64_t>(ts.tv_sec) * 1000000000ULL + 
-                    static_cast<uint64_t>(ts.tv_nsec);
+    uint64_t ts_ns =
+        static_cast<uint64_t>(ts.tv_sec) * 1000000000ULL + static_cast<uint64_t>(ts.tv_nsec);
     timestamps_.push_back(ts_ns);
     event_ids_.push_back(event_id);
 }
@@ -826,9 +813,9 @@ LogTester::OrderReport LogTester::get_order_report() const {
     std::lock_guard<std::mutex> lock(mutex_);
     OrderReport report;
     report.total_events = timestamps_.size();
-    
+
     for (size_t i = 1; i < timestamps_.size(); i++) {
-        if (timestamps_[i] < timestamps_[i-1]) {
+        if (timestamps_[i] < timestamps_[i - 1]) {
             report.chronological = false;
             report.out_of_order_count++;
         }
@@ -845,8 +832,8 @@ OffsetTracker::OffsetTracker(uint64_t reference_ns) : reference_ns_(reference_ns
 void OffsetTracker::record_sample() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-    uint64_t now = static_cast<uint64_t>(ts.tv_sec) * 1000000000ULL + 
-                    static_cast<uint64_t>(ts.tv_nsec);
+    uint64_t now =
+        static_cast<uint64_t>(ts.tv_sec) * 1000000000ULL + static_cast<uint64_t>(ts.tv_nsec);
     if (reference_ns_ == 0) {
         reference_ns_ = now;
     }
@@ -871,9 +858,7 @@ void FaultTimeline::record_fault(uint8_t fault, uint64_t timestamp_ns) {
     faults_.push_back(entry);
 }
 
-std::vector<FaultTimeline::FaultEntry> FaultTimeline::get_fault_sequence() const {
-    return faults_;
-}
+std::vector<FaultTimeline::FaultEntry> FaultTimeline::get_fault_sequence() const { return faults_; }
 
 // ============================================================================
 // CrashDumpTester Implementation
@@ -881,15 +866,15 @@ std::vector<FaultTimeline::FaultEntry> FaultTimeline::get_fault_sequence() const
 
 CrashDumpTester::CrashDumpTester() {}
 
-void CrashDumpTester::record_state(uint32_t thread_id, const char* state_name, 
-                                const char* state_value) {
+void CrashDumpTester::record_state(uint32_t thread_id, const char* state_name,
+                                   const char* state_value) {
     (void)thread_id;
     (void)state_name;
     (void)state_value;
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-    uint64_t ts_ns = static_cast<uint64_t>(ts.tv_sec) * 1000000000ULL + 
-                    static_cast<uint64_t>(ts.tv_nsec);
+    uint64_t ts_ns =
+        static_cast<uint64_t>(ts.tv_sec) * 1000000000ULL + static_cast<uint64_t>(ts.tv_nsec);
     timestamps_.push_back(ts_ns);
 }
 
@@ -906,16 +891,14 @@ bool CrashDumpTester::verify_integrity() const {
 
 bool CrashDumpTester::verify_order() const {
     for (size_t i = 1; i < timestamps_.size(); i++) {
-        if (timestamps_[i] < timestamps_[i-1]) {
+        if (timestamps_[i] < timestamps_[i - 1]) {
             return false;
         }
     }
     return true;
 }
 
-size_t CrashDumpTester::get_state_size() const {
-    return dump_data_.size();
-}
+size_t CrashDumpTester::get_state_size() const { return dump_data_.size(); }
 
 // ============================================================================
 // TestEnvironment Implementation
@@ -938,8 +921,8 @@ void TestEnvironment::init(uint64_t max_stack_size_kb, size_t heap_baseline_enve
 void TestEnvironment::reset_trackers() {
     if (stack_tracker_instance_) {
         // StackTracker does not have a reset method for high_water_bytes directly.
-        // It's usually reset by creating a new instance per thread/context or relying on worst-case.
-        // For simplicity here, we'll just note it.
+        // It's usually reset by creating a new instance per thread/context or relying on
+        // worst-case. For simplicity here, we'll just note it.
     }
     if (heap_tracker_instance_) {
         heap_tracker_instance_->reset();
@@ -950,7 +933,8 @@ StackTracker& TestEnvironment::get_stack_tracker() {
     if (!stack_tracker_instance_) {
         // Handle error or initialize with default if not initialized
         // For testing, we expect init to be called
-        throw std::runtime_error("StackTracker not initialized. Call TestEnvironment::init() first.");
+        throw std::runtime_error(
+            "StackTracker not initialized. Call TestEnvironment::init() first.");
     }
     return *stack_tracker_instance_;
 }
@@ -958,7 +942,8 @@ StackTracker& TestEnvironment::get_stack_tracker() {
 HeapTracker& TestEnvironment::get_heap_tracker() {
     if (!heap_tracker_instance_) {
         // Handle error or initialize with default if not initialized
-        throw std::runtime_error("HeapTracker not initialized. Call TestEnvironment::init() first.");
+        throw std::runtime_error(
+            "HeapTracker not initialized. Call TestEnvironment::init() first.");
     }
     return *heap_tracker_instance_;
 }

@@ -2,13 +2,13 @@
 // Usage: sudo ./laser_verify [/dev/ttyAMAxx]
 // Prints 5 distance readings in continuous mode, then exits.
 
-#include "aurore/drivers/laser_rangefinder.hpp"
-
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <thread>
+
+#include "aurore/drivers/laser_rangefinder.hpp"
 
 int main(int argc, char* argv[]) {
     const std::string device = (argc > 1) ? argv[1] : "/dev/ttyAMA10";

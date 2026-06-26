@@ -1,24 +1,25 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <cstdint>
-#include <cstring>
-#include <cstdio>
-#include <cstdlib>
-#include <cerrno>
-#include <future>
-#include <functional>
-#include <fstream>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
 #include <openssl/evp.h>
+#include <openssl/hmac.h>
 #include <openssl/pem.h>
 #include <openssl/rand.h>
+#include <openssl/sha.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <functional>
+#include <future>
 #include <iomanip>
 #include <sstream>
+#include <string>
+#include <vector>
 
 // Suppress deprecation warnings for SHA256_* functions (they're faster than EVP API)
 #pragma GCC diagnostic push
@@ -68,12 +69,11 @@ inline void compute_sha256_raw_threadsafe(const void* data, size_t len, unsigned
  * @param len Length of the data buffer.
  * @param out_hmac Pointer to a buffer where the 32-byte HMAC will be stored.
  */
-inline void compute_hmac_sha256_raw(const std::string& key, const void* data, size_t len, unsigned char* out_hmac) {
+inline void compute_hmac_sha256_raw(const std::string& key, const void* data, size_t len,
+                                    unsigned char* out_hmac) {
     unsigned int hmac_len = 0;
-    HMAC(EVP_sha256(),
-         key.c_str(), static_cast<int>(key.length()),
-         reinterpret_cast<const unsigned char*>(data), len,
-         out_hmac, &hmac_len);
+    HMAC(EVP_sha256(), key.c_str(), static_cast<int>(key.length()),
+         reinterpret_cast<const unsigned char*>(data), len, out_hmac, &hmac_len);
 }
 
 /**
@@ -87,7 +87,8 @@ inline void compute_hmac_sha256_raw(const std::string& key, const void* data, si
  * @param len Length of the data buffer.
  * @param out_hmac Pointer to a buffer where the 32-byte HMAC will be stored.
  */
-inline bool compute_hmac_sha256_raw_threadsafe(const std::string& key, const void* data, size_t len, unsigned char* out_hmac) {
+inline bool compute_hmac_sha256_raw_threadsafe(const std::string& key, const void* data, size_t len,
+                                               unsigned char* out_hmac) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     if (!ctx) {
         std::fprintf(stderr, "[security] EVP_MD_CTX_new failed\n");
@@ -95,9 +96,7 @@ inline bool compute_hmac_sha256_raw_threadsafe(const std::string& key, const voi
     }
 
     EVP_PKEY* pkey = EVP_PKEY_new_raw_private_key(
-        EVP_PKEY_HMAC, nullptr,
-        reinterpret_cast<const unsigned char*>(key.data()), key.size()
-    );
+        EVP_PKEY_HMAC, nullptr, reinterpret_cast<const unsigned char*>(key.data()), key.size());
     if (!pkey) {
         std::fprintf(stderr, "[security] EVP_PKEY_new_raw_private_key failed\n");
         EVP_MD_CTX_free(ctx);
@@ -135,7 +134,8 @@ inline bool compute_hmac_sha256_raw_threadsafe(const std::string& key, const voi
  * @param signature Pointer to the 32-byte signature to verify.
  * @return true if valid, false otherwise.
  */
-inline bool verify_hmac_sha256_raw(const std::string& key, const void* data, size_t len, const unsigned char* signature) {
+inline bool verify_hmac_sha256_raw(const std::string& key, const void* data, size_t len,
+                                   const unsigned char* signature) {
     unsigned char computed[32];
     compute_hmac_sha256_raw(key, data, len, computed);
 
@@ -187,9 +187,8 @@ bool is_sequence_gap(uint32_t old_seq, uint32_t new_seq, uint32_t threshold);
  * @param sig_path   Output path for DER-encoded ECDSA signature
  * @return true on success
  */
-inline bool sign_file_ecdsa(const std::string& file_path,
-                             const std::string& key_pem,
-                             const std::string& sig_path) {
+inline bool sign_file_ecdsa(const std::string& file_path, const std::string& key_pem,
+                            const std::string& sig_path) {
     // Hash the file with SHA-256
     unsigned char file_hash[32];
     {
@@ -219,7 +218,10 @@ inline bool sign_file_ecdsa(const std::string& file_path,
 
     // Sign the hash
     EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
-    if (!mdctx) { EVP_PKEY_free(pkey); return false; }
+    if (!mdctx) {
+        EVP_PKEY_free(pkey);
+        return false;
+    }
     if (EVP_DigestSignInit(mdctx, nullptr, EVP_sha256(), nullptr, pkey) != 1 ||
         EVP_DigestSignUpdate(mdctx, file_hash, 32) != 1) {
         EVP_MD_CTX_free(mdctx);
@@ -259,9 +261,8 @@ inline bool sign_file_ecdsa(const std::string& file_path,
  * @param sig_path   Path to DER-encoded ECDSA signature
  * @return true if signature is valid
  */
-inline bool verify_file_ecdsa(const std::string& file_path,
-                               const std::string& pubkey_pem,
-                               const std::string& sig_path) {
+inline bool verify_file_ecdsa(const std::string& file_path, const std::string& pubkey_pem,
+                              const std::string& sig_path) {
     // Hash the file
     unsigned char file_hash[32];
     {
@@ -300,8 +301,7 @@ inline bool verify_file_ecdsa(const std::string& file_path,
     // Verify
     EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
     bool ok = false;
-    if (mdctx &&
-        EVP_DigestVerifyInit(mdctx, nullptr, EVP_sha256(), nullptr, pkey) == 1 &&
+    if (mdctx && EVP_DigestVerifyInit(mdctx, nullptr, EVP_sha256(), nullptr, pkey) == 1 &&
         EVP_DigestVerifyUpdate(mdctx, file_hash, 32) == 1 &&
         EVP_DigestVerifyFinal(mdctx, sig.data(), sig.size()) == 1) {
         ok = true;
@@ -322,7 +322,7 @@ inline bool verify_file_ecdsa(const std::string& file_path,
  * @return true if binary is authentic; false if verification fails or files absent
  */
 inline bool verify_self(const std::string& pubkey_path = "/etc/aurore/signing_key.pub",
-                        const std::string& sig_path    = "/etc/aurore/aurore.sig") {
+                        const std::string& sig_path = "/etc/aurore/aurore.sig") {
     // Resolve self binary path via /proc/self/exe
     char exe_path[4096] = {};
     ssize_t n = ::readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
@@ -356,9 +356,7 @@ inline bool verify_self(const std::string& pubkey_path = "/etc/aurore/signing_ke
  * @param out_key Output buffer for 32-byte key
  * @return true on success
  */
-inline bool generate_key_256bit(uint8_t out_key[32]) {
-    return RAND_bytes(out_key, 32) == 1;
-}
+inline bool generate_key_256bit(uint8_t out_key[32]) { return RAND_bytes(out_key, 32) == 1; }
 
 /**
  * @brief Save a 256-bit key to a protected file (mode 0600).
@@ -379,7 +377,8 @@ inline bool save_key_to_file(const std::string& path, const uint8_t key[32]) {
     f.write(reinterpret_cast<const char*>(key), 32);
     f.close();
     if (::chmod(path.c_str(), 0600) != 0) {
-        std::fprintf(stderr, "[security] chmod 0600 failed for %s: %s\n", path.c_str(), strerror(errno));
+        std::fprintf(stderr, "[security] chmod 0600 failed for %s: %s\n", path.c_str(),
+                     strerror(errno));
         return false;
     }
     return true;
@@ -411,7 +410,8 @@ inline bool load_hmac_key(const std::string& key_path, std::string& out_key) {
                 char* end = nullptr;
                 raw[i] = static_cast<uint8_t>(std::strtoul(hex, &end, 16));
                 if (end != hex + 2) {
-                    std::fprintf(stderr, "[security] AURORE_HMAC_KEY: invalid hex at byte %zu\n", i);
+                    std::fprintf(stderr, "[security] AURORE_HMAC_KEY: invalid hex at byte %zu\n",
+                                 i);
                     return false;
                 }
             }
@@ -422,13 +422,16 @@ inline bool load_hmac_key(const std::string& key_path, std::string& out_key) {
             out_key.assign(env_key, 32);
             return true;
         }
-        std::fprintf(stderr, "[security] AURORE_HMAC_KEY env var too short (%zu chars, need 64 hex)\n", env_len);
+        std::fprintf(stderr,
+                     "[security] AURORE_HMAC_KEY env var too short (%zu chars, need 64 hex)\n",
+                     env_len);
         return false;
     }
 
     // 2. Load from file — check permissions first (AM7-L2-SEC-006)
     if (key_path.empty()) {
-        std::fprintf(stderr, "[security] No AURORE_HMAC_KEY env var and no key file path configured\n");
+        std::fprintf(stderr,
+                     "[security] No AURORE_HMAC_KEY env var and no key file path configured\n");
         return false;
     }
 
@@ -468,17 +471,17 @@ inline bool load_hmac_key(const std::string& key_path, std::string& out_key) {
 
 /**
  * @brief Async frame authentication helper.
- * 
+ *
  * Computes SHA256 hash and HMAC-SHA256 asynchronously to avoid blocking
  * the critical path. Uses a background thread for hash computation.
- * 
+ *
  * Usage:
  * @code
  *     AsyncFrameAuthenticator auth(hmac_key);
- *     
+ *
  *     // After frame capture, submit for async authentication
  *     auth.authenticate_frame(pixel_data, pixel_size, frame_header, frame);
- *     
+ *
  *     // Wait for completion (optional, with timeout)
  *     if (auth.wait_for_completion(std::chrono::milliseconds(8))) {
  *         // Frame is authenticated
@@ -486,14 +489,13 @@ inline bool load_hmac_key(const std::string& key_path, std::string& out_key) {
  * @endcode
  */
 class AsyncFrameAuthenticator {
-public:
+   public:
     /**
      * @brief Construct authenticator with HMAC key.
-     * 
+     *
      * @param hmac_key 256-bit HMAC key (32 bytes recommended)
      */
-    explicit AsyncFrameAuthenticator(const std::string& hmac_key)
-        : hmac_key_(hmac_key) {}
+    explicit AsyncFrameAuthenticator(const std::string& hmac_key) : hmac_key_(hmac_key) {}
 
     ~AsyncFrameAuthenticator() {
         if (worker_future_.valid()) worker_future_.wait();
@@ -515,13 +517,12 @@ public:
      * @param out_hash Output buffer for SHA256 hash (32 bytes, e.g. frame.frame_hash)
      * @param out_hmac Output buffer for HMAC-SHA256 (32 bytes, e.g. frame.hmac)
      */
-    void authenticate_frame(const void* pixel_data, size_t pixel_size,
-                           const void* header_data, size_t header_size,
-                           uint8_t* out_hash, uint8_t* out_hmac);
+    void authenticate_frame(const void* pixel_data, size_t pixel_size, const void* header_data,
+                            size_t header_size, uint8_t* out_hash, uint8_t* out_hmac);
 
     /**
      * @brief Wait for authentication to complete.
-     * 
+     *
      * @param timeout Maximum time to wait
      * @return true if authentication completed, false on timeout
      */
@@ -529,7 +530,7 @@ public:
 
     /**
      * @brief Check if authentication is in progress.
-     * 
+     *
      * @return true if authentication is running
      */
     bool is_busy() const noexcept {
@@ -539,14 +540,12 @@ public:
 
     /**
      * @brief Check if last authentication succeeded.
-     * 
+     *
      * @return true if authentication completed successfully
      */
-    bool last_success() const noexcept {
-        return result_;
-    }
+    bool last_success() const noexcept { return result_; }
 
-private:
+   private:
     std::string hmac_key_;
     mutable std::future<bool> worker_future_;
     bool result_ = false;
@@ -556,14 +555,14 @@ private:
 };
 
 // Inline implementations for AsyncFrameAuthenticator
-inline void AsyncFrameAuthenticator::authenticate_frame(
-    const void* pixel_data, size_t pixel_size,
-    const void* header_data, size_t header_size,
-    uint8_t* out_hash, uint8_t* out_hmac) {
-
+inline void AsyncFrameAuthenticator::authenticate_frame(const void* pixel_data, size_t pixel_size,
+                                                        const void* header_data, size_t header_size,
+                                                        uint8_t* out_hash, uint8_t* out_hmac) {
     if (worker_future_.valid() &&
         worker_future_.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout) {
-        std::fprintf(stderr, "[security] AsyncFrameAuthenticator busy — frame dropped (backpressure violation)\n");
+        std::fprintf(
+            stderr,
+            "[security] AsyncFrameAuthenticator busy — frame dropped (backpressure violation)\n");
         result_ = false;
         return;
     }
@@ -571,20 +570,20 @@ inline void AsyncFrameAuthenticator::authenticate_frame(
     pending_out_hash_ = out_hash;
     pending_out_hmac_ = out_hmac;
 
-    worker_future_ = std::async(std::launch::async,
-        [this, pixel_data, pixel_size, header_data, header_size]() -> bool {
+    worker_future_ = std::async(
+        std::launch::async, [this, pixel_data, pixel_size, header_data, header_size]() -> bool {
             unsigned char frame_hash[32];
             compute_sha256_raw_threadsafe(pixel_data, pixel_size, frame_hash);
 
             std::vector<uint8_t> hmac_input;
             hmac_input.reserve(header_size + 32);
-            hmac_input.insert(hmac_input.end(),
-                             static_cast<const uint8_t*>(header_data),
-                             static_cast<const uint8_t*>(header_data) + header_size);
+            hmac_input.insert(hmac_input.end(), static_cast<const uint8_t*>(header_data),
+                              static_cast<const uint8_t*>(header_data) + header_size);
             hmac_input.insert(hmac_input.end(), frame_hash, frame_hash + 32);
 
             unsigned char hmac[32];
-            if (!compute_hmac_sha256_raw_threadsafe(hmac_key_, hmac_input.data(), hmac_input.size(), hmac)) {
+            if (!compute_hmac_sha256_raw_threadsafe(hmac_key_, hmac_input.data(), hmac_input.size(),
+                                                    hmac)) {
                 return false;
             }
 
@@ -605,7 +604,7 @@ inline bool AsyncFrameAuthenticator::wait_for_completion(std::chrono::millisecon
     return false;  // timed out; destructor will block for cleanup
 }
 
-} // namespace security
-} // namespace aurore
+}  // namespace security
+}  // namespace aurore
 
 #pragma GCC diagnostic pop

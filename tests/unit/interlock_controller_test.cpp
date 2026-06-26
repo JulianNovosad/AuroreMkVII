@@ -18,15 +18,15 @@ using namespace aurore;
 static int tests_run = 0;
 static int tests_passed = 0;
 
-#define CHECK(cond, msg)                                          \
-    do {                                                          \
-        ++tests_run;                                              \
-        if (!(cond)) {                                            \
+#define CHECK(cond, msg)                                            \
+    do {                                                            \
+        ++tests_run;                                                \
+        if (!(cond)) {                                              \
             std::fprintf(stderr, "FAIL [%s]: %s\n", __func__, msg); \
-            return false;                                         \
-        } else {                                                  \
-            ++tests_passed;                                       \
-        }                                                         \
+            return false;                                           \
+        } else {                                                    \
+            ++tests_passed;                                         \
+        }                                                           \
     } while (0)
 
 // ---------------------------------------------------------------------------
@@ -50,8 +50,7 @@ static bool test_force_state_changes_state() {
           "state should be CLOSED after force_state(CLOSED)");
 
     ic.force_state(InterlockState::OPEN);
-    CHECK(ic.get_state() == InterlockState::OPEN,
-          "state should be OPEN after force_state(OPEN)");
+    CHECK(ic.get_state() == InterlockState::OPEN, "state should be OPEN after force_state(OPEN)");
 
     return true;
 }
@@ -63,16 +62,13 @@ static bool test_actuation_allowed_only_when_closed() {
     InterlockController ic(nullptr);
 
     ic.force_state(InterlockState::OPEN);
-    CHECK(!ic.is_actuation_allowed(),
-          "actuation should NOT be allowed when state is OPEN");
+    CHECK(!ic.is_actuation_allowed(), "actuation should NOT be allowed when state is OPEN");
 
     ic.force_state(InterlockState::CLOSED);
-    CHECK(ic.is_actuation_allowed(),
-          "actuation SHOULD be allowed when state is CLOSED");
+    CHECK(ic.is_actuation_allowed(), "actuation SHOULD be allowed when state is CLOSED");
 
     ic.force_state(InterlockState::FAULT);
-    CHECK(!ic.is_actuation_allowed(),
-          "actuation should NOT be allowed when state is FAULT");
+    CHECK(!ic.is_actuation_allowed(), "actuation should NOT be allowed when state is FAULT");
 
     return true;
 }
@@ -86,19 +82,15 @@ static bool test_get_status_reflects_state() {
     ic.force_state(InterlockState::CLOSED);
     {
         InterlockStatus s = ic.get_status();
-        CHECK(s.state == InterlockState::CLOSED,
-              "status.state should be CLOSED");
-        CHECK(!s.actuation_inhibited,
-              "actuation_inhibited should be false when CLOSED");
+        CHECK(s.state == InterlockState::CLOSED, "status.state should be CLOSED");
+        CHECK(!s.actuation_inhibited, "actuation_inhibited should be false when CLOSED");
     }
 
     ic.force_state(InterlockState::FAULT);
     {
         InterlockStatus s = ic.get_status();
-        CHECK(s.state == InterlockState::FAULT,
-              "status.state should be FAULT");
-        CHECK(s.actuation_inhibited,
-              "actuation_inhibited should be true when FAULT");
+        CHECK(s.state == InterlockState::FAULT, "status.state should be FAULT");
+        CHECK(s.actuation_inhibited, "actuation_inhibited should be true when FAULT");
     }
 
     return true;
@@ -116,8 +108,7 @@ static bool test_watchdog_feed_increments_counter() {
     ic.watchdog_feed();
     const uint64_t after = ic.get_status().watchdog_feeds;
 
-    CHECK(after == before + 1,
-          "watchdog_feeds should increment by 1 after watchdog_feed()");
+    CHECK(after == before + 1, "watchdog_feeds should increment by 1 after watchdog_feed()");
 
     return true;
 }
@@ -140,21 +131,24 @@ static bool test_init_on_laptop() {
 
     return true;
 }
-#endif // AURORE_LAPTOP_BUILD
+#endif  // AURORE_LAPTOP_BUILD
 
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 int main() {
-    struct { const char* name; bool (*fn)(); } tests[] = {
-        { "test_initial_state_is_unknown",       test_initial_state_is_unknown       },
-        { "test_force_state_changes_state",      test_force_state_changes_state      },
-        { "test_actuation_allowed_only_when_closed", test_actuation_allowed_only_when_closed },
-        { "test_get_status_reflects_state",      test_get_status_reflects_state      },
-        { "test_watchdog_feed_increments_counter", test_watchdog_feed_increments_counter },
+    struct {
+        const char* name;
+        bool (*fn)();
+    } tests[] = {
+        {"test_initial_state_is_unknown", test_initial_state_is_unknown},
+        {"test_force_state_changes_state", test_force_state_changes_state},
+        {"test_actuation_allowed_only_when_closed", test_actuation_allowed_only_when_closed},
+        {"test_get_status_reflects_state", test_get_status_reflects_state},
+        {"test_watchdog_feed_increments_counter", test_watchdog_feed_increments_counter},
 #ifdef AURORE_LAPTOP_BUILD
-        { "test_init_on_laptop",                 test_init_on_laptop                 },
-#endif // AURORE_LAPTOP_BUILD
+        {"test_init_on_laptop", test_init_on_laptop},
+#endif  // AURORE_LAPTOP_BUILD
     };
 
     for (auto& t : tests) {

@@ -2,9 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 #include <random>
 #include <vector>
-#include <iostream>
 
 namespace aurore {
 
@@ -23,7 +23,8 @@ bool BallisticSolver::loadProfiles(const nlohmann::json& config) {
         BallisticProfile default_profile;
         default_profile.name = "Default";
         if (config.contains("ballistics") && config["ballistics"].contains("muzzle_velocity_mps")) {
-            default_profile.muzzle_velocity_m_s = config["ballistics"]["muzzle_velocity_mps"].get<float>();
+            default_profile.muzzle_velocity_m_s =
+                config["ballistics"]["muzzle_velocity_mps"].get<float>();
         }
         profiles_.push_back(default_profile);
         active_profile_idx_ = 0;
@@ -69,7 +70,8 @@ bool BallisticSolver::loadProfiles(const nlohmann::json& config) {
 
             // Validate profile
             if (!profile.validate()) {
-                std::cerr << "BallisticSolver: Profile '" << profile.name << "' failed validation, skipping" << std::endl;
+                std::cerr << "BallisticSolver: Profile '" << profile.name
+                          << "' failed validation, skipping" << std::endl;
                 invalid_count++;
                 continue;
             }
@@ -100,7 +102,8 @@ bool BallisticSolver::loadProfiles(const nlohmann::json& config) {
     if (invalid_count > 0) {
         std::cout << " (" << invalid_count << " invalid skipped)";
     }
-    std::cout << ", active: '" << profiles_[static_cast<size_t>(active_profile_idx_)].name << "'" << std::endl;
+    std::cout << ", active: '" << profiles_[static_cast<size_t>(active_profile_idx_)].name << "'"
+              << std::endl;
 
     return true;
 }
@@ -124,9 +127,7 @@ const BallisticProfile* BallisticSolver::getActiveProfile() const {
     return nullptr;
 }
 
-std::vector<BallisticProfile> BallisticSolver::getAvailableProfiles() const {
-    return profiles_;
-}
+std::vector<BallisticProfile> BallisticSolver::getAvailableProfiles() const { return profiles_; }
 
 // ============================================================================
 // G1 Drag Model + RK4 Integration Implementation
@@ -309,7 +310,8 @@ void BallisticSolver::initialize_lookup_table() {
             float drop = 0.5f * kGravity * tof * tof;
 
             tof_table_[static_cast<size_t>(ri)][static_cast<size_t>(vi)] = tof;
-            el_lead_table_[static_cast<size_t>(ri)][static_cast<size_t>(vi)] = std::atan2(drop, range) * 180.f / static_cast<float>(M_PI);
+            el_lead_table_[static_cast<size_t>(ri)][static_cast<size_t>(vi)] =
+                std::atan2(drop, range) * 180.f / static_cast<float>(M_PI);
 
             int hits = 0;
             for (int i = 0; i < n_sims; ++i) {
@@ -364,8 +366,10 @@ void BallisticSolver::initialize_lookup_table() {
             for (int tvi = 0; tvi < kLookupTableTargetVelBins; ++tvi) {
                 float target_vel = index_to_target_velocity(tvi);
                 float lateral_displacement = target_vel * tof;
-                float az_lead = std::atan2(lateral_displacement, range) * 180.f / static_cast<float>(M_PI);
-                az_lead_table_[static_cast<size_t>(ri)][static_cast<size_t>(vi)][static_cast<size_t>(tvi)] = az_lead;
+                float az_lead =
+                    std::atan2(lateral_displacement, range) * 180.f / static_cast<float>(M_PI);
+                az_lead_table_[static_cast<size_t>(ri)][static_cast<size_t>(vi)]
+                              [static_cast<size_t>(tvi)] = az_lead;
             }
         }
     }
@@ -494,17 +498,19 @@ std::optional<KineticSolution> BallisticSolver::solve_kinetic(float range_m, flo
     }
 
     float el_deg = best_angle * 180.f / static_cast<float>(M_PI);
-    
+
     if (!std::isfinite(el_deg) || !std::isfinite(az_lead_deg) || !std::isfinite(tof)) {
-        throw std::runtime_error("BallisticSolver: solve_kinetic intermediate results contain NaN or Inf");
+        throw std::runtime_error(
+            "BallisticSolver: solve_kinetic intermediate results contain NaN or Inf");
     }
-    
+
     return KineticSolution{el_deg, az_lead_deg, tof};
 }
 
 std::optional<DropSolution> BallisticSolver::solve_drop(float range_m, float height_m,
                                                         float target_velocity_m_s) const {
-    if (!std::isfinite(range_m) || !std::isfinite(height_m) || !std::isfinite(target_velocity_m_s)) {
+    if (!std::isfinite(range_m) || !std::isfinite(height_m) ||
+        !std::isfinite(target_velocity_m_s)) {
         return std::nullopt;
     }
 
@@ -548,11 +554,11 @@ std::optional<DropSolution> BallisticSolver::solve_drop(float range_m, float hei
     float tof = range_m / (launch_v * cos_angle);
 
     float el_deg = launch_angle * 180.f / static_cast<float>(M_PI);
-    
+
     if (!std::isfinite(el_deg) || !std::isfinite(launch_v) || !std::isfinite(tof)) {
         return std::nullopt;
     }
-    
+
     return DropSolution{el_deg, 0.f, launch_v, tof};
 }
 
@@ -588,11 +594,12 @@ std::optional<FireControlSolution> BallisticSolver::solve(float range_m, float g
     }
 
     sol.p_hit = get_p_hit_from_table(range_m, sol.velocity_m_s, sol.kinetic_mode);
-    
-    if (!std::isfinite(sol.el_lead_deg) || !std::isfinite(sol.az_lead_deg) || !std::isfinite(sol.p_hit)) {
+
+    if (!std::isfinite(sol.el_lead_deg) || !std::isfinite(sol.az_lead_deg) ||
+        !std::isfinite(sol.p_hit)) {
         return std::nullopt;
     }
-    
+
     return sol;
 }
 
@@ -636,7 +643,8 @@ float BallisticSolver::get_tof_from_table(float range_m, float velocity_m_s) con
     }
 
     float clamped_range = std::clamp(range_m, kLookupTableMinRange, kLookupTableMaxRange);
-    float clamped_velocity = std::clamp(velocity_m_s, kLookupTableMinVelocity, kLookupTableMaxVelocity);
+    float clamped_velocity =
+        std::clamp(velocity_m_s, kLookupTableMinVelocity, kLookupTableMaxVelocity);
 
     int ri = range_to_index(clamped_range);
     int vi = velocity_to_index(clamped_velocity);
@@ -656,7 +664,8 @@ float BallisticSolver::get_el_lead_from_table(float range_m, float velocity_m_s)
     }
 
     float clamped_range = std::clamp(range_m, kLookupTableMinRange, kLookupTableMaxRange);
-    float clamped_velocity = std::clamp(velocity_m_s, kLookupTableMinVelocity, kLookupTableMaxVelocity);
+    float clamped_velocity =
+        std::clamp(velocity_m_s, kLookupTableMinVelocity, kLookupTableMaxVelocity);
 
     int ri = range_to_index(clamped_range);
     int vi = velocity_to_index(clamped_velocity);
@@ -670,7 +679,8 @@ float BallisticSolver::get_el_lead_from_table(float range_m, float velocity_m_s)
     return el_lead_table_[static_cast<size_t>(ri)][static_cast<size_t>(vi)];
 }
 
-float BallisticSolver::get_az_lead_from_table(float range_m, float velocity_m_s, float target_velocity_m_s) const {
+float BallisticSolver::get_az_lead_from_table(float range_m, float velocity_m_s,
+                                              float target_velocity_m_s) const {
     if (!lookup_table_initialized_.load(std::memory_order_acquire)) {
         float tof = range_m / velocity_m_s;
         float lateral = target_velocity_m_s * tof;
@@ -678,20 +688,24 @@ float BallisticSolver::get_az_lead_from_table(float range_m, float velocity_m_s,
     }
 
     float clamped_range = std::clamp(range_m, kLookupTableMinRange, kLookupTableMaxRange);
-    float clamped_velocity = std::clamp(velocity_m_s, kLookupTableMinVelocity, kLookupTableMaxVelocity);
-    float clamped_target_vel = std::clamp(target_velocity_m_s, kLookupTableMinTargetVel, kLookupTableMaxTargetVel);
+    float clamped_velocity =
+        std::clamp(velocity_m_s, kLookupTableMinVelocity, kLookupTableMaxVelocity);
+    float clamped_target_vel =
+        std::clamp(target_velocity_m_s, kLookupTableMinTargetVel, kLookupTableMaxTargetVel);
 
     int ri = range_to_index(clamped_range);
     int vi = velocity_to_index(clamped_velocity);
     int tvi = target_velocity_to_index(clamped_target_vel);
 
-    if (ri < 0 || ri >= kLookupTableRangeBins || vi < 0 || vi >= kLookupTableVelocityBins || tvi < 0 || tvi >= kLookupTableTargetVelBins) {
+    if (ri < 0 || ri >= kLookupTableRangeBins || vi < 0 || vi >= kLookupTableVelocityBins ||
+        tvi < 0 || tvi >= kLookupTableTargetVelBins) {
         float tof = range_m / velocity_m_s;
         float lateral = target_velocity_m_s * tof;
         return std::atan2(lateral, range_m) * 180.f / static_cast<float>(M_PI);
     }
 
-    return az_lead_table_[static_cast<size_t>(ri)][static_cast<size_t>(vi)][static_cast<size_t>(tvi)];
+    return az_lead_table_[static_cast<size_t>(ri)][static_cast<size_t>(vi)]
+                         [static_cast<size_t>(tvi)];
 }
 
 // PERF-005: Helper functions for table index conversion

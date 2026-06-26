@@ -20,21 +20,27 @@ std::atomic<size_t> g_tests_passed(0);
 std::atomic<size_t> g_tests_failed(0);
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::cout << "  PASS: " << #name << std::endl; \
-    } \
-    catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                          \
+    do {                                                                        \
+        g_tests_run.fetch_add(1);                                               \
+        try {                                                                   \
+            name();                                                             \
+            g_tests_passed.fetch_add(1);                                        \
+            std::cout << "  PASS: " << #name << std::endl;                      \
+        } catch (const std::exception& e) {                                     \
+            g_tests_failed.fetch_add(1);                                        \
+            std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
+        }                                                                       \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
 
 // Scalar implementation
 void convert_scalar(const uint8_t* raw, uint8_t* bgr, int width, int height, int stride) {
@@ -48,17 +54,15 @@ void convert_scalar(const uint8_t* raw, uint8_t* bgr, int width, int height, int
             const uint16_t p3 = (static_cast<uint16_t>(line[3]) << 2) | ((line[4] >> 6) & 0x03u);
             line += 5;
 
-            const auto to_u8 = [](uint16_t v) -> uint8_t {
-                return static_cast<uint8_t>(v >> 2);
-            };
-            
+            const auto to_u8 = [](uint16_t v) -> uint8_t { return static_cast<uint8_t>(v >> 2); };
+
             for (int i = 0; i < 4; ++i) {
                 if (col + i < width) {
-                    uint16_t p = (i==0?p0:(i==1?p1:(i==2?p2:p3)));
+                    uint16_t p = (i == 0 ? p0 : (i == 1 ? p1 : (i == 2 ? p2 : p3)));
                     uint8_t val = to_u8(p);
-                    out[(col+i)*3 + 0] = val;
-                    out[(col+i)*3 + 1] = val;
-                    out[(col+i)*3 + 2] = val;
+                    out[(col + i) * 3 + 0] = val;
+                    out[(col + i) * 3 + 1] = val;
+                    out[(col + i) * 3 + 2] = val;
                 }
             }
         }
@@ -106,10 +110,30 @@ void convert_neon(const uint8_t* raw, uint8_t* bgr, int width, int height, int s
             const uint8_t g2 = line[2];
             const uint8_t g3 = line[3];
             line += 5;
-            if (col+0 < width) { out[0]=g0; out[1]=g0; out[2]=g0; out+=3; }
-            if (col+1 < width) { out[0]=g1; out[1]=g1; out[2]=g1; out+=3; }
-            if (col+2 < width) { out[0]=g2; out[1]=g2; out[2]=g2; out+=3; }
-            if (col+3 < width) { out[0]=g3; out[1]=g3; out[2]=g3; out+=3; }
+            if (col + 0 < width) {
+                out[0] = g0;
+                out[1] = g0;
+                out[2] = g0;
+                out += 3;
+            }
+            if (col + 1 < width) {
+                out[0] = g1;
+                out[1] = g1;
+                out[2] = g1;
+                out += 3;
+            }
+            if (col + 2 < width) {
+                out[0] = g2;
+                out[1] = g2;
+                out[2] = g2;
+                out += 3;
+            }
+            if (col + 3 < width) {
+                out[0] = g3;
+                out[1] = g3;
+                out[2] = g3;
+                out += 3;
+            }
         }
     }
 }
@@ -121,21 +145,21 @@ void convert_neon(const uint8_t* raw, uint8_t* bgr, int width, int height, int s
 TEST(test_raw10_conversion_logic) {
     const int width = 64;
     const int height = 4;
-    const int stride = (width * 10 + 7) / 8; // 80 bytes
-    
+    const int stride = (width * 10 + 7) / 8;  // 80 bytes
+
     std::vector<uint8_t> raw(stride * height);
     for (size_t i = 0; i < raw.size(); ++i) raw[i] = static_cast<uint8_t>(i % 256);
-    
+
     std::vector<uint8_t> bgr_scalar(width * height * 3, 0);
     convert_scalar(raw.data(), bgr_scalar.data(), width, height, stride);
-    
+
 #ifdef HAS_NEON
     std::vector<uint8_t> bgr_neon(width * height * 3, 0);
     convert_neon(raw.data(), bgr_neon.data(), width, height, stride);
-    
+
     for (size_t i = 0; i < bgr_scalar.size(); ++i) {
         if (bgr_scalar[i] != bgr_neon[i]) {
-            std::cerr << "Mismatch at index " << i << ": scalar=" << static_cast<int>(bgr_scalar[i]) 
+            std::cerr << "Mismatch at index " << i << ": scalar=" << static_cast<int>(bgr_scalar[i])
                       << ", neon=" << static_cast<int>(bgr_neon[i]) << std::endl;
             throw std::runtime_error("NEON logic mismatch");
         }
@@ -150,7 +174,7 @@ TEST(test_raw10_conversion_logic) {
     // line[0]=0, line[4]=4 -> p0 = 4. to_u8(4) = 1.
     // Wait, line[0] is high 8 bits? Yes. (line[0]<<2) | (low bits).
     // line[0]=0, line[4]=4 -> p0 = 4. val = 4 >> 2 = 1.
-    ASSERT_EQ(bgr_scalar[0], 0); // byte 0 is high 8 bits, so val = byte 0.
+    ASSERT_EQ(bgr_scalar[0], 0);  // byte 0 is high 8 bits, so val = byte 0.
     // Let's check the code: to_u8(p0) = (p0 >> 2).
     // p0 = (line[0] << 2) | ...
     // to_u8(p0) = ((line[0] << 2) | ...) >> 2 = line[0].
@@ -160,7 +184,7 @@ TEST(test_raw10_conversion_logic) {
 int main() {
     std::cout << "Running Raw10 Conversion tests..." << std::endl;
     RUN_TEST(test_raw10_conversion_logic);
-    
+
     std::cout << "Tests run: " << g_tests_run.load() << std::endl;
     std::cout << "Tests passed: " << g_tests_passed.load() << std::endl;
     return g_tests_failed.load() > 0 ? 1 : 0;

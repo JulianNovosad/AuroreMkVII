@@ -108,7 +108,7 @@ TrackSolution KcfTracker::update(const cv::Mat& bgr_frame) {
     // PSR = (max_response - mean_response) / std_dev_response (excluding peak window)
     // Since cv::TrackerKCF doesn't expose its response map, we calculate it via matchTemplate
     // on a small ROI around the tracked object.
-    
+
     // 1. Get template from current frame at tracked position
     cv::Rect template_roi = bbox & cv::Rect(0, 0, bgr_frame.cols, bgr_frame.rows);
     if (template_roi.width < 5 || template_roi.height < 5) {
@@ -116,37 +116,38 @@ TrackSolution KcfTracker::update(const cv::Mat& bgr_frame) {
     } else {
         cv::Mat template_img;
         cv::cvtColor(bgr_frame(template_roi), template_img, cv::COLOR_BGR2GRAY);
-        
+
         // 2. Search in slightly larger ROI
         int margin_x = template_roi.width / 2;
         int margin_y = template_roi.height / 2;
         cv::Rect search_roi(template_roi.x - margin_x, template_roi.y - margin_y,
                             template_roi.width + 2 * margin_x, template_roi.height + 2 * margin_y);
         search_roi &= cv::Rect(0, 0, bgr_frame.cols, bgr_frame.rows);
-        
+
         if (search_roi.width <= template_roi.width || search_roi.height <= template_roi.height) {
             sol.psr = 0.0f;
         } else {
             cv::Mat search_img;
             cv::cvtColor(bgr_frame(search_roi), search_img, cv::COLOR_BGR2GRAY);
-            
+
             cv::Mat response;
             cv::matchTemplate(search_img, template_img, response, cv::TM_CCOEFF_NORMED);
-            
+
             double max_val;
             cv::Point max_loc;
             cv::minMaxLoc(response, nullptr, &max_val, nullptr, &max_loc);
-            
+
             // 3. Calculate mean and std_dev excluding peak (11x11 window)
             int peak_win = 11;
             cv::Mat mask = cv::Mat::ones(response.size(), CV_8U);
-            cv::Rect peak_rect(max_loc.x - peak_win/2, max_loc.y - peak_win/2, peak_win, peak_win);
+            cv::Rect peak_rect(max_loc.x - peak_win / 2, max_loc.y - peak_win / 2, peak_win,
+                               peak_win);
             peak_rect &= cv::Rect(0, 0, response.cols, response.rows);
             mask(peak_rect).setTo(0);
-            
+
             cv::Scalar mean, stddev;
             cv::meanStdDev(response, mean, stddev, mask);
-            
+
             if (stddev[0] < 0.00001) {
                 sol.psr = 0.0f;
             } else {

@@ -18,17 +18,17 @@
  * @copyright Aurore MkVII Project - Educational/Personal Use Only
  */
 
-#include <cerrno>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <fcntl.h>
 #include <poll.h>
 #include <termios.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <chrono>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include <thread>
 
@@ -65,11 +65,16 @@ static void hex_dump(const uint8_t* data, size_t len, const char* label) {
 
 static speed_t baud_to_speed(int baud) {
     switch (baud) {
-        case 9600:   return B9600;
-        case 19200:  return B19200;
-        case 38400:  return B38400;
-        case 115200: return B115200;
-        default:     return B9600;
+        case 9600:
+            return B9600;
+        case 19200:
+            return B19200;
+        case 38400:
+            return B38400;
+        case 115200:
+            return B115200;
+        default:
+            return B9600;
     }
 }
 
@@ -125,20 +130,32 @@ static int open_uart(const char* device, int baud) {
 // Run with: ./lrf_analyzer /dev/ttyAMA0 9600 raw 10
 // ============================================================================
 static void analyze_raw(int fd, int duration_sec) {
-    static constexpr uint8_t kLaserOnCmd[]    = {0xAA, 0x00, 0x01, 0xBE, 0x00, 0x01, 0x00, 0x01, 0xC1};
-    static constexpr uint8_t kContinuousCmd[] = {0xAA, 0x00, 0x00, 0x21, 0x00, 0x01, 0x00, 0x00, 0x22};
+    // Use ASCII commands per M01 spec (same as laser_rangefinder.cpp)
+    const char* kWakeup = "\r";
+    const char* kLaserOn = "L\r";
+    const char* kContinuous = "D\r";
 
     std::printf("\n=== Raw UART Dump (%d seconds) ===\n", duration_sec);
-    std::printf("Sending Laser ON (x3) then Continuous (x3)...\n");
+    std::printf("Sending Wakeup → L (laser on) → D (continuous)...\n");
 
     ::tcflush(fd, TCIOFLUSH);
+
+    // Wake up with CR
+    ssize_t w = ::write(fd, kWakeup, strlen(kWakeup));
+    (void)w;
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    // Enable laser
     for (int i = 0; i < 3; ++i) {
-        ssize_t w = ::write(fd, kLaserOnCmd, sizeof(kLaserOnCmd));
+        w = ::write(fd, kLaserOn, strlen(kLaserOn));
         (void)w;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    std::this_thread::sleep_for(std::chrono::seconds(2));  // Laser warm-up
+
+    // Start continuous mode
     for (int i = 0; i < 3; ++i) {
-        ssize_t w = ::write(fd, kContinuousCmd, sizeof(kContinuousCmd));
+        w = ::write(fd, kContinuous, strlen(kContinuous));
         (void)w;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
@@ -147,16 +164,16 @@ static void analyze_raw(int fd, int duration_sec) {
     ::tcflush(fd, TCIFLUSH);
 
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(duration_sec);
-    auto start    = std::chrono::steady_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     uint8_t accum[512];
-    size_t  accum_len = 0;
-    int     chunk_num = 0;
-    int     read_count = 0;
+    size_t accum_len = 0;
+    int chunk_num = 0;
+    int read_count = 0;
 
     while (std::chrono::steady_clock::now() < deadline) {
         struct pollfd pfd{};
-        pfd.fd     = fd;
+        pfd.fd = fd;
         pfd.events = POLLIN;
         if (::poll(&pfd, 1, 200) <= 0) continue;
 
@@ -165,16 +182,14 @@ static void analyze_raw(int fd, int duration_sec) {
         if (n <= 0) continue;
 
         ++read_count;
-        double t = std::chrono::duration<double>(
-                       std::chrono::steady_clock::now() - start).count();
+        double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         std::printf("[T+%6.3fs] read %2zd bytes: ", t, n);
         for (ssize_t j = 0; j < n; ++j) std::printf("%02X ", tmp[j]);
         std::printf("\n");
         std::fflush(stdout);
 
         // Append to accumulator
-        for (ssize_t j = 0; j < n && accum_len < sizeof(accum); ++j)
-            accum[accum_len++] = tmp[j];
+        for (ssize_t j = 0; j < n && accum_len < sizeof(accum); ++j) accum[accum_len++] = tmp[j];
 
         // Process complete 9-byte frames
         while (accum_len >= 9) {
@@ -193,16 +208,15 @@ static void analyze_raw(int fd, int duration_sec) {
                 std::printf("    uint16-BE [b:b+1] -> mm:\n");
                 for (int b = 1; b <= 7; ++b) {
                     uint32_t v = (static_cast<uint32_t>(f[b]) << 8) | f[b + 1];
-                    std::printf("      [%d:%d] 0x%02X 0x%02X = %4u mm = %.3f m\n",
-                                b, b + 1, f[b], f[b + 1], v, v / 1000.0);
+                    std::printf("      [%d:%d] 0x%02X 0x%02X = %4u mm = %.3f m\n", b, b + 1, f[b],
+                                f[b + 1], v, v / 1000.0);
                 }
                 // 4-nibble BCD in centimetres (the 0xEE frame format)
-                std::printf("    4-nibble BCD-cm [b:b+1] -> mm (only plausible 50-50000 mm shown):\n");
+                std::printf(
+                    "    4-nibble BCD-cm [b:b+1] -> mm (only plausible 50-50000 mm shown):\n");
                 for (int b = 1; b <= 7; ++b) {
-                    uint32_t cm = ((f[b]   >> 4) & 0xF) * 1000u +
-                                   (f[b]         & 0xF) * 100u  +
-                                  ((f[b+1] >> 4) & 0xF) * 10u   +
-                                   (f[b+1]       & 0xF);
+                    uint32_t cm = ((f[b] >> 4) & 0xF) * 1000u + (f[b] & 0xF) * 100u +
+                                  ((f[b + 1] >> 4) & 0xF) * 10u + (f[b + 1] & 0xF);
                     uint32_t mm = cm * 10u;
                     if (mm >= 50 && mm <= 50000)
                         std::printf("      [%d:%d] 0x%02X 0x%02X = %4u cm = %5u mm = %.3f m  <--\n",
@@ -211,13 +225,10 @@ static void analyze_raw(int fd, int duration_sec) {
                 // 3-nibble BCD (the old broken decode)
                 {
                     const uint8_t dh = f[5], dl = f[6];
-                    uint32_t old_cm = ((dh >> 4) & 0xF) * 100u +
-                                       (dh        & 0xF) * 10u  +
-                                      ((dl >> 4) & 0xF);
-                    uint32_t new_cm = ((dh >> 4) & 0xF) * 1000u +
-                                       (dh        & 0xF) * 100u  +
-                                      ((dl >> 4) & 0xF) * 10u  +
-                                       (dl        & 0xF);
+                    uint32_t old_cm =
+                        ((dh >> 4) & 0xF) * 100u + (dh & 0xF) * 10u + ((dl >> 4) & 0xF);
+                    uint32_t new_cm = ((dh >> 4) & 0xF) * 1000u + (dh & 0xF) * 100u +
+                                      ((dl >> 4) & 0xF) * 10u + (dl & 0xF);
                     std::printf("    bytes[5:6] BCD: OLD 3-nibble = %u mm, NEW 4-nibble = %u mm\n",
                                 old_cm * 10u, new_cm * 10u);
                 }
@@ -238,21 +249,36 @@ static void analyze_raw(int fd, int duration_sec) {
 // M01 Analyzer
 // ============================================================================
 static void analyze_m01(int fd, int num_samples) {
-    static constexpr uint8_t kContinuousCmd[] = {0xAA, 0x00, 0x00, 0x21, 0x00, 0x01, 0x00, 0x00, 0x22};
+    // Use ASCII commands per M01 spec (same as laser_rangefinder.cpp)
+    const char* kWakeup = "\r";
+    const char* kLaserOn = "L\r";
+    const char* kContinuous = "D\r";
 
     std::printf("\n=== M01 Protocol Analyzer ===\n");
-    std::printf("Sending continuous-mode command...\n");
+    std::printf("Sending Wakeup → L (laser on) → D (continuous)...\n");
 
     ::tcflush(fd, TCIOFLUSH);
+
+    // Wake up with CR
+    ssize_t w = ::write(fd, kWakeup, strlen(kWakeup));
+    (void)w;
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    // Enable laser (2s warm-up)
     for (int i = 0; i < 3; ++i) {
-        ssize_t bytes_written = ::write(fd, kContinuousCmd, sizeof(kContinuousCmd));
-        if (bytes_written < 0) { /* Error handling could go here, e.g., log, but not critical for diagnostic tool */ }
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        w = ::write(fd, kLaserOn, strlen(kLaserOn));
+        (void)w;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     std::printf("Waiting 2s for LRF warm-up...\n");
     std::this_thread::sleep_for(std::chrono::seconds(2));
-    // Do NOT flush here — data from the module may already be buffered.
-    // The M01 outputs a burst after each command; flushing throws it away.
+
+    // Start continuous mode
+    for (int i = 0; i < 3; ++i) {
+        w = ::write(fd, kContinuous, strlen(kContinuous));
+        (void)w;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
     // Track high-byte changes for stuck-sensor detection
     int last_dist_hi = -1;
@@ -270,7 +296,7 @@ static void analyze_m01(int fd, int num_samples) {
         // burst after each continuous command and then goes quiet; re-sending
         // keeps data flowing between samples.
         {
-            ssize_t w = ::write(fd, kContinuousCmd, sizeof(kContinuousCmd));
+            w = ::write(fd, kContinuous, strlen(kContinuous));
             (void)w;
         }
 
@@ -312,26 +338,22 @@ static void analyze_m01(int fd, int num_samples) {
 
             if (ck_ok) {
                 // Old (broken) 3-nibble decode at bytes[5:6]
-                uint32_t old_cm = ((buf[5] >> 4) & 0xF) * 100u +
-                                   (buf[5]        & 0xF) * 10u  +
-                                  ((buf[6] >> 4) & 0xF);
+                uint32_t old_cm =
+                    ((buf[5] >> 4) & 0xF) * 100u + (buf[5] & 0xF) * 10u + ((buf[6] >> 4) & 0xF);
                 // Fixed 4-nibble decode (all BCD digits)
-                uint32_t new_cm = ((buf[5] >> 4) & 0xF) * 1000u +
-                                   (buf[5]        & 0xF) * 100u  +
-                                  ((buf[6] >> 4) & 0xF) * 10u   +
-                                   (buf[6]        & 0xF);
-                std::printf("         bytes[5:6]=0x%02X 0x%02X | BCD-3nib=%umm(%.3fm)"
-                            " BCD-4nib=%umm(%.3fm)\n",
-                            buf[5], buf[6],
-                            old_cm * 10, old_cm * 10 / 1000.0,
-                            new_cm * 10, new_cm * 10 / 1000.0);
+                uint32_t new_cm = ((buf[5] >> 4) & 0xF) * 1000u + (buf[5] & 0xF) * 100u +
+                                  ((buf[6] >> 4) & 0xF) * 10u + (buf[6] & 0xF);
+                std::printf(
+                    "         bytes[5:6]=0x%02X 0x%02X | BCD-3nib=%umm(%.3fm)"
+                    " BCD-4nib=%umm(%.3fm)\n",
+                    buf[5], buf[6], old_cm * 10, old_cm * 10 / 1000.0, new_cm * 10,
+                    new_cm * 10 / 1000.0);
 
                 // Also show uint16-BE for every offset (helps spot non-BCD encoding)
                 std::printf("         uint16-BE pairs:");
                 for (int b = 1; b <= 7; ++b) {
                     uint32_t v = (static_cast<uint32_t>(buf[b]) << 8) | buf[b + 1];
-                    if (v >= 50 && v <= 50000)
-                        std::printf(" [%d:%d]=%umm", b, b + 1, v);
+                    if (v >= 50 && v <= 50000) std::printf(" [%d:%d]=%umm", b, b + 1, v);
                 }
                 std::printf("\n");
             }
@@ -374,21 +396,21 @@ static void analyze_m01(int fd, int num_samples) {
         //   13-byte data frames: bytes [8:9]
         uint8_t dh, dl;
         if (frame_len == 13) {
-            dh = buf[8]; dl = buf[9];
+            dh = buf[8];
+            dl = buf[9];
         } else {
-            dh = buf[5]; dl = buf[6];
+            dh = buf[5];
+            dl = buf[6];
         }
-        uint32_t dist_mm = ((dh >> 4) & 0xF) * 1000u +
-                            (dh        & 0xF) * 100u  +
-                           ((dl >> 4) & 0xF) * 10u   +
-                            (dl        & 0xF);
+        uint32_t dist_mm =
+            ((dh >> 4) & 0xF) * 1000u + (dh & 0xF) * 100u + ((dl >> 4) & 0xF) * 10u + (dl & 0xF);
         float dist_m = static_cast<float>(dist_mm) / 1000.0f;
 
-        std::printf("  [%03d] FRAME %zu-byte | bytes[dh:dl]=0x%02X 0x%02X | "
-                    "BCD=%u mm (%.3f m) | CRC %s",
-                    sample + 1, frame_len, dh, dl,
-                    dist_mm, static_cast<double>(dist_m),
-                    ck_ok ? "OK" : "FAIL");
+        std::printf(
+            "  [%03d] FRAME %zu-byte | bytes[dh:dl]=0x%02X 0x%02X | "
+            "BCD=%u mm (%.3f m) | CRC %s",
+            sample + 1, frame_len, dh, dl, dist_mm, static_cast<double>(dist_m),
+            ck_ok ? "OK" : "FAIL");
 
         if (!ck_ok) {
             std::printf(" (expected 0x%02X, got 0x%02X)", expected_ck, actual_ck);
@@ -456,8 +478,8 @@ static void analyze_modbus(int fd, int num_samples) {
 
         ssize_t written = ::write(fd, kPollCmd, sizeof(kPollCmd));
         if (written != static_cast<ssize_t>(sizeof(kPollCmd))) {
-            std::printf("  [%03d] TX FAIL: only wrote %zd of %zu bytes\n",
-                        sample + 1, written, sizeof(kPollCmd));
+            std::printf("  [%03d] TX FAIL: only wrote %zd of %zu bytes\n", sample + 1, written,
+                        sizeof(kPollCmd));
             continue;
         }
 
@@ -547,7 +569,8 @@ static void analyze_modbus(int fd, int num_samples) {
     std::printf("  Hi-byte changes: %d (of %d valid)\n", hi_byte_changes, valid_frames);
 
     if (valid_frames > 0 && hi_byte_changes == 0) {
-        std::printf("\nFAIL: LRF distance high-byte NEVER changed across %d frames.\n", valid_frames);
+        std::printf("\nFAIL: LRF distance high-byte NEVER changed across %d frames.\n",
+                    valid_frames);
         std::printf(" Check: Sensor stuck or target not moving between samples.\n");
         std::printf(" Fix: Move target >256mm between samples and re-run.\n");
     }
@@ -574,8 +597,8 @@ int main(int argc, char* argv[]) {
     if (argc >= 5) samples = std::atoi(argv[4]);
 
     std::printf("LRF Analyzer — Aurore MkVII Diagnostic Tool\n");
-    std::printf("Device: %s  Baud: %d  Protocol: %s  Samples: %d\n\n",
-                device, baud, protocol, samples);
+    std::printf("Device: %s  Baud: %d  Protocol: %s  Samples: %d\n\n", device, baud, protocol,
+                samples);
 
     int fd = open_uart(device, baud);
     if (fd < 0) return 1;

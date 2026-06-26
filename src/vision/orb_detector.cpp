@@ -1,7 +1,9 @@
-#include "aurore/detector.hpp"
+#include <sys/stat.h>
+
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
-#include <sys/stat.h>
+
+#include "aurore/detector.hpp"
 
 namespace aurore {
 
@@ -16,9 +18,9 @@ namespace aurore {
 // - patchSize: 31 (standard)
 // - fastThreshold: 20 (standard)
 OrbDetector::OrbDetector()
-    : orb_(cv::ORB::create(500, 1.2f, 4, 31, 0, 2, cv::ORB::HARRIS_SCORE, 31, 20))
-    , matcher_(cv::BFMatcher::create(cv::NORM_HAMMING, false))
-    , clahe_(cv::createCLAHE(2.0, {8, 8}))  // PERF-002: Cache CLAHE object at construction
+    : orb_(cv::ORB::create(500, 1.2f, 4, 31, 0, 2, cv::ORB::HARRIS_SCORE, 31, 20)),
+      matcher_(cv::BFMatcher::create(cv::NORM_HAMMING, false)),
+      clahe_(cv::createCLAHE(2.0, {8, 8}))  // PERF-002: Cache CLAHE object at construction
 {}
 
 void OrbDetector::add_template(const cv::Mat& bgr) {
@@ -90,8 +92,10 @@ std::optional<Detection> OrbDetector::detect(const cv::Mat& bgr_frame) const {
 
         std::vector<cv::Point2f> src_pts, dst_pts;
         for (auto& m : good) {
-            src_pts.push_back(tmpl.keypoints[static_cast<std::vector<cv::KeyPoint>::size_type>(m.queryIdx)].pt);
-            dst_pts.push_back(frame_kps[static_cast<std::vector<cv::KeyPoint>::size_type>(m.trainIdx)].pt);
+            src_pts.push_back(
+                tmpl.keypoints[static_cast<std::vector<cv::KeyPoint>::size_type>(m.queryIdx)].pt);
+            dst_pts.push_back(
+                frame_kps[static_cast<std::vector<cv::KeyPoint>::size_type>(m.trainIdx)].pt);
         }
         cv::Mat mask;
         // PERF-003: Limit RANSAC iterations to 50 (from default 2000) for faster homography
@@ -108,13 +112,14 @@ std::optional<Detection> OrbDetector::detect(const cv::Mat& bgr_frame) const {
             int n = 0;
             for (int i = 0; i < mask.rows; ++i) {
                 if (mask.at<uint8_t>(i)) {
-                    cx += dst_pts[static_cast<std::vector<cv::Point_<float> >::size_type>(i)].x;
-                    cy += dst_pts[static_cast<std::vector<cv::Point_<float> >::size_type>(i)].y;
+                    cx += dst_pts[static_cast<std::vector<cv::Point_<float>>::size_type>(i)].x;
+                    cy += dst_pts[static_cast<std::vector<cv::Point_<float>>::size_type>(i)].y;
                     ++n;
                 }
             }
             if (n > 0) {
-                cx /= static_cast<float>(n); cy /= static_cast<float>(n);
+                cx /= static_cast<float>(n);
+                cy /= static_cast<float>(n);
                 best.confidence = conf;
                 best.bbox = {static_cast<int>(cx - 25), static_cast<int>(cy - 25), 50, 50};
             }

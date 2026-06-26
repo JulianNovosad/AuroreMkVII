@@ -1,28 +1,31 @@
 #include "aurore/gimbal_controller.hpp"
-#include "aurore/timing.hpp"
 
 #include <utility>
+
+#include "aurore/timing.hpp"
 
 namespace aurore {
 
 GimbalController::GimbalController(const CameraIntrinsics& cam) : cam_(cam) {}
 
 std::pair<float, float> GimbalController::apply_rate_limit(float az_desired, float el_desired) {
-    const uint64_t now    = get_timestamp();
+    const uint64_t now = get_timestamp();
     const uint64_t prev_t = prev_cmd_ns_.load(std::memory_order_relaxed);
 
     // dt_s: use nominal frame period for the very first call, else clamp real elapsed time
     const float dt_s = (prev_t == 0)
-        ? (1.0f / 120.0f)
-        : std::clamp(static_cast<float>(now - prev_t) * 1e-9f, 0.001f, 0.1f);
+                           ? (1.0f / 120.0f)
+                           : std::clamp(static_cast<float>(now - prev_t) * 1e-9f, 0.001f, 0.1f);
 
     const float prev_az = prev_az_cmd_.load(std::memory_order_relaxed);
     const float prev_el = prev_el_cmd_.load(std::memory_order_relaxed);
 
     // --- velocity clamping ---
     const float max_vel_delta = kGimbalRateLimitDefault * dt_s;
-    const float az_vel_limited = prev_az + std::clamp(az_desired - prev_az, -max_vel_delta, max_vel_delta);
-    const float el_vel_limited = prev_el + std::clamp(el_desired - prev_el, -max_vel_delta, max_vel_delta);
+    const float az_vel_limited =
+        prev_az + std::clamp(az_desired - prev_az, -max_vel_delta, max_vel_delta);
+    const float el_vel_limited =
+        prev_el + std::clamp(el_desired - prev_el, -max_vel_delta, max_vel_delta);
 
     // --- acceleration clamping ---
     // Compute velocity implied by the velocity-limited position change
@@ -33,8 +36,10 @@ std::pair<float, float> GimbalController::apply_rate_limit(float az_desired, flo
     const float prev_el_v = prev_el_vel_.load(std::memory_order_relaxed);
 
     const float max_accel_delta = kGimbalAccelLimitDefault * dt_s;
-    const float az_vel_clamped  = prev_az_v + std::clamp(az_vel - prev_az_v, -max_accel_delta, max_accel_delta);
-    const float el_vel_clamped  = prev_el_v + std::clamp(el_vel - prev_el_v, -max_accel_delta, max_accel_delta);
+    const float az_vel_clamped =
+        prev_az_v + std::clamp(az_vel - prev_az_v, -max_accel_delta, max_accel_delta);
+    const float el_vel_clamped =
+        prev_el_v + std::clamp(el_vel - prev_el_v, -max_accel_delta, max_accel_delta);
 
     // Recompute final angles from the acceleration-clamped velocity
     const float az_final = prev_az + az_vel_clamped * dt_s;
@@ -84,7 +89,8 @@ GimbalCommand GimbalController::command_from_pixel(float centroid_x, float centr
     return GimbalCommand{new_az, new_el, std::nullopt};  // No sequence number for AUTO mode
 }
 
-GimbalCommand GimbalController::command_absolute(float az_deg, float el_deg, std::optional<uint32_t> seq_num) {
+GimbalCommand GimbalController::command_absolute(float az_deg, float el_deg,
+                                                 std::optional<uint32_t> seq_num) {
     // FREECAM mode: apply rate limits before setting absolute angles
     auto [limited_az, limited_el] = apply_rate_limit(az_deg, el_deg);
 
@@ -113,10 +119,13 @@ GimbalCommand GimbalController::command_absolute(float az_deg, float el_deg, std
     return GimbalCommand{clamped_az, clamped_el, seq_num};
 }
 
-std::optional<GimbalCommand> GimbalController::process_command_with_gap_check(float az_deg, float el_deg, uint32_t seq_num) {
+std::optional<GimbalCommand> GimbalController::process_command_with_gap_check(float az_deg,
+                                                                              float el_deg,
+                                                                              uint32_t seq_num) {
     // Check for sequence gap if we have a previous sequence number
     if (last_sequence_num_.has_value()) {
-        if (security::is_sequence_gap(last_sequence_num_.value(), seq_num, kGimbalSequenceGapThreshold)) {
+        if (security::is_sequence_gap(last_sequence_num_.value(), seq_num,
+                                      kGimbalSequenceGapThreshold)) {
             // Sequence gap detected - reject command and flag fault
             sequence_gap_detected_.store(true, std::memory_order_release);
             return std::nullopt;  // Command rejected

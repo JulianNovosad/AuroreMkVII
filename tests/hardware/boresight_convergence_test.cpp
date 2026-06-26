@@ -25,8 +25,8 @@
 #include <vector>
 
 #include "aurore/drivers/laser_rangefinder.hpp"
-#include "aurore/usb_camera.hpp"
 #include "aurore/timing.hpp"
+#include "aurore/usb_camera.hpp"
 
 struct PixelCoord {
     float u{0.0f};
@@ -55,15 +55,14 @@ static ConvergenceZone calculate_convergence_zone(float range_m) {
     return zone;
 }
 
-static bool is_in_convergence_zone(const PixelCoord& mipi_px, 
-                                 const PixelCoord& usb_px,
-                                 float range_m) {
+static bool is_in_convergence_zone(const PixelCoord& mipi_px, const PixelCoord& usb_px,
+                                   float range_m) {
     ConvergenceZone zone = calculate_convergence_zone(range_m);
-    
+
     float dx = std::abs(mipi_px.u - usb_px.u);
     float dy = std::abs(mipi_px.v - usb_px.v);
     float distance = std::sqrt(dx * dx + dy * dy);
-    
+
     return distance <= zone.tolerance_px;
 }
 
@@ -91,15 +90,15 @@ struct AlignmentLog {
     bool test_passed{false};
 };
 
-#define TEST_ASSERT(condition, message)                           \
-    do {                                                          \
-        if (condition) {                                          \
-            std::cout << "  PASS: " << message << "\n";          \
-            tests_passed++;                                       \
-        } else {                                                  \
-            std::cerr << "  FAIL: " << message << "\n";          \
-            tests_failed++;                                       \
-        }                                                         \
+#define TEST_ASSERT(condition, message)                 \
+    do {                                                \
+        if (condition) {                                \
+            std::cout << "  PASS: " << message << "\n"; \
+            tests_passed++;                             \
+        } else {                                        \
+            std::cerr << "  FAIL: " << message << "\n"; \
+            tests_failed++;                             \
+        }                                               \
     } while (0)
 
 static void print_banner() {
@@ -110,13 +109,11 @@ static void print_banner() {
     std::cout << "\n";
 }
 
-static void wait_for_user(const char* prompt) {
-    std::cout << "\n>>> " << prompt << "\n";
-}
+static void wait_for_user(const char* prompt) { std::cout << "\n>>> " << prompt << "\n"; }
 
 static bool check_libcamera() {
     std::cout << "\n=== Check: MIPI Camera (libcamera) ===\n";
-    
+
     std::string result;
     FILE* pipe = popen("rpicam-hello --list-cameras 2>&1", "r");
     if (pipe) {
@@ -126,42 +123,42 @@ static bool check_libcamera() {
         }
         pclose(pipe);
     }
-    
-    bool has_camera = result.find("imx708") != std::string::npos || 
-                      result.find("Camera") != std::string::npos;
-    
+
+    bool has_camera =
+        result.find("imx708") != std::string::npos || result.find("Camera") != std::string::npos;
+
     TEST_ASSERT(has_camera, "MIPI CSI-2 camera detected");
-    
+
     if (!has_camera) {
         std::cerr << "FAIL: MIPI camera not responding\n";
         std::cerr << "      Check: rpicam-hello --list-cameras\n";
         std::cerr << "      Fix: Reseat MIPI CSI cable, ensure camera powered\n";
     }
-    
+
     return has_camera;
 }
 
 static bool check_i2c() {
     std::cout << "\n=== Check: I2C Bus (/dev/i2c-1) ===\n";
-    
+
     bool has_i2c = access("/dev/i2c-1", R_OK | W_OK) == 0;
     TEST_ASSERT(has_i2c, "I2C-1 bus accessible");
-    
+
     if (!has_i2c) {
         std::cerr << "FAIL: I2C bus not accessible\n";
         std::cerr << "      Check: ls /dev/i2c-1\n";
         std::cerr << "      Fix: Enable I2C in /boot/firmware/config.txt\n";
     }
-    
+
     return has_i2c;
 }
 
 static bool check_uart_lrf() {
     std::cout << "\n=== Check: UART LRF ===\n";
-    
+
     std::vector<std::string> uart_devices = {"/dev/ttyAMA0", "/dev/ttyAMA10"};
     bool found_uart = false;
-    
+
     for (const auto& uart : uart_devices) {
         if (access(uart.c_str(), R_OK | W_OK) == 0) {
             found_uart = true;
@@ -169,21 +166,21 @@ static bool check_uart_lrf() {
             break;
         }
     }
-    
+
     TEST_ASSERT(found_uart, "LRF UART device accessible");
-    
+
     if (!found_uart) {
         std::cerr << "FAIL: LRF UART not found\n";
         std::cerr << "      Check: ls /dev/ttyAMA*\n";
         std::cerr << "      Fix: Connect LRF to Fusion HAT+ UART slot\n";
     }
-    
+
     return found_uart;
 }
 
 static bool check_usb_camera() {
     std::cout << "\n=== Check: USB Webcam ===\n";
-    
+
     FILE* pipe = popen("ls /dev/video* 2>&1", "r");
     std::string result;
     char buffer[256];
@@ -191,16 +188,16 @@ static bool check_usb_camera() {
         result += buffer;
     }
     pclose(pipe);
-    
+
     bool has_usb = result.find("video") != std::string::npos;
     TEST_ASSERT(has_usb, "USB webcam detected");
-    
+
     if (!has_usb) {
         std::cerr << "FAIL: USB camera not found\n";
         std::cerr << "      Check: ls /dev/video*\n";
         std::cerr << "      Fix: Connect USB webcam\n";
     }
-    
+
     return has_usb;
 }
 
@@ -239,89 +236,90 @@ static AlignmentLog run_convergence_test(const std::string& uart_device) {
     }
 
     lrf.stop();
-    
+
     float range_mm = range_m * 1000.0f;
     std::cout << "  LRF measured: " << range_m << "m (" << static_cast<int>(range_mm) << "mm)\n";
-    
+
     int range_error_mm = std::abs(static_cast<int>(range_mm) - kTargetRangeMm);
     bool range_ok = range_error_mm <= kRangeToleranceMm;
-    
+
     // For automated testing, accept any valid range reading
     // The exact range depends on what's actually in front of the LRF
     TEST_ASSERT(range_mm > 0, "LRF returned valid range reading");
-    
+
     // For now, skip the exact range check - we just verify LRF is working
     (void)range_ok;
-    
+
     log.measured_range_m = range_m;
-    
+
     ConvergenceZone convergence = calculate_convergence_zone(range_m);
-    
+
     std::cout << "  Convergence zone:\n";
     std::cout << "    MIPI center: (" << convergence.mipi_x << ", " << convergence.mipi_y << ")\n";
     std::cout << "    USB center:  (" << convergence.usb_x << ", " << convergence.usb_y << ")\n";
     std::cout << "    Tolerance:  ±" << convergence.tolerance_px << "px\n";
-    
+
     log.convergence_zone_radius = convergence.tolerance_px;
-    
+
     PixelCoord mipi_px;
     mipi_px.u = convergence.mipi_x + 20.0f;
     mipi_px.v = convergence.mipi_y + 15.0f;
     mipi_px.width = kMipiWidth;
     mipi_px.height = kMipiHeight;
-    
+
     PixelCoord usb_px;
     usb_px.u = convergence.usb_x + 10.0f;
     usb_px.v = convergence.usb_y + 8.0f;
     usb_px.width = kUsbWidth;
     usb_px.height = kUsbHeight;
-    
+
     log.mipi_px_x = mipi_px.u;
     log.mipi_px_y = mipi_px.v;
     log.usb_px_x = usb_px.u;
     log.usb_px_y = usb_px.v;
-    
+
     float dx = std::abs(mipi_px.u - usb_px.u);
     float dy = std::abs(mipi_px.v - usb_px.v);
     float residual = std::sqrt(dx * dx + dy * dy);
-    
+
     log.residual_error_px = residual;
-    
+
     bool in_zone = is_in_convergence_zone(mipi_px, usb_px, range_m);
-    
+
     // Skip convergence zone check for basic LRF test
     // The convergence calculation uses test/fake data
     (void)in_zone;
     (void)residual;
-    
+
     log.test_passed = true;
-    
+
     return log;
 }
 
 static void save_alignment_log(const AlignmentLog& log) {
     std::string log_dir = "agent_logs";
-    
+
     int mkdir_result = system(("mkdir -p " + log_dir).c_str());
     (void)mkdir_result;
-    
+
     std::string filepath = log_dir + "/alignment.json";
     std::ofstream out(filepath);
-    
+
     if (out.is_open()) {
         out << "{\n";
         out << "  \"timestamp\": \"" << std::time(nullptr) << "\",\n";
         out << "  \"test_name\": \"boresight_convergence\",\n";
         out << "  \"target_range_m\": " << kTargetRangeM << ",\n";
         out << "  \"measured_range_m\": " << log.measured_range_m << ",\n";
-        out << "  \"mipi_pixel\": {\"x\": " << log.mipi_px_x << ", \"y\": " << log.mipi_px_y << "},\n";
+        out << "  \"mipi_pixel\": {\"x\": " << log.mipi_px_x << ", \"y\": " << log.mipi_px_y
+            << "},\n";
         out << "  \"usb_pixel\": {\"x\": " << log.usb_px_x << ", \"y\": " << log.usb_px_y << "},\n";
         out << "  \"residual_error_px\": " << log.residual_error_px << ",\n";
         out << "  \"convergence_tolerance_px\": " << log.convergence_zone_radius << ",\n";
         out << "  \"test_passed\": " << (log.test_passed ? "true" : "false") << "\n";
         out << "}\n";
         out.close();
-        
+
         std::cout << "\n  Alignment log saved to: " << filepath << "\n";
     } else {
         std::cerr << "\n  ERROR: Failed to save alignment log\n";
@@ -330,44 +328,44 @@ static void save_alignment_log(const AlignmentLog& log) {
 
 static void print_summary() {
     std::cout << "\n========================================\n";
-    std::cout << "Boresight Test Summary: " << tests_passed << " passed, " 
-              << tests_failed << " failed\n";
+    std::cout << "Boresight Test Summary: " << tests_passed << " passed, " << tests_failed
+              << " failed\n";
     std::cout << "========================================\n";
 }
 
 int main(int argc, char* argv[]) {
     print_banner();
-    
+
     if (!check_libcamera()) {
         std::cerr << "\nFATAL: Hardware not detected - exiting\n";
         return EXIT_FAILURE;
     }
-    
+
     if (!check_i2c()) {
         std::cerr << "\nFATAL: Hardware not detected - exiting\n";
         return EXIT_FAILURE;
     }
-    
+
     if (!check_uart_lrf()) {
         std::cerr << "\nFATAL: Hardware not detected - exiting\n";
         return EXIT_FAILURE;
     }
-    
+
     if (!check_usb_camera()) {
         std::cerr << "\nFATAL: Hardware not detected - exiting\n";
         return EXIT_FAILURE;
     }
-    
+
     std::string uart_device = "/dev/ttyAMA0";
     if (argc > 1) {
         uart_device = argv[1];
     }
-    
+
     AlignmentLog result = run_convergence_test(uart_device);
-    
+
     save_alignment_log(result);
-    
+
     print_summary();
-    
+
     return (tests_failed == 0 && result.test_passed) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

@@ -28,25 +28,44 @@ std::atomic<size_t> g_tests_passed(0);
 std::atomic<size_t> g_tests_failed(0);
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::cout << "  PASS: " << #name << std::endl; \
-    } catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                          \
+    do {                                                                        \
+        g_tests_run.fetch_add(1);                                               \
+        try {                                                                   \
+            name();                                                             \
+            g_tests_passed.fetch_add(1);                                        \
+            std::cout << "  PASS: " << #name << std::endl;                      \
+        } catch (const std::exception& e) {                                     \
+            g_tests_failed.fetch_add(1);                                        \
+            std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
+        }                                                                       \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_GT(a, b) do { if (!((a) > (b))) throw std::runtime_error("Assertion failed: " #a " > " #b); } while(0)
-#define ASSERT_LT(a, b) do { if (!((a) < (b))) throw std::runtime_error("Assertion failed: " #a " < " #b); } while(0)
-#define ASSERT_GE(a, b) do { if (!((a) >= (b))) throw std::runtime_error("Assertion failed: " #a " >= " #b); } while(0)
-#define ASSERT_LE(a, b) do { if (!((a) <= (b))) throw std::runtime_error("Assertion failed: " #a " <= " #b); } while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_GT(a, b)                                                               \
+    do {                                                                              \
+        if (!((a) > (b))) throw std::runtime_error("Assertion failed: " #a " > " #b); \
+    } while (0)
+#define ASSERT_LT(a, b)                                                               \
+    do {                                                                              \
+        if (!((a) < (b))) throw std::runtime_error("Assertion failed: " #a " < " #b); \
+    } while (0)
+#define ASSERT_GE(a, b)                                                                 \
+    do {                                                                                \
+        if (!((a) >= (b))) throw std::runtime_error("Assertion failed: " #a " >= " #b); \
+    } while (0)
+#define ASSERT_LE(a, b)                                                                 \
+    do {                                                                                \
+        if (!((a) <= (b))) throw std::runtime_error("Assertion failed: " #a " <= " #b); \
+    } while (0)
 
 }  // anonymous namespace
 
@@ -244,40 +263,40 @@ TEST(test_drag_coefficient_hypersonic) {
 
 TEST(test_profile_valid_params_pass) {
     aurore::BallisticProfile profile;
-    profile.muzzle_velocity_m_s  = 340.0f;
+    profile.muzzle_velocity_m_s = 340.0f;
     profile.ballistic_coefficient = 0.3f;
-    profile.sight_height_mm      = 50.0f;
-    profile.zero_range_m         = 100.0f;
+    profile.sight_height_mm = 50.0f;
+    profile.zero_range_m = 100.0f;
 
     ASSERT_TRUE(profile.validate());
 }
 
 TEST(test_profile_zero_muzzle_velocity_fails) {
     aurore::BallisticProfile profile;
-    profile.muzzle_velocity_m_s  = 0.0f;
+    profile.muzzle_velocity_m_s = 0.0f;
     profile.ballistic_coefficient = 0.3f;
-    profile.sight_height_mm      = 50.0f;
-    profile.zero_range_m         = 100.0f;
+    profile.sight_height_mm = 50.0f;
+    profile.zero_range_m = 100.0f;
 
     ASSERT_FALSE(profile.validate());
 }
 
 TEST(test_profile_negative_bc_fails) {
     aurore::BallisticProfile profile;
-    profile.muzzle_velocity_m_s  = 340.0f;
+    profile.muzzle_velocity_m_s = 340.0f;
     profile.ballistic_coefficient = -0.1f;
-    profile.sight_height_mm      = 50.0f;
-    profile.zero_range_m         = 100.0f;
+    profile.sight_height_mm = 50.0f;
+    profile.zero_range_m = 100.0f;
 
     ASSERT_FALSE(profile.validate());
 }
 
 TEST(test_profile_extreme_sight_height_fails) {
     aurore::BallisticProfile profile;
-    profile.muzzle_velocity_m_s  = 340.0f;
+    profile.muzzle_velocity_m_s = 340.0f;
     profile.ballistic_coefficient = 0.3f;
-    profile.sight_height_mm      = 500.0f;  // > 200mm limit
-    profile.zero_range_m         = 100.0f;
+    profile.sight_height_mm = 500.0f;  // > 200mm limit
+    profile.zero_range_m = 100.0f;
 
     ASSERT_FALSE(profile.validate());
 }

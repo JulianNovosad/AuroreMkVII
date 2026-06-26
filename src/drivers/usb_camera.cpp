@@ -6,7 +6,6 @@
  */
 
 #include "aurore/usb_camera.hpp"
-#include "aurore/timing.hpp"
 
 #include <fcntl.h>
 #include <linux/videodev2.h>
@@ -19,12 +18,13 @@
 #include <cstring>
 #include <iostream>
 #include <mutex>
+#include <opencv2/core.hpp>
+#include <opencv2/videoio.hpp>
 #include <string>
 #include <thread>
 #include <vector>
 
-#include <opencv2/core.hpp>
-#include <opencv2/videoio.hpp>
+#include "aurore/timing.hpp"
 
 namespace aurore {
 
@@ -57,21 +57,20 @@ struct UsbCamera::Impl {
         {
             std::lock_guard<std::mutex> lk(grab_mtx);
             grab_done = false;
-            grab_ok   = false;
+            grab_ok = false;
         }
 
         grab_thr = std::thread([this]() {
             const bool ok = capture.grab();
             std::lock_guard<std::mutex> lk(grab_mtx);
-            grab_ok   = ok;
+            grab_ok = ok;
             grab_done = true;
             grab_cv.notify_one();
         });
 
         std::unique_lock<std::mutex> lk(grab_mtx);
-        const bool done = grab_cv.wait_for(
-            lk, std::chrono::milliseconds(timeout_ms),
-            [this]() { return grab_done; });
+        const bool done = grab_cv.wait_for(lk, std::chrono::milliseconds(timeout_ms),
+                                           [this]() { return grab_done; });
 
         if (done) {
             lk.unlock();
@@ -95,7 +94,7 @@ bool UsbCamera::detect() noexcept {
         int fd = ::open(path.c_str(), O_RDONLY | O_NONBLOCK);
         if (fd < 0) continue;
 
-        struct v4l2_capability cap {};
+        struct v4l2_capability cap{};
         bool is_usb_cam = false;
 
         if (::ioctl(fd, VIDIOC_QUERYCAP, &cap) == 0) {
@@ -120,11 +119,10 @@ bool UsbCamera::detect() noexcept {
 // Constructor / Destructor
 // ============================================================================
 
-UsbCamera::UsbCamera(const UsbCameraConfig& config) : impl_(std::make_unique<Impl>()), config_(config) {}
+UsbCamera::UsbCamera(const UsbCameraConfig& config)
+    : impl_(std::make_unique<Impl>()), config_(config) {}
 
-UsbCamera::~UsbCamera() {
-    stop();
-}
+UsbCamera::~UsbCamera() { stop(); }
 
 // ============================================================================
 // Lifecycle
@@ -153,7 +151,7 @@ bool UsbCamera::init() {
             int fd = ::open(path.c_str(), O_RDONLY | O_NONBLOCK);
             if (fd < 0) continue;
 
-            struct v4l2_capability cap {};
+            struct v4l2_capability cap{};
             bool found = false;
             if (::ioctl(fd, VIDIOC_QUERYCAP, &cap) == 0) {
                 if ((cap.capabilities & V4L2_CAP_VIDEO_CAPTURE) &&
@@ -217,8 +215,8 @@ bool UsbCamera::init() {
     const int actual_h = static_cast<int>(impl_->capture.get(cv::CAP_PROP_FRAME_HEIGHT));
     const int actual_fps = static_cast<int>(impl_->capture.get(cv::CAP_PROP_FPS));
 
-    std::cout << "[UsbCamera] Opened " << actual_device_path_
-              << " (" << actual_w << "x" << actual_h << " @ " << actual_fps << " FPS)\n";
+    std::cout << "[UsbCamera] Opened " << actual_device_path_ << " (" << actual_w << "x" << actual_h
+              << " @ " << actual_fps << " FPS)\n";
 
     return true;
 }
@@ -234,8 +232,8 @@ bool UsbCamera::start() {
     // is stalled or the camera is not delivering frames.
     constexpr int kStartGrabTimeoutMs = 2000;
     if (!impl_->grab_with_timeout(kStartGrabTimeoutMs)) {
-        std::cerr << "[UsbCamera] Failed to grab initial frame from "
-                  << actual_device_path_ << " (timeout or V4L2 error)\n"
+        std::cerr << "[UsbCamera] Failed to grab initial frame from " << actual_device_path_
+                  << " (timeout or V4L2 error)\n"
                   << "      Check: dmesg | tail -20\n"
                   << "      Fix: Reconnect webcam and check USB bandwidth\n";
         // Calling release() unblocks grab() inside grab_thr, then we join it.
@@ -312,8 +310,8 @@ cv::Mat UsbCamera::wrap_as_mat(const ZeroCopyFrame& frame, PixelFormat /*target_
     }
 
     // Wrap the existing buffer as a cv::Mat header (no copy)
-    return cv::Mat(frame.height, frame.width, CV_8UC3,
-                   frame.plane_data[0], static_cast<size_t>(frame.stride[0]));
+    return cv::Mat(frame.height, frame.width, CV_8UC3, frame.plane_data[0],
+                   static_cast<size_t>(frame.stride[0]));
 }
 
 void UsbCamera::release_frame(ZeroCopyFrame& frame) {

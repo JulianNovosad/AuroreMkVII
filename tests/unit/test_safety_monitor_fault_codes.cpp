@@ -14,16 +14,16 @@
  * - AM7-L3-SAFE-005: Software watchdog monitoring
  */
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <string>
 #include <thread>
 #include <vector>
-#include <algorithm>
-#include <string>
 
 #include "aurore/safety_monitor.hpp"
 
@@ -35,28 +35,35 @@ std::atomic<size_t> g_tests_passed(0);
 std::atomic<size_t> g_tests_failed(0);
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::cout << "  PASS: " << #name << std::endl; \
-    } \
-    catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                          \
+    do {                                                                        \
+        g_tests_run.fetch_add(1);                                               \
+        try {                                                                   \
+            name();                                                             \
+            g_tests_passed.fetch_add(1);                                        \
+            std::cout << "  PASS: " << #name << std::endl;                      \
+        } catch (const std::exception& e) {                                     \
+            g_tests_failed.fetch_add(1);                                        \
+            std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
+        }                                                                       \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_NE(a, b) do { if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " == " #b); } while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_NE(a, b)                                                              \
+    do {                                                                             \
+        if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " == " #b); \
+    } while (0)
 
 // Helper: sleep for specified duration in milliseconds
-void sleep_ms(int ms) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-}
+void sleep_ms(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
 
 }  // anonymous namespace
 
@@ -267,7 +274,7 @@ TEST(test_fault_code_all_24_values) {
         aurore::SafetyFaultCode::POWER_FAULT,
     };
 
-    // Verify count: 1 (NONE) + 3 (vision) + 3 (actuation) + 3 (timing) + 3 (system) 
+    // Verify count: 1 (NONE) + 3 (vision) + 3 (actuation) + 3 (timing) + 3 (system)
     //              + 3 (communication) + 4 (safety system) + 3 (emergency) = 23
     ASSERT_EQ(all_codes.size(), 23);
 
@@ -288,7 +295,8 @@ TEST(test_fault_code_all_24_values) {
     auto unique_end = std::unique(code_values.begin(), code_values.end());
     ASSERT_EQ(std::distance(code_values.begin(), unique_end), 23);
 
-    std::cout << "    All " << all_codes.size() << " fault codes verified: unique values, valid strings" << std::endl;
+    std::cout << "    All " << all_codes.size()
+              << " fault codes verified: unique values, valid strings" << std::endl;
 }
 
 // ============================================================================
@@ -299,39 +307,58 @@ TEST(test_fault_code_categories) {
     // Verify fault codes are grouped by category (high byte)
 
     // Vision faults (0x01xx)
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::VISION_STALLED) & 0xFF00) == 0x0100);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::VISION_LATENCY_EXCEEDED) & 0xFF00) == 0x0100);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::VISION_BUFFER_OVERRUN) & 0xFF00) == 0x0100);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::VISION_STALLED) & 0xFF00) ==
+                0x0100);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::VISION_LATENCY_EXCEEDED) &
+                 0xFF00) == 0x0100);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::VISION_BUFFER_OVERRUN) & 0xFF00) ==
+                0x0100);
 
     // Actuation faults (0x02xx)
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::ACTUATION_STALLED) & 0xFF00) == 0x0200);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::ACTUATION_LATENCY_EXCEEDED) & 0xFF00) == 0x0200);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::ACTUATION_COMMAND_INVALID) & 0xFF00) == 0x0200);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::ACTUATION_STALLED) & 0xFF00) ==
+                0x0200);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::ACTUATION_LATENCY_EXCEEDED) &
+                 0xFF00) == 0x0200);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::ACTUATION_COMMAND_INVALID) &
+                 0xFF00) == 0x0200);
 
     // Timing faults (0x03xx)
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::FRAME_DEADLINE_MISSED) & 0xFF00) == 0x0300);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::CONSECUTIVE_DEADLINE_MISSES) & 0xFF00) == 0x0300);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::TIMESTAMP_NON_MONOTONIC) & 0xFF00) == 0x0300);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::FRAME_DEADLINE_MISSED) & 0xFF00) ==
+                0x0300);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::CONSECUTIVE_DEADLINE_MISSES) &
+                 0xFF00) == 0x0300);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::TIMESTAMP_NON_MONOTONIC) &
+                 0xFF00) == 0x0300);
 
     // System faults (0x04xx)
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::WATCHDOG_FEED_FAILED) & 0xFF00) == 0x0400);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::MEMORY_LOCK_FAILED) & 0xFF00) == 0x0400);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::SCHEDULING_POLICY_FAILED) & 0xFF00) == 0x0400);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::WATCHDOG_FEED_FAILED) & 0xFF00) ==
+                0x0400);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::MEMORY_LOCK_FAILED) & 0xFF00) ==
+                0x0400);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::SCHEDULING_POLICY_FAILED) &
+                 0xFF00) == 0x0400);
 
     // Communication faults (0x05xx)
     ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::I2C_TIMEOUT) & 0xFF00) == 0x0500);
     ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::I2C_NACK) & 0xFF00) == 0x0500);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::CAMERA_TIMEOUT) & 0xFF00) == 0x0500);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::CAMERA_TIMEOUT) & 0xFF00) ==
+                0x0500);
 
     // Safety system faults (0x06xx)
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::SAFETY_COMPARATOR_MISMATCH) & 0xFF00) == 0x0600);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::INTERLOCK_FAULT) & 0xFF00) == 0x0600);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::RANGE_DATA_STALE) & 0xFF00) == 0x0600);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::RANGE_DATA_INVALID) & 0xFF00) == 0x0600);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::SAFETY_COMPARATOR_MISMATCH) &
+                 0xFF00) == 0x0600);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::INTERLOCK_FAULT) & 0xFF00) ==
+                0x0600);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::RANGE_DATA_STALE) & 0xFF00) ==
+                0x0600);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::RANGE_DATA_INVALID) & 0xFF00) ==
+                0x0600);
 
     // Emergency faults (0x07xx)
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::EMERGENCY_STOP_REQUESTED) & 0xFF00) == 0x0700);
-    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::CRITICAL_TEMPERATURE) & 0xFF00) == 0x0700);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::EMERGENCY_STOP_REQUESTED) &
+                 0xFF00) == 0x0700);
+    ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::CRITICAL_TEMPERATURE) & 0xFF00) ==
+                0x0700);
     ASSERT_TRUE((static_cast<uint16_t>(aurore::SafetyFaultCode::POWER_FAULT) & 0xFF00) == 0x0700);
 
     std::cout << "    Fault code categories verified: 7 categories" << std::endl;
@@ -364,9 +391,9 @@ TEST(test_stage_latency_stats_record_latency) {
     aurore::StageLatencyStats stats;
 
     // Record multiple latencies
-    stats.record_latency(1000000);   // 1ms
-    stats.record_latency(2000000);   // 2ms
-    stats.record_latency(3000000);   // 3ms
+    stats.record_latency(1000000);  // 1ms
+    stats.record_latency(2000000);  // 2ms
+    stats.record_latency(3000000);  // 3ms
 
     ASSERT_EQ(stats.last_latency_ns.load(), 3000000);
     ASSERT_EQ(stats.max_latency_ns.load(), 3000000);
@@ -442,9 +469,9 @@ TEST(test_safety_monitor_record_stage_latency) {
     monitor.init();
 
     // Record latencies for each stage
-    monitor.record_stage_latency(aurore::PipelineStage::VISION, 5000000);    // 5ms
-    monitor.record_stage_latency(aurore::PipelineStage::TRACK, 3000000);     // 3ms
-    monitor.record_stage_latency(aurore::PipelineStage::ACTUATION, 2000000); // 2ms
+    monitor.record_stage_latency(aurore::PipelineStage::VISION, 5000000);     // 5ms
+    monitor.record_stage_latency(aurore::PipelineStage::TRACK, 3000000);      // 3ms
+    monitor.record_stage_latency(aurore::PipelineStage::ACTUATION, 2000000);  // 2ms
 
     // Verify stats recorded
     const auto& vision_stats = monitor.get_stage_stats(aurore::PipelineStage::VISION);
@@ -495,11 +522,10 @@ TEST(test_safety_monitor_recovery_callback) {
         [](const char* stage_name, uint64_t stall_count, void* user_data) {
             auto* count = static_cast<std::atomic<int>*>(user_data);
             count->fetch_add(1);
-            (void)stage_name;  // Unused in test
+            (void)stage_name;   // Unused in test
             (void)stall_count;  // Unused in test
         },
-        &recovery_count
-    );
+        &recovery_count);
 
     // Trigger 3 consecutive stalls
     for (int i = 0; i < 3; i++) {

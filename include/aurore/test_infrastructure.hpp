@@ -4,10 +4,10 @@
 #include <atomic>
 #include <cstdint>
 #include <deque>
+#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
-#include <map>
 
 namespace aurore {
 namespace test {
@@ -17,7 +17,7 @@ namespace test {
 // ============================================================================
 
 class StackTracker {
-public:
+   public:
     struct StackStats {
         uint64_t current_usage_bytes = 0;
         uint64_t high_water_bytes = 0;
@@ -31,7 +31,7 @@ public:
     StackStats get_stats() const;
     bool check_safety_threshold(uint64_t safety_margin_kb) const;
 
-private:
+   private:
     uint64_t max_stack_size_bytes_;
     mutable uint64_t high_water_bytes_;
 };
@@ -41,7 +41,7 @@ private:
 // ============================================================================
 
 class HeapTracker {
-public:
+   public:
     struct HeapStats {
         uint64_t allocation_count = 0;
         uint64_t deallocation_count = 0;
@@ -62,7 +62,7 @@ public:
     bool check_growth_envelope() const;
     void reset();
 
-private:
+   private:
     std::atomic<uint64_t> allocation_count_;
     std::atomic<uint64_t> deallocation_count_;
     std::atomic<size_t> current_allocated_bytes_;
@@ -77,15 +77,10 @@ private:
 // DmaHealthMonitor
 // ============================================================================
 
-enum class DmaState {
-    Idle,
-    Active,
-    Error,
-    Recovering
-};
+enum class DmaState { Idle, Active, Error, Recovering };
 
 class DmaHealthMonitor {
-public:
+   public:
     struct DmaStats {
         DmaState state = DmaState::Idle;
         uint64_t transfer_count = 0;
@@ -103,7 +98,7 @@ public:
     DmaStats get_stats() const;
     bool check_alignment(size_t alignment) const;
 
-private:
+   private:
     DmaState state_;
     uint64_t transfer_count_;
     uint64_t error_count_;
@@ -116,14 +111,10 @@ private:
 // ThermalHealthMonitor
 // ============================================================================
 
-enum class ThrottleState {
-    Nominal,
-    Throttling,
-    Critical
-};
+enum class ThrottleState { Nominal, Throttling, Critical };
 
 class ThermalHealthMonitor {
-public:
+   public:
     struct ThermalStats {
         double temperature_celsius = 0.0;
         ThrottleState throttle_state = ThrottleState::Nominal;
@@ -140,7 +131,7 @@ public:
     bool simulate_throttling_transition();
     bool verify_timing_contract() const;
 
-private:
+   private:
     double critical_threshold_celsius_;
     ThrottleState current_state_;
     uint64_t throttle_count_;
@@ -152,15 +143,10 @@ private:
 // ResourceMonitor
 // ============================================================================
 
-enum class ResourceType {
-    Handles,
-    Descriptors,
-    DmaChannels,
-    MemoryBlocks
-};
+enum class ResourceType { Handles, Descriptors, DmaChannels, MemoryBlocks };
 
 class ResourceMonitor {
-public:
+   public:
     struct ResourceStats {
         ResourceType type = ResourceType::Handles;
         uint32_t limit = 0;
@@ -175,7 +161,7 @@ public:
     ResourceStats get_stats() const;
     bool is_exhausted() const;
 
-private:
+   private:
     ResourceType type_;
     uint32_t limit_;
     std::atomic<uint32_t> active_count_;
@@ -186,15 +172,10 @@ private:
 // QueueStressTest
 // ============================================================================
 
-enum class BackpressurePolicy {
-    DropOldest,
-    DropNewest,
-    BlockProducer,
-    ReturnFalse
-};
+enum class BackpressurePolicy { DropOldest, DropNewest, BlockProducer, ReturnFalse };
 
 class QueueStressTest {
-public:
+   public:
     struct QueueMetrics {
         uint64_t total_produced = 0;
         uint64_t total_consumed = 0;
@@ -210,7 +191,7 @@ public:
     QueueMetrics get_metrics() const;
     void reset_metrics();
 
-private:
+   private:
     size_t capacity_;
     BackpressurePolicy policy_;
     std::atomic<size_t> depth_;
@@ -224,17 +205,10 @@ private:
 // ConcurrencyPathologyDetector
 // ============================================================================
 
-enum class PathologyType {
-    None,
-    Deadlock,
-    Livelock,
-    Starvation,
-    PriorityInversion,
-    DataCoherency
-};
+enum class PathologyType { None, Deadlock, Livelock, Starvation, PriorityInversion, DataCoherency };
 
 class ConcurrencyPathologyDetector {
-public:
+   public:
     struct PathologyReport {
         PathologyType type = PathologyType::None;
         std::vector<void*> involved_locks;
@@ -248,7 +222,7 @@ public:
     void release(void* lock_id);
     PathologyReport check();
 
-private:
+   private:
     std::atomic<bool> instrumentation_enabled_;
     std::vector<void*> lock_chain_;
     uint64_t lockwait_time_ns_;
@@ -258,15 +232,10 @@ private:
 // TimestampValidator
 // ============================================================================
 
-enum class ViolationType {
-    None,
-    NonMonotonic,
-    Discontinuity,
-    Rollover
-};
+enum class ViolationType { None, NonMonotonic, Discontinuity, Rollover };
 
 class TimestampValidator {
-public:
+   public:
     struct ValidationReport {
         ViolationType type = ViolationType::None;
         uint64_t total_samples = 0;
@@ -276,12 +245,12 @@ public:
         int64_t diff_ns = 0;
     };
 
-    TimestampValidator(uint64_t max_acceptable_jitter_ns = 100000); // 100 microseconds
+    TimestampValidator(uint64_t max_acceptable_jitter_ns = 100000);  // 100 microseconds
     void record_timestamp(uint64_t timestamp_ns);
     ValidationReport validate() const;
     void reset();
 
-private:
+   private:
     uint64_t max_acceptable_jitter_ns_;
     std::deque<uint64_t> timestamps_;
     std::atomic<uint64_t> violation_count_;
@@ -292,7 +261,7 @@ private:
 // ============================================================================
 
 class NumericRobustnessTester {
-public:
+   public:
     struct NumericTestResult {
         bool nan_propagated = false;
         bool inf_propagated = false;
@@ -319,7 +288,7 @@ public:
 // ============================================================================
 
 class HostileInputInjector {
-public:
+   public:
     struct Packet {
         void* data = nullptr;
         size_t size = 0;
@@ -339,15 +308,10 @@ public:
 // ResetScenarioTester
 // ============================================================================
 
-enum class ResetType {
-    Warm,
-    Cold,
-    BrownOut,
-    SubsystemPartial
-};
+enum class ResetType { Warm, Cold, BrownOut, SubsystemPartial };
 
 class ResetScenarioTester {
-public:
+   public:
     struct RecoveryMetrics {
         ResetType type = ResetType::Warm;
         uint64_t recovery_time_ns = 0;
@@ -364,7 +328,7 @@ public:
 // ============================================================================
 
 class ConfigReloadTester {
-public:
+   public:
     struct ConfigInfo {
         uint32_t version = 0;
         bool valid = false;
@@ -377,7 +341,7 @@ public:
     bool rollback_to_last_known_good();
     ConfigInfo get_active_config() const;
 
-private:
+   private:
     ConfigInfo active_config_;
     ConfigInfo last_known_good_;
 };
@@ -387,7 +351,7 @@ private:
 // ============================================================================
 
 class LogTester {
-public:
+   public:
     struct CompletenessReport {
         uint64_t events_logged = 0;
         double completeness_ratio = 0.0;
@@ -404,7 +368,7 @@ public:
     CompletenessReport get_completeness_report() const;
     OrderReport get_order_report() const;
 
-private:
+   private:
     mutable std::mutex mutex_;
     std::deque<uint64_t> timestamps_;
     std::deque<int> event_ids_;
@@ -415,12 +379,12 @@ private:
 // ============================================================================
 
 class OffsetTracker {
-public:
+   public:
     OffsetTracker(uint64_t reference_ns = 0);
     void record_sample();
     uint64_t get_offset_ns() const;
 
-private:
+   private:
     uint64_t reference_ns_;
     std::deque<uint64_t> offsets_;
 };
@@ -430,7 +394,7 @@ private:
 // ============================================================================
 
 class FaultTimeline {
-public:
+   public:
     struct FaultEntry {
         uint8_t fault_code = 0;
         uint64_t timestamp_ns = 0;
@@ -440,7 +404,7 @@ public:
     void record_fault(uint8_t fault, uint64_t timestamp_ns);
     std::vector<FaultEntry> get_fault_sequence() const;
 
-private:
+   private:
     std::vector<FaultEntry> faults_;
 };
 
@@ -449,7 +413,7 @@ private:
 // ============================================================================
 
 class CrashDumpTester {
-public:
+   public:
     CrashDumpTester();
     void record_state(uint32_t thread_id, const char* state_name, const char* state_value);
     void set_state(const void* data, size_t size);
@@ -458,7 +422,7 @@ public:
     bool verify_order() const;
     size_t get_state_size() const;
 
-private:
+   private:
     std::vector<uint64_t> timestamps_;
     std::vector<uint8_t> dump_data_;
 };
@@ -467,27 +431,12 @@ private:
 // FaultInjector
 // ============================================================================
 
-enum class FaultTarget {
-    None,
-    Camera,
-    TPU,
-    Gimbal,
-    Network,
-    Memory,
-    Power,
-    SoftwareLogic
-};
+enum class FaultTarget { None, Camera, TPU, Gimbal, Network, Memory, Power, SoftwareLogic };
 
-enum class FaultType {
-    Transient,
-    Permanent,
-    Intermittent,
-    CorruptData,
-    HighLatency
-};
+enum class FaultType { Transient, Permanent, Intermittent, CorruptData, HighLatency };
 
 class FaultInjector {
-public:
+   public:
     static void inject_fault(FaultTarget target, FaultType type, uint64_t duration_ns);
     static void clear_faults();
     static bool validate_isolation(FaultTarget triggered, FaultTarget affected);
@@ -505,11 +454,11 @@ enum class TestTier {
     Tier2_RealtimeTemporal = 2,
     Tier3_StressSoak = 3,
     Tier4_HIL = 4,
-    Count // Keep this last for enum size
+    Count  // Keep this last for enum size
 };
 
 class TestResultAggregator {
-public:
+   public:
     struct TierResult {
         TestTier tier;
         uint64_t tests_run;
@@ -526,7 +475,7 @@ public:
     static void print_summary();
     static void reset();
 
-private:
+   private:
     static std::vector<TierResult> tier_results_;
 };
 
@@ -535,18 +484,18 @@ private:
 // ============================================================================
 
 class TestEnvironment {
-public:
+   public:
     static void init(uint64_t max_stack_size_kb, size_t heap_baseline_envelope_bytes);
     static void reset_trackers();
     static StackTracker& get_stack_tracker();
     static HeapTracker& get_heap_tracker();
 
-private:
+   private:
     static StackTracker* stack_tracker_instance_;
     static HeapTracker* heap_tracker_instance_;
 };
 
-} // namespace test
-} // namespace aurore
+}  // namespace test
+}  // namespace aurore
 
-#endif // AURORE_TEST_INFRASTRUCTURE_HPP
+#endif  // AURORE_TEST_INFRASTRUCTURE_HPP

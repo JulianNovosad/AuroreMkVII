@@ -17,16 +17,16 @@
  */
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <thread>
 #include <vector>
-#include <chrono>
 
-#include "aurore/timing.hpp"
 #include "aurore/safety_monitor.hpp"
 #include "aurore/test_infrastructure.hpp"
+#include "aurore/timing.hpp"
 
 namespace {
 
@@ -35,26 +35,48 @@ std::atomic<size_t> g_tests_passed(0);
 std::atomic<size_t> g_tests_failed(0);
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::cout << "  PASS: " << #name << std::endl; \
-    } catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                          \
+    do {                                                                        \
+        g_tests_run.fetch_add(1);                                               \
+        try {                                                                   \
+            name();                                                             \
+            g_tests_passed.fetch_add(1);                                        \
+            std::cout << "  PASS: " << #name << std::endl;                      \
+        } catch (const std::exception& e) {                                     \
+            g_tests_failed.fetch_add(1);                                        \
+            std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
+        }                                                                       \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_GT(a, b) do { if ((a) <= (b)) throw std::runtime_error("Assertion failed: " #a " > " #b); } while(0)
-#define ASSERT_LT(a, b) do { if ((a) >= (b)) throw std::runtime_error("Assertion failed: " #a " < " #b); } while(0)
-#define ASSERT_NE(a, b) do { if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_GE(a, b) do { if ((a) < (b)) throw std::runtime_error("Assertion failed: " #a " >= " #b); } while(0)
-#define ASSERT_LE(a, b) do { if ((a) > (b)) throw std::runtime_error("Assertion failed: " #a " <= " #b); } while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_GT(a, b)                                                             \
+    do {                                                                            \
+        if ((a) <= (b)) throw std::runtime_error("Assertion failed: " #a " > " #b); \
+    } while (0)
+#define ASSERT_LT(a, b)                                                             \
+    do {                                                                            \
+        if ((a) >= (b)) throw std::runtime_error("Assertion failed: " #a " < " #b); \
+    } while (0)
+#define ASSERT_NE(a, b)                                                              \
+    do {                                                                             \
+        if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_GE(a, b)                                                             \
+    do {                                                                            \
+        if ((a) < (b)) throw std::runtime_error("Assertion failed: " #a " >= " #b); \
+    } while (0)
+#define ASSERT_LE(a, b)                                                             \
+    do {                                                                            \
+        if ((a) > (b)) throw std::runtime_error("Assertion failed: " #a " <= " #b); \
+    } while (0)
 
 constexpr uint64_t kFramePeriodNs = 8333333;
 constexpr uint64_t k120HzPeriodNs = 8333333;
@@ -100,7 +122,8 @@ TEST(test_timestamp_validator_monotonic) {
     aurore::test::TimestampValidator validator(1000000);
 
     for (int i = 0; i < 100; i++) {
-        validator.record_timestamp(static_cast<uint64_t>(1000000) + static_cast<uint64_t>(i) * 1000);
+        validator.record_timestamp(static_cast<uint64_t>(1000000) +
+                                   static_cast<uint64_t>(i) * 1000);
     }
 
     auto report = validator.validate();
@@ -166,7 +189,8 @@ TEST(test_phase_alignment_vision_to_actuation) {
     auto vision_wakeup = vision_timing.next_wakeup_ns();
     auto actuation_wakeup = actuation_timing.next_wakeup_ns();
 
-    int64_t phase_diff = static_cast<int64_t>(actuation_wakeup) - static_cast<int64_t>(vision_wakeup);
+    int64_t phase_diff =
+        static_cast<int64_t>(actuation_wakeup) - static_cast<int64_t>(vision_wakeup);
 
     ASSERT_GE(phase_diff, 3500000);
     ASSERT_LE(phase_diff, 4500000);

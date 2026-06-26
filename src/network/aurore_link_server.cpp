@@ -7,10 +7,9 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include <fstream>
-
 #include <algorithm>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <unordered_map>
 
@@ -28,9 +27,9 @@ static constexpr uint32_t kSequenceGapReauthThreshold = 100;  // Gap > 100: re-a
 static constexpr uint32_t kSequenceGapFaultThreshold = 1000;  // Gap > 1000: security fault
 
 // Spec: AM7-L3-SEC-001 - NACK error codes for HMAC authentication failures
-static constexpr uint8_t kNackErrInvalidHmac = 0x01;      // HMAC verification failed
-static constexpr uint8_t kNackErrReplayDetected = 0x02;   // Replay attack detected
-static constexpr uint8_t kNackErrSequenceGap = 0x03;      // Sequence gap too large
+static constexpr uint8_t kNackErrInvalidHmac = 0x01;     // HMAC verification failed
+static constexpr uint8_t kNackErrReplayDetected = 0x02;  // Replay attack detected
+static constexpr uint8_t kNackErrSequenceGap = 0x03;     // Sequence gap too large
 
 AuroreLinkServer::AuroreLinkServer(const AuroreLinkConfig& cfg) : cfg_(cfg) {}
 
@@ -70,7 +69,7 @@ bool AuroreLinkServer::start() {
     video_accept_thread_ = std::thread(&AuroreLinkServer::video_accept_loop, this);
     command_accept_thread_ = std::thread(&AuroreLinkServer::command_accept_loop, this);
     heartbeat_monitor_thread_ = std::thread(&AuroreLinkServer::heartbeat_monitor_loop, this);
-    link_monitor_thread_      = std::thread(&AuroreLinkServer::link_monitor_loop, this);
+    link_monitor_thread_ = std::thread(&AuroreLinkServer::link_monitor_loop, this);
     std::cout << "AuroreLink listening: telemetry=" << cfg_.telemetry_port
               << " video=" << cfg_.video_port << " command=" << cfg_.command_port << "\n";
     return true;
@@ -162,9 +161,7 @@ void AuroreLinkServer::telemetry_accept_loop() {
         int client = ::accept(telemetry_fd_, nullptr, nullptr);
         if (client < 0) {
             if (errno == EAGAIN || errno == EINTR) {
-                struct timespec ts {
-                    0, 10000000
-                };  // 10ms
+                struct timespec ts{0, 10000000};  // 10ms
                 clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, nullptr);
                 continue;
             }
@@ -186,9 +183,7 @@ void AuroreLinkServer::video_accept_loop() {
         int client = ::accept(video_fd_, nullptr, nullptr);
         if (client < 0) {
             if (errno == EAGAIN || errno == EINTR) {
-                struct timespec ts {
-                    0, 10000000
-                };  // 10ms
+                struct timespec ts{0, 10000000};  // 10ms
                 clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, nullptr);
                 continue;
             }
@@ -210,9 +205,7 @@ void AuroreLinkServer::command_accept_loop() {
         int client = ::accept(command_fd_, nullptr, nullptr);
         if (client < 0) {
             if (errno == EAGAIN || errno == EINTR) {
-                struct timespec ts {
-                    0, 10000000
-                };
+                struct timespec ts{0, 10000000};
                 clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, nullptr);
                 continue;
             }
@@ -288,19 +281,21 @@ void AuroreLinkServer::command_accept_loop() {
                     if (msg.header.message_id !=
                         static_cast<uint16_t>(LinkMsgId::kEmergencyInhibit)) {
                         // Verification failure -> send NACK and log event
-                        if (!security::verify_hmac_sha256_raw(
-                                cfg_.hmac_key, &msg, sizeof(LinkInputHeader) + 32, msg.hmac.data())) {
-                            std::cerr << "AuroreLink: HMAC verification failed for msg 0x" << std::hex
-                                      << msg.header.message_id << " seq=" << std::dec
+                        if (!security::verify_hmac_sha256_raw(cfg_.hmac_key, &msg,
+                                                              sizeof(LinkInputHeader) + 32,
+                                                              msg.hmac.data())) {
+                            std::cerr << "AuroreLink: HMAC verification failed for msg 0x"
+                                      << std::hex << msg.header.message_id << " seq=" << std::dec
                                       << msg.header.sequence << std::endl;
-                            
+
                             // Spec: AM7-L3-SEC-001 - Log security event
                             if (on_security_event_) {
                                 on_security_event_("HMAC_VERIFY_FAIL", msg.header.sequence);
                             }
-                            
+
                             // Spec: ICD-005 - Return NACK for invalid HMAC
-                            send_nack(client, msg.header.sequence, msg.header.message_id, kNackErrInvalidHmac);
+                            send_nack(client, msg.header.sequence, msg.header.message_id,
+                                      kNackErrInvalidHmac);
                             continue;
                         }
                     }
@@ -321,14 +316,15 @@ void AuroreLinkServer::command_accept_loop() {
                     if (!security::verify_sequence_number(received_seq, expected_seq)) {
                         std::cerr << "AuroreLink: Replay attack detected - seq " << received_seq
                                   << " < expected " << expected_seq << "\n";
-                        
+
                         // Spec: AM7-L3-SEC-001 - Log security event for replay attack
                         if (on_security_event_) {
                             on_security_event_("REPLAY_ATTACK", received_seq);
                         }
-                        
+
                         // Spec: ICD-005 - Return NACK for replay attack
-                        send_nack(client, msg.header.sequence, msg.header.message_id, kNackErrReplayDetected);
+                        send_nack(client, msg.header.sequence, msg.header.message_id,
+                                  kNackErrReplayDetected);
                         continue;  // Discard replayed message
                     }
 
@@ -344,7 +340,7 @@ void AuroreLinkServer::command_accept_loop() {
                                 << (received_seq > old_seq ? received_seq - old_seq
                                                            : (1ULL << 32) - old_seq + received_seq)
                                 << " exceeds threshold " << kSequenceGapFaultThreshold << "\n";
-                            
+
                             // Spec: AM7-L3-SEC-001 - Log security fault event
                             if (on_security_event_) {
                                 on_security_event_("SEQ_GAP_FAULT", received_seq);
@@ -358,14 +354,15 @@ void AuroreLinkServer::command_accept_loop() {
                                 << (received_seq > old_seq ? received_seq - old_seq
                                                            : (1ULL << 32) - old_seq + received_seq)
                                 << " exceeds threshold " << kSequenceGapReauthThreshold << "\n";
-                            
+
                             // Spec: AM7-L3-SEC-001 - Log re-auth required event
                             if (on_security_event_) {
                                 on_security_event_("REAUTH_REQUIRED", received_seq);
                             }
-                            
+
                             // Spec: ICD-005 - Return NACK for sequence gap
-                            send_nack(client, msg.header.sequence, msg.header.message_id, kNackErrSequenceGap);
+                            send_nack(client, msg.header.sequence, msg.header.message_id,
+                                      kNackErrSequenceGap);
                             continue;
                         }
                     }
@@ -426,8 +423,8 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
                 constexpr float kMaxRateDps = 60.0f;
                 if (std::abs(az_dps) > kMaxRateDps || std::abs(el_dps) > kMaxRateDps) {
                     std::cerr << "AuroreLink: WARN gimbal rate out of range"
-                              << " az=" << az_dps << " el=" << el_dps << " dps (max "
-                              << kMaxRateDps << " dps) — clamped by controller\n";
+                              << " az=" << az_dps << " el=" << el_dps << " dps (max " << kMaxRateDps
+                              << " dps) — clamped by controller\n";
                 }
                 on_freecam_(az_dps, el_dps, 0.0f, msg.header.sequence);
             }
@@ -483,9 +480,9 @@ void AuroreLinkServer::handle_binary_command(int client_fd, const LinkInputMessa
         }
         default:
             // AM7-L3-IF-002: Log unknown/unsupported message IDs as warnings
-            std::cerr << "AuroreLink: WARN unknown message_id=0x"
-                      << std::hex << msg.header.message_id << std::dec
-                      << " seq=" << msg.header.sequence << " — ignored\n";
+            std::cerr << "AuroreLink: WARN unknown message_id=0x" << std::hex
+                      << msg.header.message_id << std::dec << " seq=" << msg.header.sequence
+                      << " — ignored\n";
             break;
     }
 }
@@ -495,7 +492,7 @@ void AuroreLinkServer::broadcast_status(const LinkPayloadSystemState& state) {
     msg.header.sync_word = 0xA7060006;  // AURORE06 mnemonic -> 0xA7060006
     msg.header.message_id = static_cast<uint16_t>(LinkMsgId::kSystemState);
     msg.header.timestamp_ns = aurore::get_timestamp();
-    msg.status = 0;               // ACK
+    msg.status = 0;  // ACK
     std::memcpy(msg.payload.data(), &state, sizeof(state));
 
     if (!cfg_.hmac_key.empty()) {
@@ -524,17 +521,19 @@ void AuroreLinkServer::set_emergency_stop_callback(EmergencyStopCallback cb) {
 }
 
 // Spec: AM7-L3-SEC-001 - Send NACK response for failed authentication
-void AuroreLinkServer::send_nack(int client_fd, uint32_t sequence, uint16_t message_id, uint8_t error_code) {
+void AuroreLinkServer::send_nack(int client_fd, uint32_t sequence, uint16_t message_id,
+                                 uint8_t error_code) {
     (void)message_id;  // Reserved for future use (e.g., to specify which message failed)
-    
+
     LinkOutputMessage msg{};
     msg.header.sync_word = 0xA7060006;  // AURORE06
-    msg.header.message_id = static_cast<uint16_t>(LinkMsgId::kModeNack);  // Use ModeNack for error response
+    msg.header.message_id =
+        static_cast<uint16_t>(LinkMsgId::kModeNack);  // Use ModeNack for error response
     msg.header.sequence = sequence;
     msg.header.timestamp_ns = aurore::get_timestamp();
     msg.status = 1;  // NACK
     msg.error_code = error_code;
-    
+
     // HMAC generation for outgoing response
     // Spec: AM7-L2-SEC-001 - HMAC-SHA256 with 256-bit keys
     if (!cfg_.hmac_key.empty()) {
@@ -562,15 +561,13 @@ void AuroreLinkServer::set_target_reject_callback(TargetRejectCallback cb) {
     on_target_reject_ = std::move(cb);
 }
 
-void AuroreLinkServer::set_zoom_callback(ZoomCallback cb) {
-    on_zoom_ = std::move(cb);
-}
+void AuroreLinkServer::set_zoom_callback(ZoomCallback cb) { on_zoom_ = std::move(cb); }
 
 void AuroreLinkServer::heartbeat_monitor_loop() {
     // Heartbeat timeout monitor thread
     // Checks every 100ms for heartbeat timeout (1000ms → IDLE/SAFE)
     constexpr uint64_t kCheckIntervalNs = 100000000ULL;  // 100ms
-    struct timespec sleep_ts {};
+    struct timespec sleep_ts{};
     sleep_ts.tv_nsec = kCheckIntervalNs;
 
     while (running_.load(std::memory_order_acquire)) {
@@ -603,8 +600,7 @@ void AuroreLinkServer::heartbeat_monitor_loop() {
  * IDLE/SAFE transition within one poll interval (≤ 80ms ≤ 100ms spec).
  */
 void AuroreLinkServer::link_monitor_loop() {
-    const std::string operstate_path =
-        "/sys/class/net/" + cfg_.ethernet_interface + "/operstate";
+    const std::string operstate_path = "/sys/class/net/" + cfg_.ethernet_interface + "/operstate";
 
     struct timespec sleep_ts{};
     sleep_ts.tv_nsec = static_cast<long>(kLinkPollIntervalNs);
@@ -622,8 +618,8 @@ void AuroreLinkServer::link_monitor_loop() {
         std::string state;
         operstate >> state;
 
-        const bool link_down = (state == "down" || state == "lowerlayerdown" ||
-                                state == "notpresent");
+        const bool link_down =
+            (state == "down" || state == "lowerlayerdown" || state == "notpresent");
 
         if (link_down && !was_down) {
             std::cerr << "AuroreLink: Ethernet link " << cfg_.ethernet_interface

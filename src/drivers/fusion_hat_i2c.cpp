@@ -1,16 +1,18 @@
-#include "aurore/fusion_hat.hpp"
-#include <algorithm>
-#include <cerrno>
-#include <cmath>
-#include <cstring>
 #include <fcntl.h>
-#include <iostream>
 #include <linux/i2c-dev.h>
 #include <sys/ioctl.h>
-#include <thread>
-#include <unistd.h>
-#include <chrono>
 #include <time.h>
+#include <unistd.h>
+
+#include <algorithm>
+#include <cerrno>
+#include <chrono>
+#include <cmath>
+#include <cstring>
+#include <iostream>
+#include <thread>
+
+#include "aurore/fusion_hat.hpp"
 
 namespace aurore {
 
@@ -27,8 +29,7 @@ FusionHat::~FusionHat() {
 bool FusionHat::init(const std::string& i2c_device) {
     i2c_fd_ = ::open(i2c_device.c_str(), O_RDWR);
     if (i2c_fd_ < 0) {
-        std::cerr << "FusionHat: failed to open " << i2c_device << ": "
-                  << strerror(errno) << "\n";
+        std::cerr << "FusionHat: failed to open " << i2c_device << ": " << strerror(errno) << "\n";
         return false;
     }
     if (::ioctl(i2c_fd_, I2C_SLAVE, kFusionHatI2cAddr) < 0) {
@@ -94,7 +95,7 @@ void FusionHat::i2c_worker_thread() {
         if (cmd.is_effector) {
             // Write PWM active
             write_pwm_channel(kEffectorChannel, 2000);
-            
+
             // Use clock_nanosleep for precise timing (PERF-007)
             struct timespec ts{};
             clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -105,7 +106,7 @@ void FusionHat::i2c_worker_thread() {
                 ts.tv_nsec -= 1000000000;
             }
             clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, nullptr);
-            
+
             // Write PWM safe
             write_pwm_channel(kEffectorChannel, 1000);
         } else {
@@ -128,9 +129,7 @@ void FusionHat::deauthenticate() {
 }
 
 // SEC-007: Static validation helpers
-bool FusionHat::validate_channel(uint8_t channel) {
-    return channel <= kEffectorChannel;
-}
+bool FusionHat::validate_channel(uint8_t channel) { return channel <= kEffectorChannel; }
 
 bool FusionHat::validate_angle(float angle_deg) {
     return (angle_deg >= -kAngleMaxDeg && angle_deg <= kAngleMaxDeg);
@@ -268,7 +267,7 @@ I2cCommandStatus FusionHat::trigger_effector(int pulse_ms) {
         cmd.effector_pulse_ms = pulse_ms;
         cmd.channel = kEffectorChannel;
         cmd.pulse_us = 2000;
-        
+
         {
             std::lock_guard<std::mutex> lock(queue_mutex_);
             command_queue_.push(cmd);
@@ -340,11 +339,8 @@ I2cCommandStatus FusionHat::write_pwm_channel(uint8_t channel, uint16_t pulse_us
 
     // Write to I2C
     uint8_t reg = kRegPwmBase + channel * 2;
-    uint8_t buf[3] = {
-        reg,
-        static_cast<uint8_t>(pulse_us & 0xFF),
-        static_cast<uint8_t>((pulse_us >> 8) & 0xFF)
-    };
+    uint8_t buf[3] = {reg, static_cast<uint8_t>(pulse_us & 0xFF),
+                      static_cast<uint8_t>((pulse_us >> 8) & 0xFF)};
 
     ssize_t written = ::write(i2c_fd_, buf, sizeof(buf));
     if (written != static_cast<ssize_t>(sizeof(buf))) {
@@ -363,12 +359,8 @@ void FusionHat::set_current_range_m(float range_m) {
     current_range_m_.store(range_m, std::memory_order_release);
 }
 
-void FusionHat::arm() {
-    armed_.store(true, std::memory_order_release);
-}
+void FusionHat::arm() { armed_.store(true, std::memory_order_release); }
 
-void FusionHat::disarm() {
-    armed_.store(false, std::memory_order_release);
-}
+void FusionHat::disarm() { armed_.store(false, std::memory_order_release); }
 
 }  // namespace aurore

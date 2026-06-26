@@ -8,18 +8,20 @@
  * - Immediate action without HMAC verification
  */
 
-#include "aurore/aurore_link_server.hpp"
-#include "aurore.pb.h"
 #include <arpa/inet.h>
-#include <cassert>
-#include <cstring>
-#include <iostream>
+#include <google/protobuf/stubs/common.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
-#include <thread>
-#include <chrono>
 #include <unistd.h>
-#include <google/protobuf/stubs/common.h>
+
+#include <cassert>
+#include <chrono>
+#include <cstring>
+#include <iostream>
+#include <thread>
+
+#include "aurore.pb.h"
+#include "aurore/aurore_link_server.hpp"
 
 using namespace aurore;
 
@@ -27,22 +29,23 @@ using namespace aurore;
 static int connect_to(uint16_t port) {
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in addr{};
-    addr.sin_family      = AF_INET;
-    addr.sin_port        = htons(port);
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     if (::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-        ::close(fd); return -1;
+        ::close(fd);
+        return -1;
     }
     return fd;
 }
 
 void test_emergency_stop_callback_fires() {
     std::cout << "Running test_emergency_stop_callback_fires...\n";
-    
+
     AuroreLinkConfig cfg;
     cfg.telemetry_port = 19160;
-    cfg.video_port     = 19161;
-    cfg.command_port   = 19162;
+    cfg.video_port = 19161;
+    cfg.command_port = 19162;
     cfg.hmac_key = "test_key";  // Enable HMAC for binary command testing
     AuroreLinkServer server(cfg);
 
@@ -51,7 +54,7 @@ void test_emergency_stop_callback_fires() {
         emergency_fired.store(true, std::memory_order_release);
         std::cout << "  Emergency stop callback fired\n";
     });
-    
+
     assert(server.start());
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
@@ -82,19 +85,18 @@ void test_emergency_stop_callback_fires() {
 
 void test_emergency_stop_no_auth_required() {
     std::cout << "Running test_emergency_stop_no_auth_required...\n";
-    
+
     AuroreLinkConfig cfg;
     cfg.telemetry_port = 19170;
-    cfg.video_port     = 19171;
-    cfg.command_port   = 19172;
+    cfg.video_port = 19171;
+    cfg.command_port = 19172;
     cfg.hmac_key = "test_key_with_auth_enabled";  // HMAC enabled
     AuroreLinkServer server(cfg);
 
     std::atomic<bool> emergency_fired{false};
-    server.set_emergency_stop_callback([&]() {
-        emergency_fired.store(true, std::memory_order_release);
-    });
-    
+    server.set_emergency_stop_callback(
+        [&]() { emergency_fired.store(true, std::memory_order_release); });
+
     assert(server.start());
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
@@ -126,7 +128,7 @@ void test_emergency_stop_no_auth_required() {
 
 void test_emergency_stop_message_id() {
     std::cout << "Running test_emergency_stop_message_id...\n";
-    
+
     // Verify the message ID is correct per ICD-005
     assert(static_cast<uint16_t>(aurore::LinkMsgId::kEmergencyInhibit) == 0x0109);
     std::cout << "  PASS: EMERGENCY_INHIBIT message ID is 0x0109\n";
@@ -134,19 +136,19 @@ void test_emergency_stop_message_id() {
 
 int main() {
     GOOGLE_PROTOBUF_VERIFY_VERSION;
-    
+
     std::cout << "=====================================\n";
     std::cout << "EMERGENCY_INHIBIT Handler Tests\n";
     std::cout << "=====================================\n\n";
-    
+
     test_emergency_stop_message_id();
     test_emergency_stop_callback_fires();
     test_emergency_stop_no_auth_required();
-    
+
     std::cout << "\n=====================================\n";
     std::cout << "All EMERGENCY_INHIBIT tests passed.\n";
     std::cout << "=====================================\n";
-    
+
     google::protobuf::ShutdownProtobufLibrary();
     return 0;
 }

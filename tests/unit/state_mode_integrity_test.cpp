@@ -17,13 +17,13 @@
  */
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <thread>
 #include <vector>
-#include <chrono>
-#include <functional>
 
 #include "aurore/state_machine.hpp"
 #include "aurore/test_infrastructure.hpp"
@@ -35,22 +35,32 @@ std::atomic<size_t> g_tests_passed(0);
 std::atomic<size_t> g_tests_failed(0);
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::cout << "  PASS: " << #name << std::endl; \
-    } catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                          \
+    do {                                                                        \
+        g_tests_run.fetch_add(1);                                               \
+        try {                                                                   \
+            name();                                                             \
+            g_tests_passed.fetch_add(1);                                        \
+            std::cout << "  PASS: " << #name << std::endl;                      \
+        } catch (const std::exception& e) {                                     \
+            g_tests_failed.fetch_add(1);                                        \
+            std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
+        }                                                                       \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_NE(a, b) do { if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " == " #b); } while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_NE(a, b)                                                              \
+    do {                                                                             \
+        if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " == " #b); \
+    } while (0)
 
 constexpr size_t kStateBufferSize = 512;
 
@@ -111,8 +121,7 @@ TEST(test_valid_transition_search_to_tracking) {
     // at most once; after 3 ticks position_valid_ may or may not be set.
     // The state after 10 ticks reflects the actual transition or non-transition:
     // if 3 stable frames occurred → TRACKING; otherwise → SEARCH.
-    ASSERT_TRUE(sm.state() == aurore::FcsState::SEARCH ||
-                sm.state() == aurore::FcsState::TRACKING);
+    ASSERT_TRUE(sm.state() == aurore::FcsState::SEARCH || sm.state() == aurore::FcsState::TRACKING);
 }
 
 TEST(test_valid_transition_tracking_to_armed) {
@@ -192,7 +201,7 @@ TEST(test_valid_transition_search_to_freecam) {
     aurore::StateMachine sm;
     sm.on_init_complete();
     sm.force_state_for_test(aurore::FcsState::SEARCH);  // bypass stable-frame requirement
-    sm.clear_fault_latch_for_test();                     // suppress fault on state change
+    sm.clear_fault_latch_for_test();                    // suppress fault on state change
 
     sm.request_freecam();  // SEARCH -> FREECAM is valid per AM7-L3-MODE-001 table
 
@@ -355,12 +364,10 @@ TEST(test_no_stale_flags_after_reset) {
 
 TEST(test_deterministic_recovery_paths) {
     aurore::test::ResetScenarioTester::RecoveryMetrics m1 =
-        aurore::test::ResetScenarioTester::test_reset(
-            aurore::test::ResetType::Warm, nullptr);
+        aurore::test::ResetScenarioTester::test_reset(aurore::test::ResetType::Warm, nullptr);
 
     aurore::test::ResetScenarioTester::RecoveryMetrics m2 =
-        aurore::test::ResetScenarioTester::test_reset(
-            aurore::test::ResetType::Warm, nullptr);
+        aurore::test::ResetScenarioTester::test_reset(aurore::test::ResetType::Warm, nullptr);
 
     ASSERT_EQ(m1.recovery_time_ns, m2.recovery_time_ns);
     ASSERT_TRUE(m1.deterministic);
@@ -480,7 +487,7 @@ TEST(test_concurrent_state_transitions) {
     t2.join();
 
     ASSERT_TRUE(sm.state() == aurore::FcsState::IDLE_SAFE ||
-                 sm.state() == aurore::FcsState::FREECAM);
+                sm.state() == aurore::FcsState::FREECAM);
 }
 
 TEST(test_state_change_callback) {

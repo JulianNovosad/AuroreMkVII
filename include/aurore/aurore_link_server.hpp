@@ -42,8 +42,8 @@ struct LinkOutputHeader {
 
 struct LinkOutputMessage {
     LinkOutputHeader header;
-    uint8_t status;       ///< 0=ACK, 1=NACK, 2=PENDING
-    uint8_t error_code;   ///< NACK reason code
+    uint8_t status;                   ///< 0=ACK, 1=NACK, 2=PENDING
+    uint8_t error_code;               ///< NACK reason code
     std::array<uint8_t, 28> payload;  ///< Response-specific data
     std::array<uint8_t, 32> hmac;     ///< HMAC-SHA256 (32 bytes)
 };
@@ -84,8 +84,8 @@ struct LinkPayloadModeRequest {
  * @brief ZOOM_COMMAND payload (ICD-005, 0x0103)
  */
 struct LinkPayloadZoomCmd {
-    int8_t  zoom_direction;  ///< -1=out, 0=stop, +1=in
-    uint8_t zoom_rate;       ///< 0-10, max 10% FOV/second
+    int8_t zoom_direction;  ///< -1=out, 0=stop, +1=in
+    uint8_t zoom_rate;      ///< 0-10, max 10% FOV/second
     uint16_t reserved;
     std::array<uint8_t, 28> padding{};
 };
@@ -114,9 +114,9 @@ struct LinkPayloadSystemState {
  * @brief TARGET_SELECT payload (ICD-005, line 571-575)
  */
 struct LinkPayloadTargetSelect {
-    uint16_t cursor_x;      ///< Pixel coordinates, 0-1536
-    uint16_t cursor_y;      ///< Pixel coordinates, 0-864
-    uint8_t confidence;     ///< Operator confidence 0-100
+    uint16_t cursor_x;   ///< Pixel coordinates, 0-1536
+    uint16_t cursor_y;   ///< Pixel coordinates, 0-864
+    uint8_t confidence;  ///< Operator confidence 0-100
     uint8_t reserved[2];
 };
 
@@ -124,7 +124,7 @@ struct LinkPayloadTargetSelect {
  * @brief TARGET_CONFIRM payload (ICD-005, line 577-578)
  */
 struct LinkPayloadTargetConfirm {
-    uint32_t target_id;     ///< Automatic target identifier
+    uint32_t target_id;  ///< Automatic target identifier
     uint8_t reserved[28];
 };
 
@@ -132,8 +132,8 @@ struct LinkPayloadTargetConfirm {
  * @brief TARGET_REJECT payload (ICD-005, line 580-583)
  */
 struct LinkPayloadTargetReject {
-    uint32_t target_id;     ///< Automatic target identifier
-    uint8_t reason;          ///< 0-255 reason code
+    uint32_t target_id;  ///< Automatic target identifier
+    uint8_t reason;      ///< 0-255 reason code
     uint8_t reserved[3];
 };
 #pragma pack(pop)
@@ -150,7 +150,7 @@ struct AuroreLinkConfig {
     uint16_t video_port = 9001;      // Video TCP (MkVII → Link)
     uint16_t command_port = 9002;    // Command TCP (Link → MkVII)
     size_t max_clients = 4;
-    std::string hmac_key = "";       // HMAC-SHA256 key for command authentication
+    std::string hmac_key = "";  // HMAC-SHA256 key for command authentication
     // AM7-L2-SEC-005: session timeout for maintenance (command) interfaces
     uint32_t session_timeout_s = 300;
     // AM7-L3-IF-005: Ethernet interface to monitor for link-down detection
@@ -159,14 +159,17 @@ struct AuroreLinkConfig {
 
 // Callbacks installed by main.cpp:
 using ModeCallback = std::function<void(LinkMode)>;
-using FreecamCallback = std::function<void(float az_deg, float el_deg, float velocity_dps, uint32_t seq_num)>;
+using FreecamCallback =
+    std::function<void(float az_deg, float el_deg, float velocity_dps, uint32_t seq_num)>;
 using ArmCallback = std::function<void(bool authorized)>;
 using HeartbeatTimeoutCallback = std::function<void()>;
 using EmergencyStopCallback = std::function<void()>;
-using TargetSelectCallback = std::function<void(uint16_t cursor_x, uint16_t cursor_y, uint8_t confidence)>;  // Spec: ICD-005
-using TargetConfirmCallback = std::function<void(uint32_t target_id)>;  // Spec: ICD-005
-using TargetRejectCallback = std::function<void(uint32_t target_id, uint8_t reason)>;  // Spec: ICD-005
-using ZoomCallback = std::function<void(int8_t direction, uint8_t rate)>;              // Spec: AM7-L2-IF-004
+using TargetSelectCallback =
+    std::function<void(uint16_t cursor_x, uint16_t cursor_y, uint8_t confidence)>;  // Spec: ICD-005
+using TargetConfirmCallback = std::function<void(uint32_t target_id)>;              // Spec: ICD-005
+using TargetRejectCallback =
+    std::function<void(uint32_t target_id, uint8_t reason)>;               // Spec: ICD-005
+using ZoomCallback = std::function<void(int8_t direction, uint8_t rate)>;  // Spec: AM7-L2-IF-004
 // Spec: AM7-L3-SEC-001 - HMAC security event callback for logging authentication failures
 using SecurityEventCallback = std::function<void(const std::string& event_type, uint32_t sequence)>;
 
@@ -196,11 +199,11 @@ class AuroreLinkServer {
     void set_arm_callback(ArmCallback cb);
     void set_heartbeat_timeout_callback(HeartbeatTimeoutCallback cb);
     void set_emergency_stop_callback(EmergencyStopCallback cb);
-    void set_target_select_callback(TargetSelectCallback cb);   // Spec: ICD-005
-    void set_target_confirm_callback(TargetConfirmCallback cb); // Spec: ICD-005
-    void set_target_reject_callback(TargetRejectCallback cb);   // Spec: ICD-005
+    void set_target_select_callback(TargetSelectCallback cb);    // Spec: ICD-005
+    void set_target_confirm_callback(TargetConfirmCallback cb);  // Spec: ICD-005
+    void set_target_reject_callback(TargetRejectCallback cb);    // Spec: ICD-005
     void set_zoom_callback(ZoomCallback cb);                     // Spec: AM7-L2-IF-004
-    void set_security_event_callback(SecurityEventCallback cb); // Spec: AM7-L3-SEC-001
+    void set_security_event_callback(SecurityEventCallback cb);  // Spec: AM7-L3-SEC-001
 
     size_t client_count() const;
     LinkMode current_mode() const { return mode_.load(std::memory_order_acquire); }
@@ -236,11 +239,11 @@ class AuroreLinkServer {
     ArmCallback on_arm_;
     HeartbeatTimeoutCallback on_heartbeat_timeout_;
     EmergencyStopCallback on_emergency_stop_;
-    TargetSelectCallback on_target_select_;     // Spec: ICD-005
-    TargetConfirmCallback on_target_confirm_;   // Spec: ICD-005
-    TargetRejectCallback on_target_reject_;     // Spec: ICD-005
-    ZoomCallback on_zoom_;                      // Spec: AM7-L2-IF-004
-    SecurityEventCallback on_security_event_;   // Spec: AM7-L3-SEC-001
+    TargetSelectCallback on_target_select_;    // Spec: ICD-005
+    TargetConfirmCallback on_target_confirm_;  // Spec: ICD-005
+    TargetRejectCallback on_target_reject_;    // Spec: ICD-005
+    ZoomCallback on_zoom_;                     // Spec: AM7-L2-IF-004
+    SecurityEventCallback on_security_event_;  // Spec: AM7-L3-SEC-001
 
     // Spec: AM7-L3-SEC-001 - Send NACK for failed HMAC verification
     void send_nack(int client_fd, uint32_t sequence, uint16_t message_id, uint8_t error_code);

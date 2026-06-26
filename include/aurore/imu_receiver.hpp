@@ -13,17 +13,17 @@ namespace aurore {
 
 /**
  * @brief IMU sensor sample from SensaGram app
- * 
+ *
  * Spec: AM7-L2-IF-009, ICD-008
  * Source: Android phone (Samsung A54) running SensaGram
  * Protocol: UDP port 7070, JSON format
  */
 struct ImuSample {
-    uint64_t sensor_timestamp_ns{0};    ///< Android SensorEvent.timestamp
-    uint64_t receipt_timestamp_ns{0};   ///< Pi 5 CLOCK_MONOTONIC_RAW on receipt
-    std::string sensor_type;            ///< "android.sensor.accelerometer", etc.
+    uint64_t sensor_timestamp_ns{0};                  ///< Android SensorEvent.timestamp
+    uint64_t receipt_timestamp_ns{0};                 ///< Pi 5 CLOCK_MONOTONIC_RAW on receipt
+    std::string sensor_type;                          ///< "android.sensor.accelerometer", etc.
     std::array<float, 4> values{0.f, 0.f, 0.f, 0.f};  ///< Sensor values (up to 4)
-    bool valid{false};                  ///< Sample validity flag
+    bool valid{false};                                ///< Sample validity flag
 };
 
 /**
@@ -54,9 +54,9 @@ struct ImuData {
     bool gyro_valid{false};
 
     // Device orientation (degrees)
-    float azimuth_deg{0.f};   ///< 0-360
-    float pitch_deg{0.f};     ///< -180 to 180
-    float roll_deg{0.f};      ///< -180 to 180
+    float azimuth_deg{0.f};  ///< 0-360
+    float pitch_deg{0.f};    ///< -180 to 180
+    float roll_deg{0.f};     ///< -180 to 180
     bool orientation_valid{false};
 
     // Quaternion orientation (w, x, y, z)
@@ -75,14 +75,14 @@ struct ImuData {
 
 /**
  * @brief Configuration for IMU receiver
- * 
+ *
  * Spec: AM7-L2-IF-009
  */
 struct ImuReceiverConfig {
-    std::string bind_address = "0.0.0.0";  ///< Listen on all interfaces (required for USB tether)
-    uint16_t udp_port = 7070;                 ///< UDP port for IMU data
-    size_t max_queue_size = 100;              ///< Max samples to buffer
-    uint64_t max_sample_age_ns = 100000000;   ///< 100ms max age
+    std::string bind_address = "0.0.0.0";    ///< Listen on all interfaces (required for USB tether)
+    uint16_t udp_port = 7070;                ///< UDP port for IMU data
+    size_t max_queue_size = 100;             ///< Max samples to buffer
+    uint64_t max_sample_age_ns = 100000000;  ///< 100ms max age
     bool enable_accelerometer = true;
     bool enable_gyroscope = true;
     bool enable_device_orientation = true;
@@ -91,23 +91,23 @@ struct ImuReceiverConfig {
 
 /**
  * @brief UDP receiver for SensaGram IMU data
- * 
+ *
  * Receives JSON-formatted IMU samples from Android phone running SensaGram app.
  * Parses accelerometer, gyroscope, device_orientation, and orientation sensors.
- * 
+ *
  * Spec: AM7-L2-IF-009, AM7-L2-IMU-001, ICD-008
- * 
+ *
  * Usage:
  * @code
  * ImuReceiverConfig config;
  * config.udp_port = 7070;
- * 
+ *
  * ImuReceiver receiver(config);
  * if (!receiver.init()) {
  *     // Handle error
  * }
  * receiver.start();
- * 
+ *
  * // In control loop:
  * ImuData data = receiver.get_latest_data();
  * if (data.gyro_valid) {

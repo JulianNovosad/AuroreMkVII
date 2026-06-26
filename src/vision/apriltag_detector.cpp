@@ -101,8 +101,6 @@ std::vector<Detection> AprilTagDetector::detect_all(const cv::Mat& bgr_frame) co
     return results;
 }
 
-std::vector<int> AprilTagDetector::get_last_detected_ids() const {
-    return last_detected_ids_;
-}
+std::vector<int> AprilTagDetector::get_last_detected_ids() const { return last_detected_ids_; }
 
 }  // namespace aurore

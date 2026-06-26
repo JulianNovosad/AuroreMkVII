@@ -33,7 +33,7 @@ using BackpressurePolicy = aurore::test::BackpressurePolicy;
 using ResetType = aurore::test::ResetType;
 using TestTier = aurore::test::TestTier;
 
-} // namespace test
-} // namespace aurore
+}  // namespace test
+}  // namespace aurore
 
-#endif // AURORE_TEST_UTILS_HPP
+#endif  // AURORE_TEST_UTILS_HPP

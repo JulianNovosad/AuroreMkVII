@@ -1,20 +1,22 @@
-#include "aurore/aurore_link_server.hpp"
-#include "aurore.pb.h"
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <iostream>
-#include <netinet/in.h>
-#include <sys/socket.h>
 #include <thread>
-#include <chrono>
-#include <unistd.h>
+
+#include "aurore.pb.h"
+#include "aurore/aurore_link_server.hpp"
 
 using namespace aurore;
 
 // Poll a condition with retry (avoids race conditions on loaded systems)
-template<typename Pred>
+template <typename Pred>
 static bool wait_for(Pred pred, int max_ms = 500, int step_ms = 10) {
     for (int elapsed = 0; elapsed < max_ms; elapsed += step_ms) {
         if (pred()) return true;
@@ -27,11 +29,12 @@ static bool wait_for(Pred pred, int max_ms = 500, int step_ms = 10) {
 static int connect_to(uint16_t port) {
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in addr{};
-    addr.sin_family      = AF_INET;
-    addr.sin_port        = htons(port);
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     if (::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-        ::close(fd); return -1;
+        ::close(fd);
+        return -1;
     }
     return fd;
 }
@@ -39,8 +42,8 @@ static int connect_to(uint16_t port) {
 void test_server_starts_and_stops() {
     AuroreLinkConfig cfg;
     cfg.telemetry_port = 19000;
-    cfg.video_port     = 19001;
-    cfg.command_port   = 19002;
+    cfg.video_port = 19001;
+    cfg.command_port = 19002;
     AuroreLinkServer server(cfg);
     assert(server.start());
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -51,8 +54,8 @@ void test_server_starts_and_stops() {
 void test_telemetry_client_receives_broadcast() {
     AuroreLinkConfig cfg;
     cfg.telemetry_port = 19010;
-    cfg.video_port     = 19011;
-    cfg.command_port   = 19012;
+    cfg.video_port = 19011;
+    cfg.command_port = 19012;
     AuroreLinkServer server(cfg);
     server.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -89,8 +92,8 @@ void test_telemetry_client_receives_broadcast() {
 void test_mode_callback_fires_on_command() {
     AuroreLinkConfig cfg;
     cfg.telemetry_port = 19020;
-    cfg.video_port     = 19021;
-    cfg.command_port   = 19022;
+    cfg.video_port = 19021;
+    cfg.command_port = 19022;
     AuroreLinkServer server(cfg);
 
     LinkMode received_mode = LinkMode::AUTO;
@@ -104,16 +107,16 @@ void test_mode_callback_fires_on_command() {
 
     // Send binary MODE_REQUEST with target_mode=1 (FREECAM)
     LinkInputMessage msg{};
-    msg.header.sync_word  = 0xA7050005;
+    msg.header.sync_word = 0xA7050005;
     msg.header.message_id = static_cast<uint16_t>(LinkMsgId::kModeRequest);
-    msg.header.sequence   = 0;
+    msg.header.sequence = 0;
     msg.header.timestamp_ns = 0;
     LinkPayloadModeRequest payload{};
     payload.target_mode = 1;  // FREECAM
     std::memcpy(msg.payload.data(), &payload, sizeof(payload));
     ::send(cmd_client, &msg, sizeof(msg), 0);
 
-    assert(wait_for([&]{ return received_mode == LinkMode::FREECAM; }));
+    assert(wait_for([&] { return received_mode == LinkMode::FREECAM; }));
 
     ::close(cmd_client);
     server.stop();
@@ -123,8 +126,8 @@ void test_mode_callback_fires_on_command() {
 void test_freecam_callback_fires_on_command() {
     AuroreLinkConfig cfg;
     cfg.telemetry_port = 19030;
-    cfg.video_port     = 19031;
-    cfg.command_port   = 19032;
+    cfg.video_port = 19031;
+    cfg.command_port = 19032;
     AuroreLinkServer server(cfg);
 
     float received_az = 0.f, received_el = 0.f, received_vel = 0.f;
@@ -143,18 +146,18 @@ void test_freecam_callback_fires_on_command() {
     // Send binary GIMBAL_COMMAND: azimuth_rate=10000 (100 mrad/s → 5.730 deg/s),
     //                              elevation_rate=-5000 (-50 mrad/s → -2.865 deg/s)
     LinkInputMessage msg{};
-    msg.header.sync_word  = 0xA7050005;
+    msg.header.sync_word = 0xA7050005;
     msg.header.message_id = static_cast<uint16_t>(LinkMsgId::kGimbalCommand);
-    msg.header.sequence   = 0;
+    msg.header.sequence = 0;
     msg.header.timestamp_ns = 0;
     LinkPayloadGimbalCmd gimbal{};
-    gimbal.azimuth_rate   = 10000;
+    gimbal.azimuth_rate = 10000;
     gimbal.elevation_rate = -5000;
     std::memcpy(msg.payload.data(), &gimbal, sizeof(gimbal));
     ::send(cmd_client, &msg, sizeof(msg), 0);
 
     // Wait for callback; az > 0, el < 0
-    assert(wait_for([&]{ return std::abs(received_az) > 0.01f; }));
+    assert(wait_for([&] { return std::abs(received_az) > 0.01f; }));
     assert(received_az > 0.0f);
     assert(received_el < 0.0f);
     assert(std::abs(received_vel) < 0.001f);  // vel always 0 for gimbal rate commands
@@ -167,8 +170,8 @@ void test_freecam_callback_fires_on_command() {
 void test_heartbeat_timeout_callback_fires() {
     AuroreLinkConfig cfg;
     cfg.telemetry_port = 19040;
-    cfg.video_port     = 19041;
-    cfg.command_port   = 19042;
+    cfg.video_port = 19041;
+    cfg.command_port = 19042;
     AuroreLinkServer server(cfg);
 
     std::atomic<bool> timeout_fired{false};
@@ -192,14 +195,13 @@ void test_heartbeat_timeout_callback_fires() {
 void test_heartbeat_resets_timeout() {
     AuroreLinkConfig cfg;
     cfg.telemetry_port = 19050;
-    cfg.video_port     = 19051;
-    cfg.command_port   = 19052;
+    cfg.video_port = 19051;
+    cfg.command_port = 19052;
     AuroreLinkServer server(cfg);
 
     std::atomic<int> timeout_count{0};
-    server.set_heartbeat_timeout_callback([&]() {
-        timeout_count.fetch_add(1, std::memory_order_relaxed);
-    });
+    server.set_heartbeat_timeout_callback(
+        [&]() { timeout_count.fetch_add(1, std::memory_order_relaxed); });
     server.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
@@ -233,8 +235,8 @@ void test_heartbeat_resets_timeout() {
 void test_emergency_stop_callback_fires() {
     AuroreLinkConfig cfg;
     cfg.telemetry_port = 19060;
-    cfg.video_port     = 19061;
-    cfg.command_port   = 19062;
+    cfg.video_port = 19061;
+    cfg.command_port = 19062;
     cfg.hmac_key = "test_key";  // Enable HMAC for binary command testing
     AuroreLinkServer server(cfg);
 
@@ -261,7 +263,7 @@ void test_emergency_stop_callback_fires() {
 
     ::send(cmd_client, &emergency_msg, sizeof(emergency_msg), 0);
 
-    assert(wait_for([&]{ return emergency_fired.load(std::memory_order_acquire); }));
+    assert(wait_for([&] { return emergency_fired.load(std::memory_order_acquire); }));
 
     ::close(cmd_client);
     server.stop();
@@ -271,15 +273,14 @@ void test_emergency_stop_callback_fires() {
 void test_emergency_stop_no_auth_required() {
     AuroreLinkConfig cfg;
     cfg.telemetry_port = 19070;
-    cfg.video_port     = 19071;
-    cfg.command_port   = 19072;
+    cfg.video_port = 19071;
+    cfg.command_port = 19072;
     cfg.hmac_key = "test_key_with_auth_enabled";  // HMAC enabled
     AuroreLinkServer server(cfg);
 
     std::atomic<bool> emergency_fired{false};
-    server.set_emergency_stop_callback([&]() {
-        emergency_fired.store(true, std::memory_order_release);
-    });
+    server.set_emergency_stop_callback(
+        [&]() { emergency_fired.store(true, std::memory_order_release); });
     server.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
@@ -299,7 +300,7 @@ void test_emergency_stop_no_auth_required() {
     ::send(cmd_client, &emergency_msg, sizeof(emergency_msg), 0);
 
     // Emergency stop should fire despite invalid HMAC
-    assert(wait_for([&]{ return emergency_fired.load(std::memory_order_acquire); }));
+    assert(wait_for([&] { return emergency_fired.load(std::memory_order_acquire); }));
 
     ::close(cmd_client);
     server.stop();

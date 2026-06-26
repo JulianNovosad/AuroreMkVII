@@ -1,12 +1,12 @@
 #include "aurore/command_socket.hpp"
 
+#include <fcntl.h>
+#include <poll.h>
+#include <pwd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <pwd.h>
 
 #include <algorithm>
 #include <cerrno>
@@ -19,9 +19,7 @@ namespace aurore {
 CommandSocket::CommandSocket() : cfg_(Config{}) {}
 CommandSocket::CommandSocket(const Config& cfg) : cfg_(cfg) {}
 
-CommandSocket::~CommandSocket() {
-    stop();
-}
+CommandSocket::~CommandSocket() { stop(); }
 
 void CommandSocket::set_mode_callback(ModeCallback cb) {
     std::lock_guard<std::mutex> lk(cb_mutex_);
@@ -110,20 +108,20 @@ void CommandSocket::accept_loop() {
 
         struct sockaddr_un client_addr{};
         socklen_t len = sizeof(client_addr);
-        int client_fd = ::accept(server_fd_,
-                                  reinterpret_cast<struct sockaddr*>(&client_addr), &len);
+        int client_fd =
+            ::accept(server_fd_, reinterpret_cast<struct sockaddr*>(&client_addr), &len);
         if (client_fd < 0) continue;
 
         // SEC: SO_PEERCRED validation — reject unauthorized processes
         if (cfg_.allowed_uid != 0) {
             struct ucred peer{};
             socklen_t peer_len = sizeof(peer);
-            const bool cred_ok = (::getsockopt(client_fd, SOL_SOCKET, SO_PEERCRED,
-                                               &peer, &peer_len) == 0);
+            const bool cred_ok =
+                (::getsockopt(client_fd, SOL_SOCKET, SO_PEERCRED, &peer, &peer_len) == 0);
             if (!cred_ok || peer.uid != cfg_.allowed_uid) {
                 std::cerr << "[CommandSocket] rejected connection: UID "
-                          << (cred_ok ? std::to_string(peer.uid) : "unknown")
-                          << " != allowed " << cfg_.allowed_uid << "\n";
+                          << (cred_ok ? std::to_string(peer.uid) : "unknown") << " != allowed "
+                          << cfg_.allowed_uid << "\n";
                 ::close(client_fd);
                 continue;
             }
@@ -140,11 +138,11 @@ void CommandSocket::accept_loop() {
         std::thread([this, client_fd]() {
             client_loop(client_fd);
             std::lock_guard<std::mutex> lk(clients_mutex_);
-            client_fds_.erase(
-                std::remove(client_fds_.begin(), client_fds_.end(), client_fd),
-                client_fds_.end());
+            client_fds_.erase(std::remove(client_fds_.begin(), client_fds_.end(), client_fd),
+                              client_fds_.end());
             ::close(client_fd);
-            std::cout << "[CommandSocket] Client disconnected (fd=" << client_fd << ")" << std::endl;
+            std::cout << "[CommandSocket] Client disconnected (fd=" << client_fd << ")"
+                      << std::endl;
         }).detach();
     }
 }

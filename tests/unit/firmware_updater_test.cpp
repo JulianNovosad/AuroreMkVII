@@ -3,7 +3,11 @@
 // Uses real OpenSSL (no mocks), temp files as update packages.
 
 #include "aurore/firmware_updater.hpp"
-#include "aurore/security.hpp"
+
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -11,32 +15,37 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <openssl/evp.h>
-#include <openssl/pem.h>
+
+#include "aurore/security.hpp"
 
 static int g_pass = 0;
 static int g_fail = 0;
 
-#define RUN_TEST(name) do { \
-    std::cout << "Running " << #name << "... "; \
-    try { name(); std::cout << "PASS\n"; ++g_pass; } \
-    catch (const std::exception& e) { \
-        std::cout << "FAIL: " << e.what() << "\n"; ++g_fail; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                 \
+    do {                                               \
+        std::cout << "Running " << #name << "... ";    \
+        try {                                          \
+            name();                                    \
+            std::cout << "PASS\n";                     \
+            ++g_pass;                                  \
+        } catch (const std::exception& e) {            \
+            std::cout << "FAIL: " << e.what() << "\n"; \
+            ++g_fail;                                  \
+        }                                              \
+    } while (0)
 
-#define ASSERT_TRUE(cond) do { \
-    if (!(cond)) throw std::runtime_error("Assertion failed: " #cond); \
-} while(0)
+#define ASSERT_TRUE(cond)                                                  \
+    do {                                                                   \
+        if (!(cond)) throw std::runtime_error("Assertion failed: " #cond); \
+    } while (0)
 
-#define ASSERT_EQ(a, b) do { \
-    if ((a) != (b)) throw std::runtime_error( \
-        std::string("Assertion failed: " #a " == " #b \
-            " (lhs=") + std::to_string(static_cast<int>(a)) + \
-        " rhs=" + std::to_string(static_cast<int>(b)) + ")"); \
-} while(0)
+#define ASSERT_EQ(a, b)                                                                        \
+    do {                                                                                       \
+        if ((a) != (b))                                                                        \
+            throw std::runtime_error(std::string("Assertion failed: " #a " == " #b " (lhs=") + \
+                                     std::to_string(static_cast<int>(a)) +                     \
+                                     " rhs=" + std::to_string(static_cast<int>(b)) + ")");     \
+    } while (0)
 
 // ---------------------------------------------------------------------------
 // Test fixture helpers
@@ -55,12 +64,13 @@ static void write_file(const std::string& path, const std::string& content) {
     f << content;
 }
 
-static void ensure_dir(const std::string& path) {
-    ::mkdir(path.c_str(), 0755);
-}
+static void ensure_dir(const std::string& path) { ::mkdir(path.c_str(), 0755); }
 
 // Generate an in-memory ECDSA P-256 keypair and return PEM strings
-struct KeyPair { std::string priv_pem; std::string pub_pem; };
+struct KeyPair {
+    std::string priv_pem;
+    std::string pub_pem;
+};
 
 static KeyPair generate_ec_keypair() {
     EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr);
@@ -163,10 +173,10 @@ static void test_valid_update_succeeds() {
     const std::string active_link = base + "/current";
 
     aurore::FirmwareUpdater::Config cfg;
-    cfg.slot_a_path  = slot_a + "/aurore_main";
-    cfg.slot_b_path  = slot_b + "/aurore_main";
-    cfg.active_link  = active_link;
-    cfg.pubkey_path  = pubkey_path;
+    cfg.slot_a_path = slot_a + "/aurore_main";
+    cfg.slot_b_path = slot_b + "/aurore_main";
+    cfg.active_link = active_link;
+    cfg.pubkey_path = pubkey_path;
     cfg.version_path = version_path;
 
     aurore::FirmwareUpdater updater(cfg);
@@ -193,7 +203,7 @@ static void test_signature_invalid_rejected() {
     ensure_dir(slot_b);
 
     // Generate two different keypairs — sign with key A, verify with key B
-    const KeyPair kp_sign   = generate_ec_keypair();
+    const KeyPair kp_sign = generate_ec_keypair();
     const KeyPair kp_verify = generate_ec_keypair();
 
     const std::string pubkey_path = base + "/signing_key.pub";
@@ -209,10 +219,10 @@ static void test_signature_invalid_rejected() {
     write_file(base + "/version", "1\n");
 
     aurore::FirmwareUpdater::Config cfg;
-    cfg.slot_a_path  = slot_a + "/aurore_main";
-    cfg.slot_b_path  = slot_b + "/aurore_main";
-    cfg.active_link  = base + "/current";
-    cfg.pubkey_path  = pubkey_path;
+    cfg.slot_a_path = slot_a + "/aurore_main";
+    cfg.slot_b_path = slot_b + "/aurore_main";
+    cfg.active_link = base + "/current";
+    cfg.pubkey_path = pubkey_path;
     cfg.version_path = base + "/version";
 
     aurore::FirmwareUpdater updater(cfg);
@@ -241,10 +251,10 @@ static void test_version_downgrade_rejected() {
     write_file(base + "/version", "10\n");
 
     aurore::FirmwareUpdater::Config cfg;
-    cfg.slot_a_path  = slot_a + "/aurore_main";
-    cfg.slot_b_path  = slot_b + "/aurore_main";
-    cfg.active_link  = base + "/current";
-    cfg.pubkey_path  = base + "/signing_key.pub";
+    cfg.slot_a_path = slot_a + "/aurore_main";
+    cfg.slot_b_path = slot_b + "/aurore_main";
+    cfg.active_link = base + "/current";
+    cfg.pubkey_path = base + "/signing_key.pub";
     cfg.version_path = base + "/version";
 
     aurore::FirmwareUpdater updater(cfg);
@@ -270,10 +280,10 @@ static void test_same_version_rejected() {
     write_file(base + "/version", "7\n");
 
     aurore::FirmwareUpdater::Config cfg;
-    cfg.slot_a_path  = slot_a + "/aurore_main";
-    cfg.slot_b_path  = slot_b + "/aurore_main";
-    cfg.active_link  = base + "/current";
-    cfg.pubkey_path  = base + "/signing_key.pub";
+    cfg.slot_a_path = slot_a + "/aurore_main";
+    cfg.slot_b_path = slot_b + "/aurore_main";
+    cfg.active_link = base + "/current";
+    cfg.pubkey_path = base + "/signing_key.pub";
     cfg.version_path = base + "/version";
 
     aurore::FirmwareUpdater updater(cfg);
@@ -296,10 +306,10 @@ static void test_first_install_zero_version_accepts_any() {
     // No version file — current_version() returns 0
 
     aurore::FirmwareUpdater::Config cfg;
-    cfg.slot_a_path  = base + "/slot_a/aurore_main";
-    cfg.slot_b_path  = base + "/slot_b/aurore_main";
-    cfg.active_link  = base + "/current";
-    cfg.pubkey_path  = base + "/signing_key.pub";
+    cfg.slot_a_path = base + "/slot_a/aurore_main";
+    cfg.slot_b_path = base + "/slot_b/aurore_main";
+    cfg.active_link = base + "/current";
+    cfg.pubkey_path = base + "/signing_key.pub";
     cfg.version_path = base + "/version";
 
     aurore::FirmwareUpdater updater(cfg);
@@ -320,10 +330,10 @@ static void test_dual_bank_alternates_slots() {
     write_file(base + "/signing_key.pub", kp.pub_pem);
 
     aurore::FirmwareUpdater::Config cfg;
-    cfg.slot_a_path  = base + "/slot_a/aurore_main";
-    cfg.slot_b_path  = base + "/slot_b/aurore_main";
-    cfg.active_link  = base + "/current";
-    cfg.pubkey_path  = base + "/signing_key.pub";
+    cfg.slot_a_path = base + "/slot_a/aurore_main";
+    cfg.slot_b_path = base + "/slot_b/aurore_main";
+    cfg.active_link = base + "/current";
+    cfg.pubkey_path = base + "/signing_key.pub";
     cfg.version_path = base + "/version";
     write_file(cfg.version_path, "0\n");
 
@@ -359,10 +369,10 @@ static void test_missing_pubkey_returns_io_error() {
     write_file(base + "/version", "1\n");
 
     aurore::FirmwareUpdater::Config cfg;
-    cfg.slot_a_path  = base + "/slot_a/aurore_main";
-    cfg.slot_b_path  = base + "/slot_b/aurore_main";
-    cfg.active_link  = base + "/current";
-    cfg.pubkey_path  = base + "/nonexistent_key.pub";  // missing
+    cfg.slot_a_path = base + "/slot_a/aurore_main";
+    cfg.slot_b_path = base + "/slot_b/aurore_main";
+    cfg.active_link = base + "/current";
+    cfg.pubkey_path = base + "/nonexistent_key.pub";  // missing
     cfg.version_path = base + "/version";
 
     aurore::FirmwareUpdater updater(cfg);

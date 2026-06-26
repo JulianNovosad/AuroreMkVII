@@ -17,7 +17,8 @@
  */
 
 #include "aurore/camera_wrapper.hpp"
-#include "aurore/timing.hpp"
+
+#include <sys/mman.h>
 
 #include <cerrno>
 #include <chrono>
@@ -26,10 +27,10 @@
 #include <iostream>
 #include <mutex>
 #include <queue>
-#include <unordered_map>
 #include <system_error>
+#include <unordered_map>
 
-#include <sys/mman.h>
+#include "aurore/timing.hpp"
 
 // OpenCV headers
 #include <opencv2/opencv.hpp>
@@ -42,9 +43,9 @@
 // VideoCore VII GPU acceleration headers (Raspberry Pi 5 only)
 // Guarded by AURORE_USE_GPU compile-time flag
 #ifdef AURORE_USE_GPU
-#include <bcm_host.h>
-#include <GLES3/gl3.h>
 #include <EGL/egl.h>
+#include <GLES3/gl3.h>
+#include <bcm_host.h>
 #include <sys/stat.h>
 #endif
 
@@ -65,16 +66,16 @@ namespace aurore {
  * The libcamera fields and methods are conditionally compiled.
  */
 struct CameraWrapper::Impl {
-    int width  = 0;
+    int width = 0;
     int height = 0;
-    int fps    = 0;
+    int fps = 0;
     int lc_stride = 0;  // actual stride from libcamera (may differ from computed)
     uint64_t frame_counter = 0;
 
     // --- Capture mode flags (set by configure_stream) ---
-    bool use_libcamera    = false;
+    bool use_libcamera = false;
     bool use_test_pattern = false;
-    bool use_webcam       = false;
+    bool use_webcam = false;
 
     // --- Persistent BGR output buffer (avoids mmap/page-fault churn per frame) ---
     // Allocated once in wrap_as_mat on first call; reused on all subsequent calls.
@@ -83,7 +84,8 @@ struct CameraWrapper::Impl {
 
     // --- Staging buffer for non-cacheable DMA reads ---
     // DMA buffers are non-cacheable, causing ~25ms per read due to memory controller delays.
-    // First copy DMA to cached staging, then process from cached memory (~1ms copy vs ~25ms slow reads).
+    // First copy DMA to cached staging, then process from cached memory (~1ms copy vs ~25ms slow
+    // reads).
     std::vector<uint8_t> raw_staging;
 
     // --- OpenCV webcam state ---
@@ -160,8 +162,8 @@ struct CameraWrapper::Impl {
             return false;
         }
 
-        std::cout << "[camera] GPU: VideoCore VII available (EGL "
-                  << major << "." << minor << ")\n";
+        std::cout << "[camera] GPU: VideoCore VII available (EGL " << major << "." << minor
+                  << ")\n";
         return true;
     }
 
@@ -184,15 +186,19 @@ struct CameraWrapper::Impl {
         }
 
         // Setup EGL config
-        EGLint config_attrs[] = {
-            EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-            EGL_RED_SIZE, 8,
-            EGL_GREEN_SIZE, 8,
-            EGL_BLUE_SIZE, 8,
-            EGL_ALPHA_SIZE, 8,
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-            EGL_NONE
-        };
+        EGLint config_attrs[] = {EGL_SURFACE_TYPE,
+                                 EGL_WINDOW_BIT,
+                                 EGL_RED_SIZE,
+                                 8,
+                                 EGL_GREEN_SIZE,
+                                 8,
+                                 EGL_BLUE_SIZE,
+                                 8,
+                                 EGL_ALPHA_SIZE,
+                                 8,
+                                 EGL_RENDERABLE_TYPE,
+                                 EGL_OPENGL_ES2_BIT,
+                                 EGL_NONE};
 
         EGLConfig config;
         EGLint num_configs;
@@ -202,11 +208,7 @@ struct CameraWrapper::Impl {
         }
 
         // Create EGL surface (pbuffer for off-screen rendering)
-        EGLint surface_attrs[] = {
-            EGL_WIDTH, width,
-            EGL_HEIGHT, height,
-            EGL_NONE
-        };
+        EGLint surface_attrs[] = {EGL_WIDTH, width, EGL_HEIGHT, height, EGL_NONE};
         egl_surface = eglCreatePbufferSurface(egl_display, config, surface_attrs);
         if (egl_surface == EGL_NO_SURFACE) {
             std::cerr << "[camera] GPU: eglCreatePbufferSurface failed\n";
@@ -214,10 +216,7 @@ struct CameraWrapper::Impl {
         }
 
         // Create EGL context (ES 3.0 required for VAO support)
-        EGLint context_attrs[] = {
-            EGL_CONTEXT_CLIENT_VERSION, 3,
-            EGL_NONE
-        };
+        EGLint context_attrs[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
         egl_context = eglCreateContext(egl_display, config, EGL_NO_CONTEXT, context_attrs);
         if (egl_context == EGL_NO_CONTEXT) {
             std::cerr << "[camera] GPU: eglCreateContext failed\n";
@@ -358,7 +357,7 @@ struct CameraWrapper::Impl {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
         // Cache uniform locations
-        gpu_tex_loc   = glGetUniformLocation(gpu_program, "u_texture");
+        gpu_tex_loc = glGetUniformLocation(gpu_program, "u_texture");
         gpu_texel_loc = glGetUniformLocation(gpu_program, "u_texelSize");
 
         // Allocate FBO + RBO for offscreen rendering (owned by Impl, released in cleanup_gpu)
@@ -458,8 +457,8 @@ struct CameraWrapper::Impl {
         // Upload RAW Bayer data as luminance texture (1 byte/pixel)
         glBindTexture(GL_TEXTURE_2D, gpu_texture);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, raw_stride);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, width, height, 0,
-                     GL_LUMINANCE, GL_UNSIGNED_BYTE, raw_data);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, width, height, 0, GL_LUMINANCE,
+                     GL_UNSIGNED_BYTE, raw_data);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
         // Bind the pre-allocated FBO and configure viewport
@@ -471,8 +470,7 @@ struct CameraWrapper::Impl {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, gpu_texture);
         glUniform1i(gpu_tex_loc, 0);
-        glUniform2f(gpu_texel_loc,
-                    1.0f / static_cast<float>(width),
+        glUniform2f(gpu_texel_loc, 1.0f / static_cast<float>(width),
                     1.0f / static_cast<float>(height));
 
         // Render fullscreen quad
@@ -481,10 +479,8 @@ struct CameraWrapper::Impl {
 
         // Quad: position (xy) + texcoord (uv), two triangles as a strip
         const float vertices[] = {
-            -1.0f, -1.0f, 0.0f, 0.0f,
-             1.0f, -1.0f, 1.0f, 0.0f,
-            -1.0f,  1.0f, 0.0f, 1.0f,
-             1.0f,  1.0f, 1.0f, 1.0f,
+            -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, 0.0f,
+            -1.0f, 1.0f,  0.0f, 1.0f, 1.0f, 1.0f,  1.0f, 1.0f,
         };
 
         GLuint vao = 0;
@@ -499,10 +495,12 @@ struct CameraWrapper::Impl {
         GLint tex_attr = glGetAttribLocation(gpu_program, "a_texCoord");
         glEnableVertexAttribArray(pos_attr);
         glEnableVertexAttribArray(tex_attr);
-        glVertexAttribPointer(pos_attr, 2, GL_FLOAT, GL_FALSE, 4 * static_cast<GLsizei>(sizeof(float)),
+        glVertexAttribPointer(pos_attr, 2, GL_FLOAT, GL_FALSE,
+                              4 * static_cast<GLsizei>(sizeof(float)),
                               reinterpret_cast<const void*>(static_cast<uintptr_t>(0)));
-        glVertexAttribPointer(tex_attr, 2, GL_FLOAT, GL_FALSE, 4 * static_cast<GLsizei>(sizeof(float)),
-                              reinterpret_cast<const void*>(static_cast<uintptr_t>(2 * sizeof(float))));
+        glVertexAttribPointer(
+            tex_attr, 2, GL_FLOAT, GL_FALSE, 4 * static_cast<GLsizei>(sizeof(float)),
+            reinterpret_cast<const void*>(static_cast<uintptr_t>(2 * sizeof(float))));
 
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
@@ -527,20 +525,23 @@ struct CameraWrapper::Impl {
     // =========================================================================
     // libcamera state (hardware builds only)
     // =========================================================================
-    std::unique_ptr<libcamera::CameraManager>        lc_cm;
-    std::shared_ptr<libcamera::Camera>               lc_camera;
+    std::unique_ptr<libcamera::CameraManager> lc_cm;
+    std::shared_ptr<libcamera::Camera> lc_camera;
     std::unique_ptr<libcamera::FrameBufferAllocator> lc_allocator;
-    libcamera::Stream*                               lc_stream = nullptr;
-    libcamera::Stream*                               lc_stream_yolo = nullptr;
+    libcamera::Stream* lc_stream = nullptr;
+    libcamera::Stream* lc_stream_yolo = nullptr;
     std::vector<std::unique_ptr<libcamera::Request>> lc_requests;
     int lc_stride_yolo = 0;
 
     // DMA buffer mapping: FrameBuffer* → {mmap ptr, size}
-    struct MappedBuf { void* data; size_t size; };
+    struct MappedBuf {
+        void* data;
+        size_t size;
+    };
     std::unordered_map<const libcamera::FrameBuffer*, MappedBuf> lc_mapped;
 
     // Completed-request synchronisation
-    std::mutex              lc_mutex;
+    std::mutex lc_mutex;
     std::condition_variable lc_cv;
     std::queue<libcamera::Request*> lc_completed;
     bool lc_stopped = false;
@@ -551,15 +552,15 @@ struct CameraWrapper::Impl {
     // =========================================================================
 
     bool configure_stream(const CameraConfig& config) {
-        width         = config.width;
-        height        = config.height;
-        fps           = config.fps;
+        width = config.width;
+        height = config.height;
+        fps = config.fps;
         frame_counter = 0;
 
-        use_libcamera    = false;
+        use_libcamera = false;
         use_test_pattern = false;
-        use_webcam       = false;
-        webcam_id        = 0;
+        use_webcam = false;
+        webcam_id = 0;
 
 #ifdef AURORE_USE_GPU
         gpu_available = false;
@@ -613,7 +614,8 @@ struct CameraWrapper::Impl {
             if (init_libcamera(config)) {
                 return true;
             }
-            std::fprintf(stderr, "FATAL: libcamera init failed. No camera found or hardware error.\n");
+            std::fprintf(stderr,
+                         "FATAL: libcamera init failed. No camera found or hardware error.\n");
             return false;
         }
 #else
@@ -626,11 +628,11 @@ struct CameraWrapper::Impl {
                 webcam_cap.open(webcam_id);
             }
             if (webcam_cap.isOpened()) {
-                webcam_cap.set(cv::CAP_PROP_FRAME_WIDTH,  width);
+                webcam_cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
                 webcam_cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
-                webcam_cap.set(cv::CAP_PROP_FPS,          fps);
-                std::cout << "[camera] Webcam opened: " << width << "x" << height
-                          << " @ " << webcam_cap.get(cv::CAP_PROP_FPS) << " FPS\n";
+                webcam_cap.set(cv::CAP_PROP_FPS, fps);
+                std::cout << "[camera] Webcam opened: " << width << "x" << height << " @ "
+                          << webcam_cap.get(cv::CAP_PROP_FPS) << " FPS\n";
                 return true;
             }
             std::fprintf(stderr, "FATAL: Webcam unavailable (ID: %d)\n", webcam_id);
@@ -638,12 +640,11 @@ struct CameraWrapper::Impl {
         }
 
         if (use_test_pattern) {
-            std::cout << "[camera] Test pattern generator ("
-                      << width << "x" << height << ")\n";
-            target_pos      = cv::Point2f(static_cast<float>(width)  / 2.0f,
-                                          static_cast<float>(height) / 2.0f);
+            std::cout << "[camera] Test pattern generator (" << width << "x" << height << ")\n";
+            target_pos =
+                cv::Point2f(static_cast<float>(width) / 2.0f, static_cast<float>(height) / 2.0f);
             target_velocity = cv::Point2f(2.0f, 1.5f);
-            target_size     = 30.0f;
+            target_size = 30.0f;
         }
         return true;
     }
@@ -699,8 +700,8 @@ struct CameraWrapper::Impl {
         }
 
         auto cfg = lc_camera->generateConfiguration({
-            libcamera::StreamRole::VideoRecording, // Stream 0: Tracking (BGR888)
-            libcamera::StreamRole::Viewfinder      // Stream 1: YOLO (BGR888)
+            libcamera::StreamRole::VideoRecording,  // Stream 0: Tracking (BGR888)
+            libcamera::StreamRole::Viewfinder       // Stream 1: YOLO (BGR888)
         });
         if (!cfg || cfg->size() < 2) {
             std::cerr << "[camera] generateConfiguration failed for dual-stream\n";
@@ -712,15 +713,15 @@ struct CameraWrapper::Impl {
         }
 
         // --- Stream 0: Tracking (BGR888) ---
-        auto& scfg        = cfg->at(0);
-        scfg.size.width   = static_cast<unsigned int>(config.width);
-        scfg.size.height  = static_cast<unsigned int>(config.height);
-        scfg.pixelFormat  = libcamera::formats::BGR888;
-        scfg.bufferCount  = static_cast<unsigned int>(config.buffer_count);
+        auto& scfg = cfg->at(0);
+        scfg.size.width = static_cast<unsigned int>(config.width);
+        scfg.size.height = static_cast<unsigned int>(config.height);
+        scfg.pixelFormat = libcamera::formats::BGR888;
+        scfg.bufferCount = static_cast<unsigned int>(config.buffer_count);
 
         // --- Stream 1: YOLO (BGR888) ---
-        auto& scfg_yolo   = cfg->at(1);
-        scfg_yolo.size.width  = 640;
+        auto& scfg_yolo = cfg->at(1);
+        scfg_yolo.size.width = 640;
         scfg_yolo.size.height = 360;
         scfg_yolo.pixelFormat = libcamera::formats::BGR888;
         scfg_yolo.bufferCount = static_cast<unsigned int>(config.buffer_count);
@@ -745,7 +746,7 @@ struct CameraWrapper::Impl {
 
         lc_stream = scfg.stream();
         lc_stride = static_cast<int>(scfg.stride);
-        
+
         lc_stream_yolo = scfg_yolo.stream();
         lc_stride_yolo = static_cast<int>(scfg_yolo.stride);
 
@@ -766,12 +767,13 @@ struct CameraWrapper::Impl {
         auto map_buffers = [&](libcamera::Stream* stream) {
             for (const auto& fb : lc_allocator->buffers(stream)) {
                 if (lc_mapped.count(fb.get())) continue;
-                
+
                 const auto& plane = fb->planes()[0];
-                const off_t off   = (plane.offset != libcamera::FrameBuffer::Plane::kInvalidOffset)
-                                    ? static_cast<off_t>(plane.offset) : 0;
-                void* mapped = mmap(nullptr, plane.length, PROT_READ, MAP_SHARED,
-                                    plane.fd.get(), off);
+                const off_t off = (plane.offset != libcamera::FrameBuffer::Plane::kInvalidOffset)
+                                      ? static_cast<off_t>(plane.offset)
+                                      : 0;
+                void* mapped =
+                    mmap(nullptr, plane.length, PROT_READ, MAP_SHARED, plane.fd.get(), off);
                 if (mapped == MAP_FAILED) {
                     std::cerr << "[camera] mmap failed: " << strerror(errno) << "\n";
                     continue;
@@ -805,8 +807,7 @@ struct CameraWrapper::Impl {
         lc_camera->requestCompleted.connect(this, &Impl::on_request_completed);
 
         libcamera::ControlList controls(lc_camera->controls());
-        controls.set(libcamera::controls::ExposureTime,
-                     static_cast<int32_t>(config.exposure_us));
+        controls.set(libcamera::controls::ExposureTime, static_cast<int32_t>(config.exposure_us));
         controls.set(libcamera::controls::AnalogueGain, config.gain);
 
         // Enforce the configured frame rate. Without this the ISP picks its own
@@ -816,8 +817,8 @@ struct CameraWrapper::Impl {
             const std::array<int64_t, 2> dur = {frame_us, frame_us};
             controls.set(libcamera::controls::FrameDurationLimits,
                          libcamera::Span<const int64_t, 2>(dur));
-            std::cout << "[camera] FrameDurationLimits: " << frame_us << "us ("
-                      << config.fps << "fps)\n";
+            std::cout << "[camera] FrameDurationLimits: " << frame_us << "us (" << config.fps
+                      << "fps)\n";
         }
 
         if (lc_camera->start(&controls) != 0) {
@@ -830,10 +831,8 @@ struct CameraWrapper::Impl {
             lc_camera->queueRequest(req.get());
         }
 
-        std::cout << "[camera] libcamera: "
-                  << scfg.size.width << "x" << scfg.size.height
-                  << " " << scfg.pixelFormat.toString()
-                  << " stride=" << scfg.stride << "\n";
+        std::cout << "[camera] libcamera: " << scfg.size.width << "x" << scfg.size.height << " "
+                  << scfg.pixelFormat.toString() << " stride=" << scfg.stride << "\n";
         return true;
     }
 
@@ -857,9 +856,8 @@ struct CameraWrapper::Impl {
      */
     bool capture_libcamera(ZeroCopyFrame& frame, int timeout_ms) {
         std::unique_lock<std::mutex> lock(lc_mutex);
-        const bool got = lc_cv.wait_for(
-            lock, std::chrono::milliseconds(timeout_ms),
-            [this] { return !lc_completed.empty() || lc_stopped; });
+        const bool got = lc_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+                                        [this] { return !lc_completed.empty() || lc_stopped; });
 
         if (!got || lc_completed.empty()) {
             frame.valid = false;
@@ -872,7 +870,7 @@ struct CameraWrapper::Impl {
         lock.unlock();
 
         const auto& bufs = req->buffers();
-        
+
         // --- Stream 0: Tracking ---
         auto it0 = bufs.find(lc_stream);
         if (it0 == bufs.end()) {
@@ -887,14 +885,14 @@ struct CameraWrapper::Impl {
             return false;
         }
 
-        frame.sequence      = meta0.sequence;
-        frame.timestamp_ns  = static_cast<TimestampNs>(meta0.timestamp);
-        frame.width         = width;
-        frame.height        = height;
-        frame.format        = PixelFormat::BGR888;
+        frame.sequence = meta0.sequence;
+        frame.timestamp_ns = static_cast<TimestampNs>(meta0.timestamp);
+        frame.width = width;
+        frame.height = height;
+        frame.format = PixelFormat::BGR888;
         frame.plane_data[0] = mit0->second.data;
         frame.plane_size[0] = mit0->second.size;
-        frame.stride[0]     = lc_stride;
+        frame.stride[0] = lc_stride;
 
         // --- Stream 1: YOLO ---
         auto it1 = bufs.find(lc_stream_yolo);
@@ -902,22 +900,23 @@ struct CameraWrapper::Impl {
             libcamera::FrameBuffer* fb1 = it1->second;
             const auto mit1 = lc_mapped.find(fb1);
             if (mit1 != lc_mapped.end()) {
-                frame.width2         = 640;
-                frame.height2        = 360;
-                frame.format2        = PixelFormat::BGR888;
+                frame.width2 = 640;
+                frame.height2 = 360;
+                frame.format2 = PixelFormat::BGR888;
                 frame.plane_data2[0] = mit1->second.data;
                 frame.plane_size2[0] = mit1->second.size;
-                frame.stride2[0]     = lc_stride_yolo;
+                frame.stride2[0] = lc_stride_yolo;
             }
         }
 
-        frame.request_ptr   = req;
-        frame.valid         = true;
-        frame.error[0]      = 0;  // DMA buffer
+        frame.request_ptr = req;
+        frame.valid = true;
+        frame.error[0] = 0;  // DMA buffer
 
         frame_counter++;
         if (!frame.validate(width, height)) {
-            std::fprintf(stderr, "FATAL: libcamera frame failed validation (geometry/corruption)!\n");
+            std::fprintf(stderr,
+                         "FATAL: libcamera frame failed validation (geometry/corruption)!\n");
             return false;
         }
         return true;
@@ -993,39 +992,30 @@ struct CameraWrapper::Impl {
         cv::Mat frame(height, width, CV_8UC3, cv::Scalar(128, 128, 128));
 
         for (int x = 0; x < width; x += 100) {
-            cv::line(frame, cv::Point(x, 0), cv::Point(x, height),
-                     cv::Scalar(100, 100, 100), 1);
+            cv::line(frame, cv::Point(x, 0), cv::Point(x, height), cv::Scalar(100, 100, 100), 1);
         }
         for (int y = 0; y < height; y += 100) {
-            cv::line(frame, cv::Point(0, y), cv::Point(width, y),
-                     cv::Scalar(100, 100, 100), 1);
+            cv::line(frame, cv::Point(0, y), cv::Point(width, y), cv::Scalar(100, 100, 100), 1);
         }
 
         target_pos += target_velocity;
-        if (target_pos.x < target_size ||
-            target_pos.x > static_cast<float>(width) - target_size) {
+        if (target_pos.x < target_size || target_pos.x > static_cast<float>(width) - target_size) {
             target_velocity.x = -target_velocity.x;
         }
-        if (target_pos.y < target_size ||
-            target_pos.y > static_cast<float>(height) - target_size) {
+        if (target_pos.y < target_size || target_pos.y > static_cast<float>(height) - target_size) {
             target_velocity.y = -target_velocity.y;
         }
 
-        cv::circle(frame, target_pos, static_cast<int>(target_size),
-                   cv::Scalar(0, 0, 255), -1);
+        cv::circle(frame, target_pos, static_cast<int>(target_size), cv::Scalar(0, 0, 255), -1);
 
         const int cx = width / 2, cy = height / 2;
-        cv::line(frame, cv::Point(cx - 20, cy), cv::Point(cx + 20, cy),
-                 cv::Scalar(0, 255, 0), 2);
-        cv::line(frame, cv::Point(cx, cy - 20), cv::Point(cx, cy + 20),
-                 cv::Scalar(0, 255, 0), 2);
+        cv::line(frame, cv::Point(cx - 20, cy), cv::Point(cx + 20, cy), cv::Scalar(0, 255, 0), 2);
+        cv::line(frame, cv::Point(cx, cy - 20), cv::Point(cx, cy + 20), cv::Scalar(0, 255, 0), 2);
 
-        cv::putText(frame, "Frame: " + std::to_string(frame_counter),
-                    cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX,
-                    0.7, cv::Scalar(0, 255, 0), 2);
-        cv::putText(frame, "Test Pattern Mode",
-                    cv::Point(10, 60), cv::FONT_HERSHEY_SIMPLEX,
-                    0.7, cv::Scalar(255, 255, 0), 2);
+        cv::putText(frame, "Frame: " + std::to_string(frame_counter), cv::Point(10, 30),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
+        cv::putText(frame, "Test Pattern Mode", cv::Point(10, 60), cv::FONT_HERSHEY_SIMPLEX, 0.7,
+                    cv::Scalar(255, 255, 0), 2);
 
         return frame;
     }
@@ -1048,20 +1038,19 @@ struct CameraWrapper::Impl {
             webcam_cap >> bgr_frame;
             if (bgr_frame.empty()) {
                 frame.valid = false;
-                snprintf(frame.error, sizeof(frame.error),
-                         "%s", "Webcam capture failed");
+                snprintf(frame.error, sizeof(frame.error), "%s", "Webcam capture failed");
                 return false;
             }
         } else {
             bgr_frame = generate_test_pattern();
         }
 
-        frame.sequence      = frame_counter++;
-        frame.timestamp_ns  = get_timestamp(ClockId::MonotonicRaw);
-        frame.width         = width;
-        frame.height        = height;
-        frame.format        = PixelFormat::BGR888;
-        frame.valid         = !bgr_frame.empty();
+        frame.sequence = frame_counter++;
+        frame.timestamp_ns = get_timestamp(ClockId::MonotonicRaw);
+        frame.width = width;
+        frame.height = height;
+        frame.format = PixelFormat::BGR888;
+        frame.valid = !bgr_frame.empty();
 
         const size_t sz = static_cast<size_t>(width) * static_cast<size_t>(height) * 3u;
         // 64-byte aligned allocation for SIMD optimization
@@ -1080,14 +1069,14 @@ struct CameraWrapper::Impl {
 
         frame.plane_data[0] = frame_data;
         frame.plane_size[0] = sz;
-        frame.stride[0]     = width * 3;
-        frame.error[0]      = 1;  // Mark heap-allocated
+        frame.stride[0] = width * 3;
+        frame.error[0] = 1;  // Mark heap-allocated
 
-        snprintf(frame.error + 1, sizeof(frame.error) - 1,
-                 "%s", "Development mode - BGR capture");
+        snprintf(frame.error + 1, sizeof(frame.error) - 1, "%s", "Development mode - BGR capture");
 
         if (!frame.validate(width, height)) {
-            std::fprintf(stderr, "FATAL: Captured frame failed validation (geometry/corruption)!\n");
+            std::fprintf(stderr,
+                         "FATAL: Captured frame failed validation (geometry/corruption)!\n");
             return false;
         }
         return true;
@@ -1099,12 +1088,11 @@ struct CameraWrapper::Impl {
 // =============================================================================
 
 CameraWrapper::CameraWrapper(const CameraConfig& config)
-    : impl_(std::make_unique<Impl>())
-    , config_(config)
-    , running_(false)
-    , frame_count_(0)
-    , error_count_(0) {
-
+    : impl_(std::make_unique<Impl>()),
+      config_(config),
+      running_(false),
+      frame_count_(0),
+      error_count_(0) {
     if (!config_.validate()) {
         throw CameraException("Invalid camera configuration");
     }
@@ -1124,8 +1112,7 @@ bool CameraWrapper::init() {
             throw CameraException("Camera initialization failed");
         }
         return true;
-    }
-    catch (const CameraException& e) {
+    } catch (const CameraException& e) {
         impl_->cleanup();
         throw;
     }
@@ -1165,9 +1152,7 @@ bool CameraWrapper::capture_frame(ZeroCopyFrame& frame, int timeout_ms) {
     return impl_->capture_frame_stub(frame, timeout_ms);
 }
 
-bool CameraWrapper::try_capture_frame(ZeroCopyFrame& frame) {
-    return capture_frame(frame, 0);
-}
+bool CameraWrapper::try_capture_frame(ZeroCopyFrame& frame) { return capture_frame(frame, 0); }
 
 void CameraWrapper::release_frame(ZeroCopyFrame& frame) {
     if (impl_) {
@@ -1175,12 +1160,13 @@ void CameraWrapper::release_frame(ZeroCopyFrame& frame) {
     }
 }
 
-cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
-                                    PixelFormat target_format,
-                                    int stream_index) {
+cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame, PixelFormat target_format,
+                                   int stream_index) {
     if (stream_index == 0) {
         if (!frame.validate(config_.width, config_.height)) {
-            std::fprintf(stderr, "FATAL: wrap_as_mat: Frame validation failed (geometry/contract violation)\n");
+            std::fprintf(
+                stderr,
+                "FATAL: wrap_as_mat: Frame validation failed (geometry/contract violation)\n");
             return cv::Mat();
         }
     } else if (stream_index == 1) {
@@ -1203,8 +1189,8 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
         // ISP configured for BGR888: DMA bytes are already B,G,R — no conversion needed.
         // Zero-copy: return Mat header over DMA buffer (AM7-L3-VIS-001).
         // Caller MUST NOT use this Mat after camera->release_frame().
-        return cv::Mat(f_height, f_width, CV_8UC3,
-                       f_plane_data[0], static_cast<size_t>(f_stride[0]));
+        return cv::Mat(f_height, f_width, CV_8UC3, f_plane_data[0],
+                       static_cast<size_t>(f_stride[0]));
     }
 
     // Hardware: RAW10 → greyscale BGR888
@@ -1218,16 +1204,15 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
         const uint64_t tw1 = aurore::get_timestamp();
 #endif
         const uint8_t* raw = static_cast<const uint8_t*>(f_plane_data[0]);
-        const int stride   = f_stride[0];
+        const int stride = f_stride[0];
 
 #ifdef AURORE_USE_GPU
         // Try GPU acceleration first (VideoCore VII)
         // Expected performance: < 0.5ms for 1536x864
-        // Pass the DMA plane pointer directly to avoid aliasing bgr_scratch as both input and output.
+        // Pass the DMA plane pointer directly to avoid aliasing bgr_scratch as both input and
+        // output.
         if (impl_->gpu_initialized) {
-            if (impl_->convert_raw10_to_bgr_gpu(f_plane_data[0],
-                                                 f_stride[0],
-                                                 impl_->bgr_scratch)) {
+            if (impl_->convert_raw10_to_bgr_gpu(f_plane_data[0], f_stride[0], impl_->bgr_scratch)) {
                 return impl_->bgr_scratch;
             }
             // Fall through to NEON/CPU path if GPU fails
@@ -1259,7 +1244,8 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
             const uint8x8_t perm = vld1_u8(kPerm);
 
             impl_->raw_staging.resize(static_cast<size_t>(f_height) * static_cast<size_t>(stride));
-            std::memcpy(impl_->raw_staging.data(), raw, static_cast<size_t>(f_height) * static_cast<size_t>(stride));
+            std::memcpy(impl_->raw_staging.data(), raw,
+                        static_cast<size_t>(f_height) * static_cast<size_t>(stride));
             const uint8_t* staged = impl_->raw_staging.data();
 
             for (int row = 0; row < f_height; ++row) {
@@ -1290,24 +1276,47 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
                     const uint8_t g3 = line[3];
                     line += 5;
 
-                    if (col     < f_width) { out[0]=g0; out[1]=g0; out[2]=g0; out += 3; }
-                    if (col + 1 < f_width) { out[0]=g1; out[1]=g1; out[2]=g1; out += 3; }
-                    if (col + 2 < f_width) { out[0]=g2; out[1]=g2; out[2]=g2; out += 3; }
-                    if (col + 3 < f_width) { out[0]=g3; out[1]=g3; out[2]=g3; out += 3; }
+                    if (col < f_width) {
+                        out[0] = g0;
+                        out[1] = g0;
+                        out[2] = g0;
+                        out += 3;
+                    }
+                    if (col + 1 < f_width) {
+                        out[0] = g1;
+                        out[1] = g1;
+                        out[2] = g1;
+                        out += 3;
+                    }
+                    if (col + 2 < f_width) {
+                        out[0] = g2;
+                        out[1] = g2;
+                        out[2] = g2;
+                        out += 3;
+                    }
+                    if (col + 3 < f_width) {
+                        out[0] = g3;
+                        out[1] = g3;
+                        out[2] = g3;
+                        out += 3;
+                    }
                 }
             }
         }
 #else
         if (is_pisp_comp1) {
             impl_->raw_staging.resize(static_cast<size_t>(f_height) * static_cast<size_t>(stride));
-            std::memcpy(impl_->raw_staging.data(), raw, static_cast<size_t>(f_height) * static_cast<size_t>(stride));
+            std::memcpy(impl_->raw_staging.data(), raw,
+                        static_cast<size_t>(f_height) * static_cast<size_t>(stride));
             const uint8_t* staged = impl_->raw_staging.data();
             for (int row = 0; row < f_height; ++row) {
                 const uint8_t* src = staged + row * stride;
                 uint8_t* out = impl_->bgr_scratch.ptr<uint8_t>(row);
                 for (int col = 0; col < f_width; ++col) {
                     const uint8_t v = src[col];
-                    *out++ = v; *out++ = v; *out++ = v;
+                    *out++ = v;
+                    *out++ = v;
+                    *out++ = v;
                 }
             }
         } else {
@@ -1325,10 +1334,9 @@ cv::Mat CameraWrapper::wrap_as_mat(const ZeroCopyFrame& frame,
         static uint32_t wrap_call_count = 0;
         if (++wrap_call_count <= 10 || (tw2 - tw0) > 5000000ULL) {
             std::fprintf(stderr, "[wrap_as_mat #%u] alloc=%uus neon=%uus total=%uus\n",
-                wrap_call_count,
-                static_cast<unsigned>((tw1 - tw0) / 1000),
-                static_cast<unsigned>((tw2 - tw1) / 1000),
-                static_cast<unsigned>((tw2 - tw0) / 1000));
+                         wrap_call_count, static_cast<unsigned>((tw1 - tw0) / 1000),
+                         static_cast<unsigned>((tw2 - tw1) / 1000),
+                         static_cast<unsigned>((tw2 - tw0) / 1000));
         }
 #endif
         return impl_->bgr_scratch;
@@ -1354,40 +1362,40 @@ bool CameraWrapper::set_gain(float gain) {
 // =============================================================================
 
 bool FrameBufferAllocator::allocate(int width, int height, PixelFormat format, int count) {
-    width_  = width;
+    width_ = width;
     height_ = height;
     format_ = format;
-    count_  = count;
+    count_ = count;
 
     switch (format) {
         case PixelFormat::RAW10:
-            stride_[0]     = width * 2;
+            stride_[0] = width * 2;
             plane_size_[0] = static_cast<size_t>(stride_[0]) * static_cast<size_t>(height);
             break;
         case PixelFormat::BGR888:
         case PixelFormat::RGB888:
-            stride_[0]     = width * 3;
+            stride_[0] = width * 3;
             plane_size_[0] = static_cast<size_t>(stride_[0]) * static_cast<size_t>(height);
             break;
         case PixelFormat::NV12:
-            stride_[0]     = width;
+            stride_[0] = width;
             plane_size_[0] = static_cast<size_t>(stride_[0]) * static_cast<size_t>(height);
-            stride_[1]     = width;
+            stride_[1] = width;
             plane_size_[1] = static_cast<size_t>(stride_[1]) * static_cast<size_t>(height) / 2u;
             break;
         case PixelFormat::YUV420:
-            stride_[0]     = width;
+            stride_[0] = width;
             plane_size_[0] = static_cast<size_t>(stride_[0]) * static_cast<size_t>(height);
-            stride_[1]     = width / 2;
+            stride_[1] = width / 2;
             plane_size_[1] = static_cast<size_t>(stride_[1]) * static_cast<size_t>(height) / 2u;
-            stride_[2]     = width / 2;
+            stride_[2] = width / 2;
             plane_size_[2] = static_cast<size_t>(stride_[2]) * static_cast<size_t>(height) / 2u;
             break;
     }
 
     buffers_.resize(static_cast<size_t>(count));
     for (int i = 0; i < count; ++i) {
-        buffers_[static_cast<size_t>(i)].fd   = -1;
+        buffers_[static_cast<size_t>(i)].fd = -1;
         buffers_[static_cast<size_t>(i)].data = nullptr;
         buffers_[static_cast<size_t>(i)].size = plane_size_[0];
     }
@@ -1396,14 +1404,20 @@ bool FrameBufferAllocator::allocate(int width, int height, PixelFormat format, i
 
 void FrameBufferAllocator::free() {
     for (auto& buffer : buffers_) {
-        if (buffer.data) { munmap(buffer.data, buffer.size); }
-        if (buffer.fd >= 0) { close(buffer.fd); }
+        if (buffer.data) {
+            munmap(buffer.data, buffer.size);
+        }
+        if (buffer.fd >= 0) {
+            close(buffer.fd);
+        }
     }
     buffers_.clear();
 }
 
 void* FrameBufferAllocator::get_data(int index, int /*plane*/) {
-    if (index < 0 || index >= count_) { return nullptr; }
+    if (index < 0 || index >= count_) {
+        return nullptr;
+    }
     return buffers_[static_cast<size_t>(index)].data;
 }
 

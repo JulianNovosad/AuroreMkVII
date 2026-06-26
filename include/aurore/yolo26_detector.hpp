@@ -1,11 +1,10 @@
 #pragma once
 
 #include <memory>
+#include <opencv2/core.hpp>
 #include <optional>
 #include <string>
 #include <vector>
-
-#include <opencv2/core.hpp>
 
 #include "aurore/state_machine.hpp"  // for Detection
 
@@ -22,12 +21,12 @@ namespace aurore {
  * dedicated non-RT detect thread, NOT from a SCHED_FIFO RT thread.
  */
 class Yolo26Detector {
-public:
+   public:
     struct Config {
-        std::string model_path;               ///< Path to yolo26n.onnx
-        float conf_threshold  = 0.40f;        ///< Minimum detection confidence
-        int   input_size      = 640;          ///< Model input resolution (square)
-        int   num_threads     = 3;            ///< ORT intra-op thread count
+        std::string model_path;                       ///< Path to yolo26n.onnx
+        float conf_threshold = 0.40f;                 ///< Minimum detection confidence
+        int input_size = 640;                         ///< Model input resolution (square)
+        int num_threads = 3;                          ///< ORT intra-op thread count
         std::vector<int> target_classes = {0, 2, 4};  ///< person, car, airplane
     };
 
@@ -45,7 +44,7 @@ public:
     /// Return all detections above threshold (any target class).
     std::vector<Detection> detect_all(const cv::Mat& bgr_frame);
 
-private:
+   private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
     Config cfg_;
@@ -53,10 +52,10 @@ private:
 
     // Letterbox bgr_frame to (input_size × input_size), return scale and padding
     struct LetterboxResult {
-        cv::Mat image;    // letterboxed float32 [0,1] CHW
-        float scale;      // scale factor applied to original image
-        float pad_top;    // top padding in pixels (after scaling)
-        float pad_left;   // left padding in pixels (after scaling)
+        cv::Mat image;   // letterboxed float32 [0,1] CHW
+        float scale;     // scale factor applied to original image
+        float pad_top;   // top padding in pixels (after scaling)
+        float pad_left;  // left padding in pixels (after scaling)
     };
     LetterboxResult letterbox(const cv::Mat& bgr_frame) const;
 

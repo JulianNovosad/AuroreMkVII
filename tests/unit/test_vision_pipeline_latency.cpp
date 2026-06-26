@@ -14,16 +14,16 @@
  * Laptop-compatible: Uses test pattern mode, skips hardware-dependent tests.
  */
 
-#include "aurore/camera_wrapper.hpp"
-#include "aurore/timing.hpp"
-
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <thread>
 #include <vector>
-#include <algorithm>
-#include <cmath>
+
+#include "aurore/camera_wrapper.hpp"
+#include "aurore/timing.hpp"
 
 // OpenCV headers (must be included after camera_wrapper.hpp for cv::Mat definition)
 #include <opencv2/opencv.hpp>
@@ -49,21 +49,13 @@ struct LatencyStats {
         count++;
     }
 
-    uint64_t mean_ns() const {
-        return count > 0 ? sum_ns / count : 0;
-    }
+    uint64_t mean_ns() const { return count > 0 ? sum_ns / count : 0; }
 
-    double mean_ms() const {
-        return static_cast<double>(mean_ns()) / 1000000.0;
-    }
+    double mean_ms() const { return static_cast<double>(mean_ns()) / 1000000.0; }
 
-    double min_ms() const {
-        return static_cast<double>(min_ns) / 1000000.0;
-    }
+    double min_ms() const { return static_cast<double>(min_ns) / 1000000.0; }
 
-    double max_ms() const {
-        return static_cast<double>(max_ns) / 1000000.0;
-    }
+    double max_ms() const { return static_cast<double>(max_ns) / 1000000.0; }
 };
 
 LatencyStats g_capture_latency;
@@ -71,27 +63,34 @@ LatencyStats g_conversion_latency;
 LatencyStats g_pipeline_latency;
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::printf("  PASS: %s\n", #name); \
-    } \
-    catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::fprintf(stderr, "  FAIL: %s - %s\n", #name, e.what()); \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                  \
+    do {                                                                \
+        g_tests_run.fetch_add(1);                                       \
+        try {                                                           \
+            name();                                                     \
+            g_tests_passed.fetch_add(1);                                \
+            std::printf("  PASS: %s\n", #name);                         \
+        } catch (const std::exception& e) {                             \
+            g_tests_failed.fetch_add(1);                                \
+            std::fprintf(stderr, "  FAIL: %s - %s\n", #name, e.what()); \
+        }                                                               \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_NEAR(a, b, tol) do { \
-    auto diff = std::abs(static_cast<int64_t>(a) - static_cast<int64_t>(b)); \
-    if (diff > static_cast<int64_t>(tol)) \
-        throw std::runtime_error("Assertion failed: " #a " not near " #b); \
-} while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_NEAR(a, b, tol)                                                   \
+    do {                                                                         \
+        auto diff = std::abs(static_cast<int64_t>(a) - static_cast<int64_t>(b)); \
+        if (diff > static_cast<int64_t>(tol))                                    \
+            throw std::runtime_error("Assertion failed: " #a " not near " #b);   \
+    } while (0)
 
 }  // anonymous namespace
 
@@ -101,9 +100,9 @@ LatencyStats g_pipeline_latency;
 
 TEST(test_capture_latency_basic) {
     aurore::CameraConfig cfg;
-    cfg.width  = 1536;
+    cfg.width = 1536;
     cfg.height = 864;
-    cfg.fps    = 120;
+    cfg.fps = 120;
 
     aurore::CameraWrapper cam(cfg);
     cam.init();
@@ -135,16 +134,15 @@ TEST(test_capture_latency_basic) {
     cam.stop();
 
     std::printf("    Capture latency: min=%.2fms, max=%.2fms, mean=%.2fms (n=%zu)\n",
-                g_capture_latency.min_ms(),
-                g_capture_latency.max_ms(),
-                g_capture_latency.mean_ms(),
+                g_capture_latency.min_ms(), g_capture_latency.max_ms(), g_capture_latency.mean_ms(),
                 g_capture_latency.count);
 
     // AM7-L2-VIS-003: Total pipeline <= 3.0ms
     // Capture alone should be < 1.0ms in test pattern mode
     // Note: Test pattern mode on laptop is slower than real camera capture
     // On RPi 5 with libcamera, capture is hardware-timed
-    ASSERT_TRUE(g_capture_latency.mean_ns() < 50000000);  // < 50ms mean (relaxed for laptop test pattern)
+    ASSERT_TRUE(g_capture_latency.mean_ns() <
+                50000000);  // < 50ms mean (relaxed for laptop test pattern)
 }
 
 // ============================================================================
@@ -153,9 +151,9 @@ TEST(test_capture_latency_basic) {
 
 TEST(test_conversion_latency) {
     aurore::CameraConfig cfg;
-    cfg.width  = 1536;
+    cfg.width = 1536;
     cfg.height = 864;
-    cfg.fps    = 120;
+    cfg.fps = 120;
 
     aurore::CameraWrapper cam(cfg);
     cam.init();
@@ -189,10 +187,8 @@ TEST(test_conversion_latency) {
     cam.stop();
 
     std::printf("    Conversion latency: min=%.2fms, max=%.2fms, mean=%.2fms (n=%zu)\n",
-                g_conversion_latency.min_ms(),
-                g_conversion_latency.max_ms(),
-                g_conversion_latency.mean_ms(),
-                g_conversion_latency.count);
+                g_conversion_latency.min_ms(), g_conversion_latency.max_ms(),
+                g_conversion_latency.mean_ms(), g_conversion_latency.count);
 
     // AM7-L2-VIS-003: Conversion should be < 1.5ms
     // NEON path: 0.8-1.2ms on RPi 5
@@ -206,9 +202,9 @@ TEST(test_conversion_latency) {
 
 TEST(test_pipeline_latency_end_to_end) {
     aurore::CameraConfig cfg;
-    cfg.width  = 1536;
+    cfg.width = 1536;
     cfg.height = 864;
-    cfg.fps    = 120;
+    cfg.fps = 120;
 
     aurore::CameraWrapper cam(cfg);
     cam.init();
@@ -246,10 +242,8 @@ TEST(test_pipeline_latency_end_to_end) {
     cam.stop();
 
     std::printf("    Pipeline latency: min=%.2fms, max=%.2fms, mean=%.2fms (n=%zu)\n",
-                g_pipeline_latency.min_ms(),
-                g_pipeline_latency.max_ms(),
-                g_pipeline_latency.mean_ms(),
-                g_pipeline_latency.count);
+                g_pipeline_latency.min_ms(), g_pipeline_latency.max_ms(),
+                g_pipeline_latency.mean_ms(), g_pipeline_latency.count);
 
     // AM7-L2-VIS-003: Total pipeline <= 3.0ms
     // On laptop with test pattern, should be well under budget
@@ -264,9 +258,9 @@ TEST(test_pipeline_latency_end_to_end) {
 
 TEST(test_sustained_frame_rate) {
     aurore::CameraConfig cfg;
-    cfg.width  = 1536;
+    cfg.width = 1536;
     cfg.height = 864;
-    cfg.fps    = 120;
+    cfg.fps = 120;
 
     aurore::CameraWrapper cam(cfg);
     cam.init();
@@ -308,9 +302,9 @@ TEST(test_sustained_frame_rate) {
 
 TEST(test_latency_jitter) {
     aurore::CameraConfig cfg;
-    cfg.width  = 1536;
+    cfg.width = 1536;
     cfg.height = 864;
-    cfg.fps    = 120;
+    cfg.fps = 120;
 
     aurore::CameraWrapper cam(cfg);
     cam.init();
@@ -367,9 +361,9 @@ TEST(test_latency_jitter) {
 
 TEST(test_no_heap_allocation_hot_path) {
     aurore::CameraConfig cfg;
-    cfg.width  = 1536;
+    cfg.width = 1536;
     cfg.height = 864;
-    cfg.fps    = 120;
+    cfg.fps = 120;
 
     aurore::CameraWrapper cam(cfg);
     cam.init();

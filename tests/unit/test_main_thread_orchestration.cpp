@@ -12,24 +12,24 @@
  * requiring actual hardware (camera, I2C, etc.).
  */
 
+#include <sched.h>
+#include <signal.h>
+#include <sys/mman.h>
+#include <sys/resource.h>
+
 #include <atomic>
 #include <cassert>
 #include <chrono>
+#include <csignal>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <thread>
 #include <vector>
-#include <csignal>
-
-#include <sched.h>
-#include <sys/mman.h>
-#include <sys/resource.h>
-#include <signal.h>
 
 #include "aurore/ring_buffer.hpp"
-#include "aurore/timing.hpp"
 #include "aurore/safety_monitor.hpp"
+#include "aurore/timing.hpp"
 
 namespace {
 
@@ -39,33 +39,41 @@ std::atomic<size_t> g_tests_passed(0);
 std::atomic<size_t> g_tests_failed(0);
 
 #define TEST(name) void name()
-#define RUN_TEST(name) do { \
-    g_tests_run.fetch_add(1); \
-    try { \
-        name(); \
-        g_tests_passed.fetch_add(1); \
-        std::cout << "  PASS: " << #name << std::endl; \
-    } \
-    catch (const std::exception& e) { \
-        g_tests_failed.fetch_add(1); \
-        std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
-    } \
-} while(0)
+#define RUN_TEST(name)                                                          \
+    do {                                                                        \
+        g_tests_run.fetch_add(1);                                               \
+        try {                                                                   \
+            name();                                                             \
+            g_tests_passed.fetch_add(1);                                        \
+            std::cout << "  PASS: " << #name << std::endl;                      \
+        } catch (const std::exception& e) {                                     \
+            g_tests_failed.fetch_add(1);                                        \
+            std::cerr << "  FAIL: " << #name << " - " << e.what() << std::endl; \
+        }                                                                       \
+    } while (0)
 
-#define ASSERT_TRUE(x) do { if (!(x)) throw std::runtime_error("Assertion failed: " #x); } while(0)
+#define ASSERT_TRUE(x)                                               \
+    do {                                                             \
+        if (!(x)) throw std::runtime_error("Assertion failed: " #x); \
+    } while (0)
 #define ASSERT_FALSE(x) ASSERT_TRUE(!(x))
-#define ASSERT_EQ(a, b) do { if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); } while(0)
-#define ASSERT_NE(a, b) do { if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " == " #b); } while(0)
-#define ASSERT_NEAR(a, b, tol) do { \
-    auto diff = std::abs(static_cast<int64_t>(a) - static_cast<int64_t>(b)); \
-    if (diff > static_cast<int64_t>(tol)) \
-        throw std::runtime_error("Assertion failed: " #a " not near " #b); \
-} while(0)
+#define ASSERT_EQ(a, b)                                                              \
+    do {                                                                             \
+        if ((a) != (b)) throw std::runtime_error("Assertion failed: " #a " != " #b); \
+    } while (0)
+#define ASSERT_NE(a, b)                                                              \
+    do {                                                                             \
+        if ((a) == (b)) throw std::runtime_error("Assertion failed: " #a " == " #b); \
+    } while (0)
+#define ASSERT_NEAR(a, b, tol)                                                   \
+    do {                                                                         \
+        auto diff = std::abs(static_cast<int64_t>(a) - static_cast<int64_t>(b)); \
+        if (diff > static_cast<int64_t>(tol))                                    \
+            throw std::runtime_error("Assertion failed: " #a " not near " #b);   \
+    } while (0)
 
 // Helper: sleep for specified duration in milliseconds
-void sleep_ms(int ms) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-}
+void sleep_ms(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
 
 // Simulated thread configuration function (mirrors main.cpp)
 bool configure_rt_thread(const char* /*name*/, int priority, int cpu_affinity) {
@@ -161,8 +169,8 @@ TEST(test_thread_timing_periods) {
     const uint64_t k1kHzPeriod = 1000000;   // 1ms
 
     const uint64_t kVisionPhase = 0;
-    const uint64_t kTrackPhase = 2000000;    // 2ms
-    const uint64_t kActuationPhase = 4000000; // 4ms
+    const uint64_t kTrackPhase = 2000000;      // 2ms
+    const uint64_t kActuationPhase = 4000000;  // 4ms
 
     ASSERT_EQ(k120HzPeriod, 8333333);
     ASSERT_EQ(k1kHzPeriod, 1000000);
@@ -175,9 +183,10 @@ TEST(test_thread_timing_periods) {
     ASSERT_TRUE(kTrackPhase < k120HzPeriod);
     ASSERT_TRUE(kActuationPhase < k120HzPeriod);
 
-    std::cout << "    120Hz period: " << k120HzPeriod << "ns, 1kHz period: " << k1kHzPeriod << "ns" << std::endl;
-    std::cout << "    Phase offsets: vision=" << kVisionPhase << "ns, track=" 
-              << kTrackPhase << "ns, actuation=" << kActuationPhase << "ns" << std::endl;
+    std::cout << "    120Hz period: " << k120HzPeriod << "ns, 1kHz period: " << k1kHzPeriod << "ns"
+              << std::endl;
+    std::cout << "    Phase offsets: vision=" << kVisionPhase << "ns, track=" << kTrackPhase
+              << "ns, actuation=" << kActuationPhase << "ns" << std::endl;
 }
 
 TEST(test_configure_rt_thread_basic) {
@@ -186,7 +195,8 @@ TEST(test_configure_rt_thread_basic) {
 
     // May fail on non-RT systems - verify function executes without crash
     // Result indicates if RT scheduling was successfully applied
-    std::cout << "    RT thread configuration: " << (result ? "success" : "failed (non-RT system)") << std::endl;
+    std::cout << "    RT thread configuration: " << (result ? "success" : "failed (non-RT system)")
+              << std::endl;
 }
 
 TEST(test_configure_rt_thread_priority_ordering) {
@@ -261,7 +271,8 @@ TEST(test_resource_limits_basic) {
         getrlimit(RLIMIT_MEMLOCK, &rl);
         ASSERT_EQ(rl.rlim_cur, kMaxMemlock);
         ASSERT_EQ(rl.rlim_max, kMaxMemlock);
-        std::cout << "    Resource limits set: " << (kMaxMemlock / (1024 * 1024)) << "MB" << std::endl;
+        std::cout << "    Resource limits set: " << (kMaxMemlock / (1024 * 1024)) << "MB"
+                  << std::endl;
     } else {
         std::cout << "    Resource limits skipped (permission denied)" << std::endl;
     }
@@ -271,11 +282,12 @@ TEST(test_memory_lock_limit_constant) {
     // Verify the MAX_MEMLOCK_BYTES constant from main.cpp
     constexpr size_t MAX_MEMLOCK_BYTES = 64 * 1024 * 1024;
 
-    ASSERT_EQ(MAX_MEMLOCK_BYTES, 67108864);  // 64MB
-    ASSERT_TRUE(MAX_MEMLOCK_BYTES >= 16 * 1024 * 1024);  // At least 16MB
+    ASSERT_EQ(MAX_MEMLOCK_BYTES, 67108864);               // 64MB
+    ASSERT_TRUE(MAX_MEMLOCK_BYTES >= 16 * 1024 * 1024);   // At least 16MB
     ASSERT_TRUE(MAX_MEMLOCK_BYTES <= 256 * 1024 * 1024);  // At most 256MB
 
-    std::cout << "    MAX_MEMLOCK_BYTES: " << (MAX_MEMLOCK_BYTES / (1024 * 1024)) << "MB" << std::endl;
+    std::cout << "    MAX_MEMLOCK_BYTES: " << (MAX_MEMLOCK_BYTES / (1024 * 1024)) << "MB"
+              << std::endl;
 }
 
 TEST(test_memory_requirements_calculation) {
@@ -292,7 +304,8 @@ TEST(test_memory_requirements_calculation) {
     const size_t kTotalRequired = kFourFrames + kStackAllocations + kSafetyMargin;
 
     std::cout << "    DMA buffers (4x): " << (kFourFrames / (1024 * 1024)) << "MB" << std::endl;
-    std::cout << "    Stack allocations: " << (kStackAllocations / (1024 * 1024)) << "MB" << std::endl;
+    std::cout << "    Stack allocations: " << (kStackAllocations / (1024 * 1024)) << "MB"
+              << std::endl;
     std::cout << "    Safety margin: " << (kSafetyMargin / (1024 * 1024)) << "MB" << std::endl;
     std::cout << "    Total required: " << (kTotalRequired / (1024 * 1024)) << "MB" << std::endl;
 
@@ -349,7 +362,8 @@ TEST(test_shutdown_sequence_order) {
     ASSERT_FALSE(track_running.load());
     ASSERT_FALSE(actuation_running.load());
 
-    std::cout << "    Shutdown sequence: " << shutdown_step.load() << " steps completed" << std::endl;
+    std::cout << "    Shutdown sequence: " << shutdown_step.load() << " steps completed"
+              << std::endl;
 }
 
 TEST(test_thread_join_timeout) {
@@ -669,7 +683,7 @@ TEST(test_deadline_monitor_vision_budget) {
         ASSERT_FALSE(deadline.exceeded());
         ASSERT_TRUE(deadline.elapsed_ns() >= 500000);  // At least 0.5ms
     }
-    
+
     uint64_t elapsed_ms = deadline.elapsed_ns() / 1000000;
     std::cout << "    Vision deadline (3ms budget): " << elapsed_ms << "ms elapsed" << std::endl;
 }
@@ -689,8 +703,8 @@ TEST(test_deadline_monitor_track_budget) {
     ASSERT_TRUE(met);
     ASSERT_FALSE(deadline.exceeded());
 
-    std::cout << "    Track deadline (" 
-              << (deadline.elapsed_ns() / 1000) << "μs elapsed)" << std::endl;
+    std::cout << "    Track deadline (" << (deadline.elapsed_ns() / 1000) << "μs elapsed)"
+              << std::endl;
 }
 
 TEST(test_deadline_monitor_actuation_budget) {
@@ -708,8 +722,8 @@ TEST(test_deadline_monitor_actuation_budget) {
     ASSERT_TRUE(met);
     ASSERT_FALSE(deadline.exceeded());
 
-    std::cout << "    Actuation deadline (" 
-              << (deadline.elapsed_ns() / 1000) << "μs elapsed)" << std::endl;
+    std::cout << "    Actuation deadline (" << (deadline.elapsed_ns() / 1000) << "μs elapsed)"
+              << std::endl;
 }
 
 // ============================================================================

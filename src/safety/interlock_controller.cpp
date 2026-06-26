@@ -198,17 +198,17 @@ SelfTestResult InterlockController::run_self_test() noexcept {
     // Test by forcing a known state and verifying it reads back correctly
     {
         InterlockState original_state = state_.load(std::memory_order_acquire);
-        
+
         // Force to OPEN, verify, then force to CLOSED, verify
         force_state(InterlockState::OPEN);
         bool open_ok = (get_state() == InterlockState::OPEN);
-        
+
         force_state(InterlockState::CLOSED);
         bool closed_ok = (get_state() == InterlockState::CLOSED);
-        
+
         // Restore original state
         force_state(original_state);
-        
+
         result.comparator_ok = open_ok && closed_ok;
     }
 
@@ -219,7 +219,7 @@ SelfTestResult InterlockController::run_self_test() noexcept {
             // Toggle LED and verify we can write
             impl_->write_pin(config_.status_led_pin, 1);
             impl_->write_pin(config_.status_led_pin, 0);
-            
+
             // GPIO test passes if we can write without error
             result.interlock_gpio_ok = true;
         } else {
@@ -232,12 +232,12 @@ SelfTestResult InterlockController::run_self_test() noexcept {
     // Test by feeding watchdog and verifying timestamp updates
     {
         uint64_t before_feed = last_watchdog_feed_ns_.load(std::memory_order_acquire);
-        
+
         // Feed watchdog
         watchdog_feed();
-        
+
         uint64_t after_feed = last_watchdog_feed_ns_.load(std::memory_order_acquire);
-        
+
         // Watchdog test passes if feed timestamp was updated
         result.watchdog_ok = (after_feed >= before_feed);
     }
@@ -247,13 +247,13 @@ SelfTestResult InterlockController::run_self_test() noexcept {
     if (!result.all_passed()) {
         self_test_failure_count_.fetch_add(1, std::memory_order_relaxed);
     }
-    
+
     // Store individual result fields atomically
     self_test_comparator_ok_.store(result.comparator_ok, std::memory_order_release);
     self_test_gpio_ok_.store(result.interlock_gpio_ok, std::memory_order_release);
     self_test_watchdog_ok_.store(result.watchdog_ok, std::memory_order_release);
     self_test_timestamp_ns_.store(result.last_test_timestamp_ns, std::memory_order_release);
-    
+
     // Store full result (non-atomic, for convenience reading)
     last_self_test_result_ = result;
 
@@ -422,7 +422,7 @@ void InterlockController::monitor_thread_func() noexcept {
         const int64_t sleep_us = static_cast<int64_t>(poll_interval_us) - elapsed / 1000;
 
         if (sleep_us > 0) {
-            struct timespec ts {};
+            struct timespec ts{};
             ts.tv_sec = sleep_us / 1000000;
             ts.tv_nsec = (sleep_us % 1000000) * 1000;
             clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, nullptr);

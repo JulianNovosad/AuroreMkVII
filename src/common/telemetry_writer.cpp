@@ -130,7 +130,7 @@ bool TelemetryWriter::enqueue_entry(const CsvLogEntry& entry) {
     size_t max_capacity = std::min(config_.max_queue_size, static_cast<size_t>(1023));
 
     // SEC-010: Check if queue is full
-    if (current_depth >= max_capacity) { 
+    if (current_depth >= max_capacity) {
         // Apply backpressure policy
         if (config_.backpressure_policy == BackpressurePolicy::kDropOldest) {
             CsvLogEntry dummy;
@@ -265,12 +265,13 @@ void TelemetryWriter::log_event(TelemetryEventId event_id, TelemetrySeverity sev
 
     CsvLogEntry entry;
     auto now = std::chrono::system_clock::now();
-    entry.produced_ts_epoch_ms = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
+    entry.produced_ts_epoch_ms = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
     entry.call_ts_epoch_ms = entry.produced_ts_epoch_ms;
-    
+
     entry.set_module("EventLog");
     entry.set_event(truncated_message.c_str());
-    
+
     // We could store event_id and severity in other fields or add them to CsvLogEntry
     // For now, follow MKVI format which uses module/event fields.
 
@@ -279,11 +280,21 @@ void TelemetryWriter::log_event(TelemetryEventId event_id, TelemetrySeverity sev
     if (config_.enable_console) {
         const char* severity_str = "";
         switch (severity) {
-            case TelemetrySeverity::kDebug: severity_str = "DEBUG"; break;
-            case TelemetrySeverity::kInfo: severity_str = "INFO"; break;
-            case TelemetrySeverity::kWarning: severity_str = "WARNING"; break;
-            case TelemetrySeverity::kError: severity_str = "ERROR"; break;
-            case TelemetrySeverity::kCritical: severity_str = "CRITICAL"; break;
+            case TelemetrySeverity::kDebug:
+                severity_str = "DEBUG";
+                break;
+            case TelemetrySeverity::kInfo:
+                severity_str = "INFO";
+                break;
+            case TelemetrySeverity::kWarning:
+                severity_str = "WARNING";
+                break;
+            case TelemetrySeverity::kError:
+                severity_str = "ERROR";
+                break;
+            case TelemetrySeverity::kCritical:
+                severity_str = "CRITICAL";
+                break;
         }
         std::cout << "[" << severity_str << "] Event " << static_cast<int>(event_id) << ": "
                   << truncated_message << std::endl;

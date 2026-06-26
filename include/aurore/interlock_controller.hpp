@@ -146,9 +146,7 @@ struct SelfTestResult {
     uint64_t last_test_timestamp_ns{0};
 
     /// Overall pass/fail
-    bool all_passed() const {
-        return comparator_ok && interlock_gpio_ok && watchdog_ok;
-    }
+    bool all_passed() const { return comparator_ok && interlock_gpio_ok && watchdog_ok; }
 
     /// Get failure description
     std::string get_failure_description() const {
@@ -161,7 +159,8 @@ struct SelfTestResult {
 };
 
 // SelfTestResult must be trivially copyable for atomic operations
-static_assert(std::is_trivially_copyable_v<SelfTestResult>, "SelfTestResult must be trivially copyable");
+static_assert(std::is_trivially_copyable_v<SelfTestResult>,
+              "SelfTestResult must be trivially copyable");
 // SelfTestResult must be 16 bytes for lock-free atomic on x86_64
 static_assert(sizeof(SelfTestResult) == 16, "SelfTestResult must be 16 bytes for lock-free atomic");
 
@@ -179,7 +178,8 @@ class InterlockController {
      * @param hat Fusion HAT+ instance for I2C inhibit control (nullptr for testing)
      * @param config Interlock configuration
      */
-    InterlockController(FusionHat* hat = nullptr, const InterlockConfig& config = InterlockConfig());
+    InterlockController(FusionHat* hat = nullptr,
+                        const InterlockConfig& config = InterlockConfig());
 
     /**
      * @brief Destructor

@@ -173,7 +173,8 @@ void StateMachine::update_lock_confirmation(bool is_stable) noexcept {
 
         // AM7-L2-TGT-004: Log lock confirmation state change
         if (lock_confirmed_ && !was_confirmed) {
-            std::cout << "[StateMachine] LOCK-CONFIRMED stability_ratio=" << stability_ratio << "\n";
+            std::cout << "[StateMachine] LOCK-CONFIRMED stability_ratio=" << stability_ratio
+                      << "\n";
         }
 
         // Reset window for continuous monitoring
@@ -344,8 +345,7 @@ void StateMachine::on_detection(const Detection& d) {
     // AM7-L3-TGT-001(a): Log rejection when confidence < 95%
     if (d.confidence < kConfidenceMin) {
         std::cerr << "[StateMachine] TGT-REJECT reason=LOW_CONFIDENCE"
-                  << " conf=" << d.confidence
-                  << " min=" << kConfidenceMin << "\n";
+                  << " conf=" << d.confidence << " min=" << kConfidenceMin << "\n";
         return;
     }
 
@@ -400,8 +400,8 @@ void StateMachine::on_tracker_update(const TrackSolution& sol) {
             if (sol.psr > 0.f && sol.psr < kPsrLowThreshold) {
                 if (++low_conf_frames_ >= kLowConfFramesMax) {
                     low_conf_frames_ = 0;
-                    std::cerr << "[StateMachine] AM7-L3-TGT-003: PSR < "
-                              << kPsrLowThreshold << " for >" << kLowConfFramesMax
+                    std::cerr << "[StateMachine] AM7-L3-TGT-003: PSR < " << kPsrLowThreshold
+                              << " for >" << kLowConfFramesMax
                               << " frames — de-selecting TRACKING -> SEARCH\n";
                     transition(FcsState::SEARCH);
                     return;
@@ -630,8 +630,7 @@ void StateMachine::request_freecam() {
 
 // AM7-L2-MODE-004: SEARCH state entry from IDLE_SAFE, FREECAM, or ARMED (per AM7-L3-MODE-001 table)
 void StateMachine::request_search() {
-    if (state_ == FcsState::IDLE_SAFE || state_ == FcsState::FREECAM ||
-        state_ == FcsState::ARMED) {
+    if (state_ == FcsState::IDLE_SAFE || state_ == FcsState::FREECAM || state_ == FcsState::ARMED) {
         transition(FcsState::SEARCH);
     }
 }

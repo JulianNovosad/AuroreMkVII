@@ -10,29 +10,27 @@
 
 #include <cassert>
 #include <cstdio>
-#include <stdexcept>
-
 #include <opencv2/opencv.hpp>
+#include <stdexcept>
 #include <thread>
 
 // ---------------------------------------------------------------------------
 // Minimal test harness (no external framework)
 // ---------------------------------------------------------------------------
 
-static int g_tests_run    = 0;
+static int g_tests_run = 0;
 static int g_tests_passed = 0;
 static int g_tests_failed = 0;
 
-#define CHECK(expr)                                                         \
-    do {                                                                    \
-        ++g_tests_run;                                                      \
-        if (!(expr)) {                                                      \
-            std::fprintf(stderr, "  FAIL [%s:%d]: %s\n",                   \
-                         __FILE__, __LINE__, #expr);                        \
-            ++g_tests_failed;                                               \
-        } else {                                                            \
-            ++g_tests_passed;                                               \
-        }                                                                   \
+#define CHECK(expr)                                                                  \
+    do {                                                                             \
+        ++g_tests_run;                                                               \
+        if (!(expr)) {                                                               \
+            std::fprintf(stderr, "  FAIL [%s:%d]: %s\n", __FILE__, __LINE__, #expr); \
+            ++g_tests_failed;                                                        \
+        } else {                                                                     \
+            ++g_tests_passed;                                                        \
+        }                                                                            \
     } while (0)
 
 [[maybe_unused]] static void run_test(const char* name, void (*fn)()) {
@@ -105,9 +103,9 @@ static void test_init_and_start_stop_lifecycle() {
 // ---------------------------------------------------------------------------
 static void test_try_capture_returns_valid_test_pattern() {
     aurore::CameraConfig cfg;
-    cfg.width  = 1536;
+    cfg.width = 1536;
     cfg.height = 864;
-    cfg.fps    = 120;
+    cfg.fps = 120;
 
     aurore::CameraWrapper cam(cfg);
     cam.init();
@@ -118,7 +116,7 @@ static void test_try_capture_returns_valid_test_pattern() {
 
     CHECK(ok);
     CHECK(frame.valid == true);
-    CHECK(frame.width  == 1536);
+    CHECK(frame.width == 1536);
     CHECK(frame.height == 864);
     CHECK(frame.plane_data[0] != nullptr);
 
@@ -130,9 +128,9 @@ static void test_try_capture_returns_valid_test_pattern() {
 // ---------------------------------------------------------------------------
 static void test_wrap_as_mat_returns_bgr_frame() {
     aurore::CameraConfig cfg;
-    cfg.width  = 320;
+    cfg.width = 320;
     cfg.height = 240;
-    cfg.fps    = 30;
+    cfg.fps = 30;
 
     aurore::CameraWrapper cam(cfg);
     cam.init();
@@ -156,9 +154,9 @@ static void test_wrap_as_mat_returns_bgr_frame() {
 // ---------------------------------------------------------------------------
 static void test_sequence_numbers_increment() {
     aurore::CameraConfig cfg;
-    cfg.width  = 320;
+    cfg.width = 320;
     cfg.height = 240;
-    cfg.fps    = 30;
+    cfg.fps = 30;
 
     aurore::CameraWrapper cam(cfg);
     cam.init();
@@ -204,12 +202,12 @@ int main() {
         }
     };
 
-    run("test_default_construction",                  test_default_construction);
-    run("test_invalid_config_throws",                 test_invalid_config_throws);
-    run("test_init_and_start_stop_lifecycle",          test_init_and_start_stop_lifecycle);
+    run("test_default_construction", test_default_construction);
+    run("test_invalid_config_throws", test_invalid_config_throws);
+    run("test_init_and_start_stop_lifecycle", test_init_and_start_stop_lifecycle);
     run("test_try_capture_returns_valid_test_pattern", test_try_capture_returns_valid_test_pattern);
-    run("test_wrap_as_mat_returns_bgr_frame",          test_wrap_as_mat_returns_bgr_frame);
-    run("test_sequence_numbers_increment",             test_sequence_numbers_increment);
+    run("test_wrap_as_mat_returns_bgr_frame", test_wrap_as_mat_returns_bgr_frame);
+    run("test_sequence_numbers_increment", test_sequence_numbers_increment);
 
     std::printf("\nResults: %d/%d passed", g_tests_passed, g_tests_run);
     if (g_tests_failed > 0) {

@@ -30,8 +30,7 @@ void test_detect_aruco_marker_tag36h11() {
 
     // Generate ArUco marker image (grayscale)
     cv::Mat marker_image;
-    cv::aruco::Dictionary dictionary =
-        cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+    cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
     cv::aruco::generateImageMarker(dictionary, 0, 200, marker_image, 1);
 
     // Create a white background frame and embed the marker
@@ -60,8 +59,7 @@ void test_detect_multiple_markers() {
     AprilTagDetector det;
     det.set_dictionary(cv::aruco::DICT_6X6_250);
 
-    cv::aruco::Dictionary dictionary =
-        cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+    cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
     cv::Mat frame = cv::Mat::ones(864, 1536, CV_8UC3) * 255;  // White background (BGR)
 
     // Place marker ID 0 at top-left
@@ -95,8 +93,7 @@ void test_filter_by_known_tag_ids() {
     det.set_dictionary(cv::aruco::DICT_6X6_250);
     det.set_known_tag_ids({0, 2});  // Only detect tags 0 and 2
 
-    cv::aruco::Dictionary dictionary =
-        cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+    cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
     cv::Mat frame = cv::Mat::ones(864, 1536, CV_8UC3) * 255;  // White background (BGR)
 
     // Place marker ID 0 (should be detected)
@@ -120,8 +117,7 @@ void test_detect_small_marker_below_threshold() {
     AprilTagDetector det;
     det.set_dictionary(cv::aruco::DICT_6X6_250);
 
-    cv::aruco::Dictionary dictionary =
-        cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+    cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
     cv::Mat frame = cv::Mat::ones(864, 1536, CV_8UC3) * 255;  // White background (BGR)
 
     // Place very small marker (below minMarkerPerimeter threshold)

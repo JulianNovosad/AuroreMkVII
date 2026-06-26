@@ -22,17 +22,17 @@
 
 namespace {
 
-static constexpr uint64_t kPeriodNs       = 8333333ULL;   // 120 Hz nominal
-static constexpr uint64_t kJitterLimitNs  = 416666ULL;    // 5% of 8333µs = 417µs
-static constexpr size_t   kWarmupSamples  = 10;
-static constexpr size_t   kDefaultSamples = 10000;        // enough for 99.9th-pctile
+static constexpr uint64_t kPeriodNs = 8333333ULL;      // 120 Hz nominal
+static constexpr uint64_t kJitterLimitNs = 416666ULL;  // 5% of 8333µs = 417µs
+static constexpr size_t kWarmupSamples = 10;
+static constexpr size_t kDefaultSamples = 10000;  // enough for 99.9th-pctile
 
 struct JitterStats {
     uint64_t min_ns;
     uint64_t max_ns;
     uint64_t mean_ns;
     uint64_t p999_ns;  // 99.9th percentile
-    bool     pass;
+    bool pass;
 };
 
 JitterStats analyse(std::vector<int64_t>& deviations) {
@@ -68,7 +68,8 @@ void run_jitter_analysis(size_t num_samples) {
 
     std::cout << "\n=== Jitter Analysis (AM7-L2-TIM-003) ===" << std::endl;
     std::cout << "Period:       " << kPeriodNs / 1000 << " µs (120 Hz)" << std::endl;
-    std::cout << "Limit:        " << kJitterLimitNs / 1000 << " µs (5% of period at P99.9)" << std::endl;
+    std::cout << "Limit:        " << kJitterLimitNs / 1000 << " µs (5% of period at P99.9)"
+              << std::endl;
     std::cout << "Samples:      " << num_samples << std::endl;
 
     std::vector<int64_t> deviations;
@@ -80,7 +81,7 @@ void run_jitter_analysis(size_t num_samples) {
     // Advance to first target tick
     next.tv_nsec += static_cast<long>(kPeriodNs);
     if (next.tv_nsec >= 1000000000L) {
-        next.tv_sec  += 1;
+        next.tv_sec += 1;
         next.tv_nsec -= 1000000000L;
     }
 
@@ -89,7 +90,7 @@ void run_jitter_analysis(size_t num_samples) {
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr);
         next.tv_nsec += static_cast<long>(kPeriodNs);
         if (next.tv_nsec >= 1000000000L) {
-            next.tv_sec  += 1;
+            next.tv_sec += 1;
             next.tv_nsec -= 1000000000L;
         }
     }
@@ -107,7 +108,7 @@ void run_jitter_analysis(size_t num_samples) {
         // Advance absolute target
         next.tv_nsec += static_cast<long>(kPeriodNs);
         if (next.tv_nsec >= 1000000000L) {
-            next.tv_sec  += 1;
+            next.tv_sec += 1;
             next.tv_nsec -= 1000000000L;
         }
     }
@@ -115,14 +116,14 @@ void run_jitter_analysis(size_t num_samples) {
     JitterStats s = analyse(deviations);
 
     std::cout << "\nResults:" << std::endl;
-    std::cout << "  Min jitter:  " << s.min_ns       / 1000 << " µs" << std::endl;
-    std::cout << "  Max jitter:  " << s.max_ns       / 1000 << " µs" << std::endl;
-    std::cout << "  Mean jitter: " << s.mean_ns      / 1000 << " µs" << std::endl;
-    std::cout << "  P99.9:       " << s.p999_ns      / 1000 << " µs" << std::endl;
+    std::cout << "  Min jitter:  " << s.min_ns / 1000 << " µs" << std::endl;
+    std::cout << "  Max jitter:  " << s.max_ns / 1000 << " µs" << std::endl;
+    std::cout << "  Mean jitter: " << s.mean_ns / 1000 << " µs" << std::endl;
+    std::cout << "  P99.9:       " << s.p999_ns / 1000 << " µs" << std::endl;
     std::cout << "  Limit:       " << kJitterLimitNs / 1000 << " µs" << std::endl;
 
-    std::cout << "\nAM7-L2-TIM-003 (jitter ≤ 5% at P99.9): "
-              << (s.pass ? "PASS" : "FAIL") << std::endl;
+    std::cout << "\nAM7-L2-TIM-003 (jitter ≤ 5% at P99.9): " << (s.pass ? "PASS" : "FAIL")
+              << std::endl;
 
     if (!s.pass) {
         std::cerr << "JITTER ANALYSIS FAILED: P99.9 jitter " << s.p999_ns / 1000

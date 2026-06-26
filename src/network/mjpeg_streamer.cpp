@@ -1,16 +1,15 @@
 #include "aurore/mjpeg_streamer.hpp"
 
-#include <cerrno>
-#include <cstring>
-#include <filesystem>
-#include <iostream>
-
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <cerrno>
+#include <cstring>
+#include <filesystem>
+#include <iostream>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
@@ -19,9 +18,7 @@ namespace aurore {
 MjpegStreamer::MjpegStreamer(const std::string& socket_path, int input_width, int input_height)
     : socket_path_(socket_path), input_width_(input_width), input_height_(input_height) {}
 
-MjpegStreamer::~MjpegStreamer() {
-    stop();
-}
+MjpegStreamer::~MjpegStreamer() { stop(); }
 
 bool MjpegStreamer::start() {
     // Pre-allocate staging buffer at full input resolution.
@@ -159,9 +156,8 @@ void MjpegStreamer::encode_loop() {
         // Resize on the non-RT encode thread.
         // INTER_AREA for downscale (high quality); INTER_LINEAR for upscale.
         const int interp = (local_frame.cols > kStreamWidth) ? cv::INTER_AREA : cv::INTER_LINEAR;
-        cv::resize(local_frame, stream_frame,
-                   cv::Size(kStreamWidth, kStreamHeight),
-                   0.0, 0.0, interp);
+        cv::resize(local_frame, stream_frame, cv::Size(kStreamWidth, kStreamHeight), 0.0, 0.0,
+                   interp);
 
         cv::imencode(".jpg", stream_frame, jpeg_buf, jpeg_params);
         broadcast(jpeg_buf);
@@ -178,18 +174,18 @@ void MjpegStreamer::broadcast(const std::vector<uchar>& jpeg) {
     uint8_t hdr[4] = {
         static_cast<uint8_t>(len >> 24),
         static_cast<uint8_t>(len >> 16),
-        static_cast<uint8_t>(len >>  8),
+        static_cast<uint8_t>(len >> 8),
         static_cast<uint8_t>(len),
     };
 
     struct iovec iov[2];
     iov[0].iov_base = hdr;
-    iov[0].iov_len  = 4;
+    iov[0].iov_len = 4;
     iov[1].iov_base = const_cast<uint8_t*>(jpeg.data());
-    iov[1].iov_len  = jpeg.size();
+    iov[1].iov_len = jpeg.size();
 
     struct msghdr msg{};
-    msg.msg_iov    = iov;
+    msg.msg_iov = iov;
     msg.msg_iovlen = 2;
 
     std::vector<int> dead;

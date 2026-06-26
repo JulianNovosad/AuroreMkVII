@@ -1,9 +1,11 @@
 #include "aurore/state_machine.hpp"
-#include "aurore/timing.hpp"
+
 #include <cassert>
 #include <chrono>
 #include <cmath>
 #include <iostream>
+
+#include "aurore/timing.hpp"
 
 using namespace aurore;
 
@@ -66,10 +68,10 @@ void test_tracking_to_armed_with_conditions() {
     StateMachine sm;
     sm.force_state_for_test(FcsState::TRACKING);
     sm.set_operator_authorization(true);
-    
+
     // Set up valid lock condition
     sm.on_redetection_score(0.96f);  // >= kRedetectionScoreMin (0.95)
-    
+
     FireControlSolution sol;
     sol.p_hit = 0.96f;  // >= kPHitMin (0.95)
     sm.on_ballistics_solution(sol);
@@ -93,19 +95,19 @@ void test_fault_from_any_state() {
     sm1.force_state_for_test(FcsState::IDLE_SAFE);
     sm1.on_fault(FaultCode::CAMERA_TIMEOUT);
     assert(sm1.state() == FcsState::FAULT);
-    
+
     // Test FAULT transition from TRACKING
     StateMachine sm2;
     sm2.force_state_for_test(FcsState::TRACKING);
     sm2.on_fault(FaultCode::WATCHDOG_TIMEOUT);
     assert(sm2.state() == FcsState::FAULT);
-    
+
     // Test FAULT transition from ARMED
     StateMachine sm3;
     sm3.force_state_for_test(FcsState::ARMED);
     sm3.on_fault(FaultCode::TEMPERATURE_CRITICAL);
     assert(sm3.state() == FcsState::FAULT);
-    
+
     std::cout << "PASS: FAULT from any state on any fault\n";
 }
 
@@ -114,7 +116,7 @@ void test_fault_interlock_inhibit() {
     sm.force_state_for_test(FcsState::ARMED);
     sm.set_interlock_enabled(true);
     assert(sm.is_interlock_enabled());
-    
+
     sm.on_fault(FaultCode::CAMERA_TIMEOUT);
     assert(sm.state() == FcsState::FAULT);
     assert(!sm.is_interlock_enabled());  // Force inhibit
@@ -290,15 +292,19 @@ void test_crc16_deterministic() {
 
     const uint16_t crc1 = StateMachine::compute_crc16(range, timestamp);
     const uint16_t crc2 = StateMachine::compute_crc16(range, timestamp);
-    const uint16_t crc3 = StateMachine::compute_crc16(range + 0.001f, timestamp);  // Different range
-    const uint16_t crc4 = StateMachine::compute_crc16(range, timestamp + 1);       // Different timestamp
+    const uint16_t crc3 =
+        StateMachine::compute_crc16(range + 0.001f, timestamp);               // Different range
+    const uint16_t crc4 = StateMachine::compute_crc16(range, timestamp + 1);  // Different timestamp
 
-    assert(crc1 == crc2);       // Same input = same CRC
-    assert(crc1 != crc3);       // Different range = different CRC
-    assert(crc1 != crc4);       // Different timestamp = different CRC
+    assert(crc1 == crc2);  // Same input = same CRC
+    assert(crc1 != crc3);  // Different range = different CRC
+    assert(crc1 != crc4);  // Different timestamp = different CRC
 
     // Use variables to avoid unused warnings in release builds
-    (void)crc1; (void)crc2; (void)crc3; (void)crc4;
+    (void)crc1;
+    (void)crc2;
+    (void)crc3;
+    (void)crc4;
 
     std::cout << "PASS: CRC-16 is deterministic and sensitive to input changes\n";
 }
@@ -319,7 +325,7 @@ void test_manual_reset_from_fault_to_idle_safe() {
     // Trigger a fault to latch it
     sm.on_fault(FaultCode::CAMERA_TIMEOUT);
     assert(sm.state() == FcsState::FAULT);
-    
+
     // Manual reset should clear fault and transition to IDLE_SAFE
     sm.on_manual_reset();
     assert(sm.state() == FcsState::IDLE_SAFE);
@@ -450,11 +456,11 @@ void test_manual_reset_clears_fault_latch() {
     StateMachine sm;
     sm.force_state_for_test(FcsState::FAULT);
     sm.on_fault(FaultCode::CAMERA_TIMEOUT);
-    
+
     // Fault should be latched
     sm.on_manual_reset();
     assert(sm.state() == FcsState::IDLE_SAFE);
-    
+
     // After reset, should be able to transition normally
     sm.request_search();
     assert(sm.state() == FcsState::SEARCH);
@@ -466,7 +472,7 @@ void test_manual_reset_clears_authorization() {
     StateMachine sm;
     sm.force_state_for_test(FcsState::FAULT);
     sm.set_operator_authorization(true);
-    
+
     sm.on_manual_reset();
     assert(sm.state() == FcsState::IDLE_SAFE);
     assert(!sm.has_operator_authorization());
@@ -589,12 +595,12 @@ void test_position_stability_single_frame_not_stable() {
     // AM7-L2-TGT-003: Single frame should not be considered stable
     StateMachine sm;
     sm.force_state_for_test(FcsState::SEARCH);
-    
+
     Detection d;
     d.confidence = 0.96f;
     d.bbox = {100, 100, 50, 50};
     sm.on_detection(d);
-    
+
     // Should remain in SEARCH (not enough frames for validation)
     assert(sm.state() == FcsState::SEARCH);
     std::cout << "PASS: Single frame not stable (AM7-L2-TGT-003)\n";
@@ -604,7 +610,7 @@ void test_position_stability_three_stable_frames_transitions() {
     // AM7-L2-TGT-003: Three consecutive stable frames (Δ ≤ 2px) should transition
     StateMachine sm;
     sm.force_state_for_test(FcsState::SEARCH);
-    
+
     // Send 3 detections with stable positions (same centroid)
     for (int i = 0; i < 3; ++i) {
         Detection d;
@@ -612,7 +618,7 @@ void test_position_stability_three_stable_frames_transitions() {
         d.bbox = {100, 100, 50, 50};  // Same position each frame
         sm.on_detection(d);
     }
-    
+
     // Should transition to TRACKING after 3 stable frames
     assert(sm.state() == FcsState::TRACKING);
     std::cout << "PASS: Three stable frames transition to TRACKING (AM7-L2-TGT-003)\n";
@@ -622,7 +628,7 @@ void test_position_stability_unstable_positions_no_transition() {
     // AM7-L2-TGT-003: Unstable positions (Δ > 2px) should not transition
     StateMachine sm;
     sm.force_state_for_test(FcsState::SEARCH);
-    
+
     // Send 3 detections with unstable positions (>2px delta)
     for (int i = 0; i < 3; ++i) {
         Detection d;
@@ -630,7 +636,7 @@ void test_position_stability_unstable_positions_no_transition() {
         d.bbox = {100 + i * 10, 100, 50, 50};  // Moving 10px each frame
         sm.on_detection(d);
     }
-    
+
     // Should remain in SEARCH (positions not stable)
     assert(sm.state() == FcsState::SEARCH);
     std::cout << "PASS: Unstable positions do not transition (AM7-L2-TGT-003)\n";
@@ -640,7 +646,7 @@ void test_position_stability_reset_on_state_change() {
     // AM7-L2-TGT-004: Validation state should reset on state transition
     StateMachine sm;
     sm.force_state_for_test(FcsState::SEARCH);
-    
+
     // Build up 2 stable frames
     for (int i = 0; i < 2; ++i) {
         Detection d;
@@ -648,21 +654,21 @@ void test_position_stability_reset_on_state_change() {
         d.bbox = {100, 100, 50, 50};
         sm.on_detection(d);
     }
-    
+
     // Cancel to IDLE_SAFE
     sm.request_cancel();
     assert(sm.state() == FcsState::IDLE_SAFE);
-    
+
     // Return to SEARCH - validation should be reset
     sm.request_search();
     assert(sm.state() == FcsState::SEARCH);
-    
+
     // Need 3 more stable frames (not just 1)
     Detection d;
     d.confidence = 0.96f;
     d.bbox = {100, 100, 50, 50};
     sm.on_detection(d);
-    
+
     // Should remain in SEARCH (validation was reset)
     assert(sm.state() == FcsState::SEARCH);
     std::cout << "PASS: Validation state resets on state change (AM7-L2-TGT-004)\n";
@@ -672,17 +678,17 @@ void test_lock_confirmation_stable_window() {
     // AM7-L2-TGT-004: Lock confirmation over 250ms window
     StateMachine sm;
     sm.force_state_for_test(FcsState::TRACKING);
-    
+
     // Simulate stable tracking for 250ms (30 frames at ~8ms/frame)
     TrackSolution sol;
     sol.valid = true;
-    
+
     for (int i = 0; i < 35; ++i) {
         sm.on_tracker_update(sol);
     }
-    
+
     // Lock should be confirmed after 250ms of stable tracking
-    // Note: This test verifies the mechanism runs; actual lock_confirmed_ 
+    // Note: This test verifies the mechanism runs; actual lock_confirmed_
     // is internal state not directly exposed
     std::cout << "PASS: Lock confirmation window runs (AM7-L2-TGT-004)\n";
 }
@@ -691,7 +697,7 @@ void test_position_stability_boundary_2px() {
     // AM7-L2-TGT-003: Test boundary condition (exactly 2px delta)
     StateMachine sm;
     sm.force_state_for_test(FcsState::SEARCH);
-    
+
     // Send 3 detections with exactly 2px delta (should be stable)
     for (int i = 0; i < 3; ++i) {
         Detection d;
@@ -699,7 +705,7 @@ void test_position_stability_boundary_2px() {
         d.bbox = {100 + i * 2, 100, 50, 50};  // Exactly 2px delta
         sm.on_detection(d);
     }
-    
+
     // Should transition (2px is within threshold)
     assert(sm.state() == FcsState::TRACKING);
     std::cout << "PASS: 2px boundary is stable (AM7-L2-TGT-003)\n";
@@ -709,7 +715,7 @@ void test_position_stability_exceeds_2px() {
     // AM7-L2-TGT-003: Test exceeding boundary (>2px delta)
     StateMachine sm;
     sm.force_state_for_test(FcsState::SEARCH);
-    
+
     // Send 3 detections with >2px delta (should not be stable)
     for (int i = 0; i < 3; ++i) {
         Detection d;
@@ -717,7 +723,7 @@ void test_position_stability_exceeds_2px() {
         d.bbox = {100 + i * 3, 100, 50, 50};  // 3px delta exceeds threshold
         sm.on_detection(d);
     }
-    
+
     // Should remain in SEARCH (>2px exceeds threshold)
     assert(sm.state() == FcsState::SEARCH);
     std::cout << "PASS: >2px exceeds stability threshold (AM7-L2-TGT-003)\n";

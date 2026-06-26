@@ -118,7 +118,8 @@ std::string FusionHatSensor::read_sysfs_string(const std::string& path) {
     std::getline(file, value);
 
     // Trim trailing whitespace/newlines
-    while (!value.empty() && (value.back() == '\n' || value.back() == '\r' || value.back() == ' ')) {
+    while (!value.empty() &&
+           (value.back() == '\n' || value.back() == '\r' || value.back() == ' ')) {
         value.pop_back();
     }
     return value;

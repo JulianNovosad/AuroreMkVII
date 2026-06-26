@@ -1,13 +1,16 @@
 #include "aurore/hud_socket.hpp"
-#include "aurore/timing.hpp"
+
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+
 #include <cassert>
 #include <chrono>
 #include <cstring>
 #include <iostream>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <thread>
-#include <unistd.h>
+
+#include "aurore/timing.hpp"
 
 using namespace aurore;
 
@@ -41,7 +44,8 @@ void test_client_can_connect() {
     addr.sun_family = AF_UNIX;
     std::strncpy(addr.sun_path, kTestSocket, sizeof(addr.sun_path) - 1);
 
-    [[maybe_unused]] int rc = ::connect(client, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
+    [[maybe_unused]] int rc =
+        ::connect(client, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
     ::close(client);
     hud.stop();
 
@@ -89,8 +93,7 @@ void test_broadcast_delivers_data() {
     assert(n > 0);
     assert(buf[0] == '{');  // JSON object start
 
-    std::cout << "PASS: HUD broadcast delivers JSON messages (received "
-              << n << " bytes)\n";
+    std::cout << "PASS: HUD broadcast delivers JSON messages (received " << n << " bytes)\n";
 }
 
 void test_max_clients_limit() {
@@ -154,7 +157,7 @@ void test_rate_limiting() {
     // Send messages rapidly - should be rate limited after initial burst
     int messages_sent = 0;
     int messages_expected = 0;
-    
+
     // Initial burst: should send up to bucket capacity (10 messages)
     for (int i = 0; i < 15; i++) {
         HudFrame frame{};
@@ -166,10 +169,10 @@ void test_rate_limiting() {
             messages_expected++;  // First 10 should pass (bucket capacity)
         }
     }
-    
+
     // Wait for token bucket to refill (0.5 sec = 5 tokens at 10/sec)
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    
+
     // Send more messages - should allow ~5 more
     for (int i = 0; i < 5; i++) {
         HudFrame frame{};
@@ -179,16 +182,16 @@ void test_rate_limiting() {
         messages_sent++;
         messages_expected++;
     }
-    
+
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
     // Verify rate limiting was applied
     uint64_t rate_limited = hud.get_rate_limited_count();
     assert(rate_limited > 0);  // Some messages should have been rate limited
-    
-    std::cout << "PASS: rate limiting enforced (limited " << rate_limited 
-              << " of " << messages_sent << " messages)\n";
-    
+
+    std::cout << "PASS: rate limiting enforced (limited " << rate_limited << " of " << messages_sent
+              << " messages)\n";
+
     ::close(client);
     hud.stop();
 }
@@ -217,7 +220,7 @@ void test_message_timeout() {
     fresh_frame.state = 4;
     fresh_frame.timestamp_ns = get_timestamp();  // Current timestamp
     hud.broadcast(fresh_frame);
-    
+
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     // Send a stale message - should be discarded
@@ -225,16 +228,16 @@ void test_message_timeout() {
     stale_frame.state = 4;
     stale_frame.timestamp_ns = get_timestamp() - 200'000'000ULL;  // 200ms old
     hud.broadcast(stale_frame);
-    
+
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
     // Verify timeout was applied
     uint64_t timeout_discarded = hud.get_timeout_discarded_count();
     assert(timeout_discarded > 0);  // Stale message should have been discarded
-    
-    std::cout << "PASS: message timeout enforced (discarded " << timeout_discarded 
+
+    std::cout << "PASS: message timeout enforced (discarded " << timeout_discarded
               << " stale messages)\n";
-    
+
     ::close(client);
     hud.stop();
 }

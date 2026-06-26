@@ -19,15 +19,15 @@
  * @copyright Aurore MkVII Project - Educational/Personal Use Only
  */
 
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <functional>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <thread>
-#include <atomic>
-#include <optional>
-#include <functional>
 
 #include "aurore/fusion_hat.hpp"
 #include "aurore/timing.hpp"
@@ -56,26 +56,24 @@ static int tests_failed = 0;
 
 static std::atomic<bool> watchdog_kicked{false};
 
-#define TEST_ASSERT(condition, message)                           \
-    do {                                                          \
-        if (condition) {                                          \
-            std::cout << "  PASS: " << message << "\n";           \
-            tests_passed++;                                       \
-        } else {                                                  \
-            std::cerr << "  FAIL: " << message << "\n";           \
-            tests_failed++;                                       \
-        }                                                         \
+#define TEST_ASSERT(condition, message)                 \
+    do {                                                \
+        if (condition) {                                \
+            std::cout << "  PASS: " << message << "\n"; \
+            tests_passed++;                             \
+        } else {                                        \
+            std::cerr << "  FAIL: " << message << "\n"; \
+            tests_failed++;                             \
+        }                                               \
     } while (0)
 
-static void sleep_ms(int ms) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-}
+static void sleep_ms(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
 
 static void test_fusion_hat_presence(aurore::FusionHat& hat) {
     std::cout << "\n=== Test: Fusion HAT+ Presence ===\n";
 
     auto start = std::chrono::steady_clock::now();
-    
+
     if (!hat.init()) {
         std::cerr << "FAIL: Fusion HAT+ not responding on /dev/i2c-1\n";
         std::cerr << "      Check: ls /sys/class/fusion_hat/fusion_hat\n";
@@ -85,17 +83,18 @@ static void test_fusion_hat_presence(aurore::FusionHat& hat) {
     }
 
     auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - start).count();
+                          std::chrono::steady_clock::now() - start)
+                          .count();
 
     if (elapsed_ms > kTestTimeoutMs) {
-        TEST_ASSERT(false, "Fusion HAT+ init timeout (" + std::to_string(elapsed_ms) + "ms > " + 
-                    std::to_string(kTestTimeoutMs) + "ms)");
+        TEST_ASSERT(false, "Fusion HAT+ init timeout (" + std::to_string(elapsed_ms) + "ms > " +
+                               std::to_string(kTestTimeoutMs) + "ms)");
         return;
     }
 
     TEST_ASSERT(hat.is_connected(), "Fusion HAT+ detected on sysfs");
     TEST_ASSERT(hat.is_initialized(), "Fusion HAT+ initialized");
-    
+
     auto fw = hat.get_firmware_version();
     if (!fw.empty()) {
         std::cout << "  INFO: Firmware version: " << fw << "\n";
@@ -130,12 +129,12 @@ static void test_pwm_resolution(aurore::FusionHat& hat) {
 
     constexpr int k16BitMax = 65535;
     bool is_16bit = (pw_max - pw_min) >= (k16BitMax / 100);
-    TEST_ASSERT(is_16bit, "16-bit resolution verified (" + std::to_string(pw_max - pw_min) + " range)");
+    TEST_ASSERT(is_16bit,
+                "16-bit resolution verified (" + std::to_string(pw_max - pw_min) + " range)");
 }
 
-static void test_servo_sweep(aurore::FusionHat& hat, int channel, 
-                              float start_deg, float mid_deg, float end_deg,
-                              const std::string& name) {
+static void test_servo_sweep(aurore::FusionHat& hat, int channel, float start_deg, float mid_deg,
+                             float end_deg, const std::string& name) {
     std::cout << "\n=== Test: " << name << " Sweep ===\n";
 
     std::cout << "  Sweep: " << start_deg << "° -> " << mid_deg << "° -> " << end_deg << "°\n";
@@ -162,14 +161,13 @@ static void test_servo_sweep(aurore::FusionHat& hat, int channel,
 }
 
 static void test_azimuth_sweep(aurore::FusionHat& hat) {
-    test_servo_sweep(hat, kAzimuthChannel, 
-                     kAzimuthMinDeg, kAzimuthMaxDeg, kAzimuthCenterDeg,
+    test_servo_sweep(hat, kAzimuthChannel, kAzimuthMinDeg, kAzimuthMaxDeg, kAzimuthCenterDeg,
                      "Azimuth (Ch" + std::to_string(kAzimuthChannel) + ")");
 }
 
 static void test_elevation_sweep(aurore::FusionHat& hat) {
-    test_servo_sweep(hat, kElevationChannel,
-                     kElevationMinDeg, kElevationMaxDeg, kElevationCenterDeg,
+    test_servo_sweep(hat, kElevationChannel, kElevationMinDeg, kElevationMaxDeg,
+                     kElevationCenterDeg,
                      "Elevation (Ch" + std::to_string(kElevationChannel) + ")");
 }
 
@@ -188,8 +186,9 @@ static void test_trigger_pulse(aurore::FusionHat& hat) {
     auto start = std::chrono::steady_clock::now();
     hat.set_servo_pulse_width(kTriggerChannel, kTriggerFireUs);
     auto cmd_time = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now() - start).count();
-    
+                        std::chrono::steady_clock::now() - start)
+                        .count();
+
     TEST_ASSERT(true, "Trigger fire command issued (" + std::to_string(cmd_time) + "μs)");
 
     sleep_ms(kTriggerFireDurationMs);
@@ -218,17 +217,17 @@ static void test_command_queuing(aurore::FusionHat& hat) {
     }
 
     auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now() - start).count();
+                          std::chrono::steady_clock::now() - start)
+                          .count();
 
     float avg_us = static_cast<float>(elapsed_us) / kNumCommands;
-    TEST_ASSERT(elapsed_us < 10000, 
+    TEST_ASSERT(elapsed_us < 10000,
                 kNumCommands + " commands queued in " + std::to_string(elapsed_us) + "μs");
     TEST_ASSERT(avg_us < 1000, "Avg command time: " + std::to_string(avg_us) + "μs (< 1ms)");
 
     uint64_t cmd_count = hat.get_command_count();
-    TEST_ASSERT(cmd_count >= kNumCommands, 
-                "Command count: " + std::to_string(cmd_count) + " (>= " + 
-                std::to_string(kNumCommands) + ")");
+    TEST_ASSERT(cmd_count >= kNumCommands, "Command count: " + std::to_string(cmd_count) +
+                                               " (>= " + std::to_string(kNumCommands) + ")");
 
     std::cout << "  INFO: PERF-006: Non-blocking queuing verified\n";
 }
@@ -265,8 +264,7 @@ static void test_sweep_to_center(aurore::FusionHat& hat) {
 
 static void print_summary() {
     std::cout << "\n========================================\n";
-    std::cout << "HIL Test Summary: " << tests_passed << " passed, " 
-              << tests_failed << " failed\n";
+    std::cout << "HIL Test Summary: " << tests_passed << " passed, " << tests_failed << " failed\n";
     std::cout << "========================================\n";
 
     if (tests_failed > 0) {
@@ -280,11 +278,11 @@ int main(int /*argc*/, char* /*argv*/[]) {
     std::cout << "Aurore MkVII Gimbal & Trigger HIL Test\n";
     std::cout << "===========================================\n";
     std::cout << "Channels:\n";
-    std::cout << "  Azimuth:    Ch" << kAzimuthChannel << " (" << kAzimuthMinDeg << "-" 
+    std::cout << "  Azimuth:    Ch" << kAzimuthChannel << " (" << kAzimuthMinDeg << "-"
               << kAzimuthMaxDeg << "°)\n";
-    std::cout << "  Elevation:  Ch" << kElevationChannel << " (" << kElevationMinDeg << "-" 
+    std::cout << "  Elevation:  Ch" << kElevationChannel << " (" << kElevationMinDeg << "-"
               << kElevationMaxDeg << "°)\n";
-    std::cout << "  Trigger:    Ch" << kTriggerChannel << " (" << kTriggerPulseWidthUs 
+    std::cout << "  Trigger:    Ch" << kTriggerChannel << " (" << kTriggerPulseWidthUs
               << "μs idle)\n";
     std::cout << "Ramp-up:     " << kRampUpMs << "ms\n";
 

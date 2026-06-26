@@ -7,12 +7,13 @@
  */
 
 #include "aurore/camera_auth.hpp"
-#include "aurore/camera_wrapper.hpp"
-#include "aurore/security.hpp"
 
 #include <cstring>
-#include <vector>
 #include <string>
+#include <vector>
+
+#include "aurore/camera_wrapper.hpp"
+#include "aurore/security.hpp"
 
 namespace aurore {
 
@@ -22,7 +23,7 @@ const char* kDefaultHmacKey = "AURORE_MK7_FRAME_AUTH_KEY_256BIT_SECRET";
 
 /**
  * @brief Compute frame header for HMAC input.
- * 
+ *
  * Packs the frame header fields into a contiguous buffer for HMAC computation.
  * Per ICD-001: HMAC covers header + frame_hash.
  */
@@ -37,7 +38,7 @@ void compute_frame_header(const ZeroCopyFrame& frame, uint8_t* out_header, size_
     // - format:        u32 (4 bytes)
     // - buffer_id:     u32 (4 bytes)
     // Total: 44 bytes
-    
+
     size_t offset = 0;
     std::memcpy(out_header + offset, &frame.sequence, sizeof(frame.sequence));
     offset += sizeof(frame.sequence);
@@ -55,13 +56,13 @@ void compute_frame_header(const ZeroCopyFrame& frame, uint8_t* out_header, size_
     offset += sizeof(frame.format);
     std::memcpy(out_header + offset, &frame.buffer_id, sizeof(frame.buffer_id));
     offset += sizeof(frame.buffer_id);
-    
+
     out_size = offset;
 }
 
 /**
  * @brief Compute SHA256 hash of frame pixel data.
- * 
+ *
  * @param frame Frame to hash
  * @return true if hash computed successfully
  */
@@ -69,20 +70,17 @@ bool compute_frame_hash(ZeroCopyFrame& frame) {
     if (!frame.is_valid() || frame.plane_data[0] == nullptr || frame.plane_size[0] == 0) {
         return false;
     }
-    
+
     // Compute SHA256 of pixel data (plane 0 only for RAW10)
-    aurore::security::compute_sha256_raw_threadsafe(
-        frame.plane_data[0], 
-        frame.plane_size[0], 
-        frame.frame_hash
-    );
-    
+    aurore::security::compute_sha256_raw_threadsafe(frame.plane_data[0], frame.plane_size[0],
+                                                    frame.frame_hash);
+
     return true;
 }
 
 /**
  * @brief Compute HMAC-SHA256 over frame header + hash.
- * 
+ *
  * @param frame Frame to authenticate (must have frame_hash computed)
  * @param hmac_key HMAC key (256-bit recommended)
  * @param key_len Length of key in bytes
@@ -92,36 +90,32 @@ bool compute_frame_hmac(ZeroCopyFrame& frame, const void* hmac_key, size_t key_l
     if (!frame.is_valid()) {
         return false;
     }
-    
+
     // Build header buffer
     uint8_t header_buf[64];  // 44 bytes needed
     size_t header_size = 0;
     compute_frame_header(frame, header_buf, header_size);
-    
+
     // Compute HMAC over header + frame_hash
     // Input: header (44 bytes) + frame_hash (32 bytes) = 76 bytes
     std::vector<uint8_t> hmac_input;
     hmac_input.reserve(header_size + 32);
     hmac_input.insert(hmac_input.end(), header_buf, header_buf + header_size);
     hmac_input.insert(hmac_input.end(), frame.frame_hash, frame.frame_hash + 32);
-    
+
     std::string key_str(static_cast<const char*>(hmac_key), key_len);
-    aurore::security::compute_hmac_sha256_raw_threadsafe(
-        key_str,
-        hmac_input.data(),
-        hmac_input.size(),
-        frame.hmac
-    );
-    
+    aurore::security::compute_hmac_sha256_raw_threadsafe(key_str, hmac_input.data(),
+                                                         hmac_input.size(), frame.hmac);
+
     return true;
 }
 
 /**
  * @brief Authenticate frame (compute hash + HMAC).
- * 
+ *
  * This is the main entry point for frame authentication.
  * Called after frame capture, before releasing to consumer.
- * 
+ *
  * @param frame Frame to authenticate
  * @param hmac_key HMAC key (nullptr uses default key)
  * @param key_len Length of key (0 uses default key length)
@@ -132,13 +126,13 @@ bool authenticate_frame(ZeroCopyFrame& frame, const void* hmac_key, size_t key_l
     if (!compute_frame_hash(frame)) {
         return false;
     }
-    
+
     // Use default key if none provided
     if (!hmac_key || key_len == 0) {
         hmac_key = kDefaultHmacKey;
         key_len = std::strlen(kDefaultHmacKey);
     }
-    
+
     // Compute HMAC over header + hash
     return compute_frame_hmac(frame, hmac_key, key_len);
 }
@@ -163,11 +157,7 @@ bool ZeroCopyFrame::verify_authentication(const void* key, size_t key_len) const
     if (plane_data[0] == nullptr || plane_size[0] == 0) {
         return false;
     }
-    aurore::security::compute_sha256_raw_threadsafe(
-        plane_data[0],
-        plane_size[0],
-        computed_hash
-    );
+    aurore::security::compute_sha256_raw_threadsafe(plane_data[0], plane_size[0], computed_hash);
 
     // Check if hash matches (detects pixel data tampering)
     if (std::memcmp(computed_hash, frame_hash, 32) != 0) {
@@ -187,7 +177,8 @@ bool ZeroCopyFrame::verify_authentication(const void* key, size_t key_len) const
 
     // Verify HMAC
     std::string key_str(static_cast<const char*>(key), key_len);
-    return aurore::security::verify_hmac_sha256_raw(key_str, hmac_input.data(), hmac_input.size(), hmac);
+    return aurore::security::verify_hmac_sha256_raw(key_str, hmac_input.data(), hmac_input.size(),
+                                                    hmac);
 }
 
 }  // namespace aurore

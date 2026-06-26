@@ -243,7 +243,7 @@ class LockFreeRingBuffer {
     // Mask for efficient modulo (Size must be power of 2)
     const uint32_t mask_;
 
-// Buffer storage - aligned to cache line, value-initialized to zero
+    // Buffer storage - aligned to cache line, value-initialized to zero
     alignas(CACHE_LINE_SIZE) T buffer_[Size]{};
 };
 

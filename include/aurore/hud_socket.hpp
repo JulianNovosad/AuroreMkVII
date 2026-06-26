@@ -108,10 +108,10 @@ struct HudFrame {
     uint32_t deadline_misses{0};
     uint8_t ammo_id{0};
     // SYSTEM_STATUS fields (AM7-L2-HUD-004)
-    uint8_t interlock{0};       // 0=inhibit, 1=enable
-    uint8_t target_lock{0};     // 0=no lock, 1=locked
-    uint8_t fault_active{0};    // 0=clear, 1=active
-    uint16_t cpu_temp_c{0};     // CPU temp * 10 (0-1000 = 0°C to 100°C)
+    uint8_t interlock{0};     // 0=inhibit, 1=enable
+    uint8_t target_lock{0};   // 0=no lock, 1=locked
+    uint8_t fault_active{0};  // 0=clear, 1=active
+    uint16_t cpu_temp_c{0};   // CPU temp * 10 (0-1000 = 0°C to 100°C)
 };
 
 // SEC-008: Peer credential validation result
@@ -158,8 +158,12 @@ class HudSocket {
     uint64_t get_auth_failures() const { return auth_failures_.load(std::memory_order_acquire); }
 
     // PERF-008: Rate limiting statistics
-    uint64_t get_rate_limited_count() const { return rate_limited_count_.load(std::memory_order_acquire); }
-    uint64_t get_timeout_discarded_count() const { return timeout_discarded_count_.load(std::memory_order_acquire); }
+    uint64_t get_rate_limited_count() const {
+        return rate_limited_count_.load(std::memory_order_acquire);
+    }
+    uint64_t get_timeout_discarded_count() const {
+        return timeout_discarded_count_.load(std::memory_order_acquire);
+    }
 
    private:
     void accept_loop();
@@ -193,9 +197,9 @@ class HudSocket {
     // the TOCTOU race where two threads both read last_refill_ns_ before either
     // updates it, causing a double token refill.
     std::mutex rate_limit_mutex_;
-    double tokens_{120.0};  // Protected by rate_limit_mutex_
-    uint64_t last_refill_ns_{0};  // Protected by rate_limit_mutex_
-    std::atomic<uint64_t> rate_limited_count_{0};  // Count of rate-limited messages
+    double tokens_{120.0};                              // Protected by rate_limit_mutex_
+    uint64_t last_refill_ns_{0};                        // Protected by rate_limit_mutex_
+    std::atomic<uint64_t> rate_limited_count_{0};       // Count of rate-limited messages
     std::atomic<uint64_t> timeout_discarded_count_{0};  // Count of stale messages discarded
 };
 

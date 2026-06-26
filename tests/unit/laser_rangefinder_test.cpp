@@ -1,22 +1,21 @@
 /**
  * @file laser_rangefinder_test.cpp
  * @brief Hardware unit tests for M01 laser rangefinder driver
- * 
+ *
  * These tests require real UART hardware (RPi 5 with M01 laser connected).
  * No mocks - tests verify actual UART communication and protocol parsing.
- * 
+ *
  * Hardware requirements:
  * - M01 laser rangefinder connected to UART (default: /dev/ttyAMA10)
  * - Run with sudo for UART access
- * 
+ *
  * Usage: sudo ./laser_rangefinder_test [/dev/ttyAMAxx]
- * 
+ *
  * FAIL-FAST: Tests fail immediately with clear error if hardware is absent.
  * No mocks or simulations - tests connect to real hardware or fail.
  */
 
 #include "aurore/drivers/laser_rangefinder.hpp"
-#include "aurore/timing.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -25,13 +24,15 @@
 #include <string>
 #include <thread>
 
+#include "aurore/timing.hpp"
+
 using namespace aurore;
 
 // Test configuration
-static constexpr float kTestDistanceM = 2.0f;      // Target distance for accuracy test
-static constexpr float kAccuracyToleranceM = 0.1f; // ±10cm tolerance
-static constexpr int kMaxReadAttempts = 50;        // Max attempts to get valid reading
-static constexpr int kSampleCount = 10;            // Number of samples for stability test
+static constexpr float kTestDistanceM = 2.0f;       // Target distance for accuracy test
+static constexpr float kAccuracyToleranceM = 0.1f;  // ±10cm tolerance
+static constexpr int kMaxReadAttempts = 50;         // Max attempts to get valid reading
+static constexpr int kSampleCount = 10;             // Number of samples for stability test
 
 static constexpr int kHardwareDetectTimeoutMs = 2000;  // Fail-fast: timeout for hardware detection
 
@@ -39,15 +40,15 @@ static constexpr int kHardwareDetectTimeoutMs = 2000;  // Fail-fast: timeout for
 static int tests_passed = 0;
 static int tests_failed = 0;
 
-#define TEST_ASSERT(condition, message)                           \
-    do {                                                          \
-        if (condition) {                                          \
-            std::cout << "  PASS: " << message << "\n";           \
-            tests_passed++;                                       \
-        } else {                                              \
-            std::cerr << "  FAIL: " << message << "\n";           \
-            tests_failed++;                                       \
-        }                                                         \
+#define TEST_ASSERT(condition, message)                 \
+    do {                                                \
+        if (condition) {                                \
+            std::cout << "  PASS: " << message << "\n"; \
+            tests_passed++;                             \
+        } else {                                        \
+            std::cerr << "  FAIL: " << message << "\n"; \
+            tests_failed++;                             \
+        }                                               \
     } while (0)
 
 bool wait_for_hardware_response(LaserRangefinder& lrf, int timeout_ms) {
@@ -66,9 +67,9 @@ bool wait_for_hardware_response(LaserRangefinder& lrf, int timeout_ms) {
  */
 void test_construction_and_init() {
     std::cout << "\n=== Test: Construction and Initial State ===\n";
-    
+
     LaserRangefinder lrf;
-    
+
     // After construction, should not be ready
     TEST_ASSERT(!lrf.is_ready(), "Default constructed LRF is not ready");
     TEST_ASSERT(lrf.latest_range_m() == 0.0f, "Initial range is 0.0m");
@@ -80,11 +81,11 @@ void test_construction_and_init() {
  */
 void test_uart_initialization(const std::string& device) {
     std::cout << "\n=== Test: UART Initialization (" << device << ") ===\n";
-    
+
     LaserRangefinder lrf;
-    
+
     bool init_ok = lrf.init(device);
-    
+
     if (!init_ok) {
         std::cerr << "  FATAL: Cannot open " << device << " - hardware unavailable\n";
         std::cerr << "  Check: ls /dev/ttyAMA* for available UART devices\n";
@@ -92,7 +93,7 @@ void test_uart_initialization(const std::string& device) {
         TEST_ASSERT(false, "UART initialization failed - hardware not connected");
         return;
     }
-    
+
     TEST_ASSERT(lrf.is_ready(), "LRF is ready after successful init");
     std::cout << "  INFO: UART " << device << " opened successfully\n";
 }
@@ -109,15 +110,15 @@ void test_continuous_mode_and_readings(const std::string& device) {
         std::cerr << "  FATAL: UART init failed - hardware unavailable\n";
         TEST_ASSERT(false, "UART hardware not connected");
         return;
-        }
+    }
 
-        std::cout << "  INFO: Waiting 2s for LRF warm-up...\n";
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::cout << "  INFO: Waiting 2s for LRF warm-up...\n";
+    std::this_thread::sleep_for(std::chrono::seconds(2));
 
-        // Start continuous measurement mode
+    // Start continuous measurement mode
     bool started = lrf.start_continuous();
     TEST_ASSERT(started, "Continuous mode started");
-    
+
     if (!started) {
         lrf.stop();
         TEST_ASSERT(false, "Failed to start continuous mode");
@@ -211,17 +212,17 @@ void test_protocol_parsing(const std::string& device) {
         std::cerr << "  FATAL: UART init failed - hardware unavailable\n";
         TEST_ASSERT(false, "UART hardware not connected");
         return;
-        }
+    }
 
-        std::cout << "  INFO: Waiting 2s for LRF warm-up...\n";
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::cout << "  INFO: Waiting 2s for LRF warm-up...\n";
+    std::this_thread::sleep_for(std::chrono::seconds(2));
 
-        if (!lrf.start_continuous()) {
+    if (!lrf.start_continuous()) {
         lrf.stop();
-        TEST_ASSERT(false, 
-            "M01 LASER NOT RESPONDING on " + device + "\n"
-            "Check: ls /dev/ttyAMA*\n"
-            "Fix: Verify M01 laser is connected and powered (5V)");
+        TEST_ASSERT(false, "M01 LASER NOT RESPONDING on " + device +
+                               "\n"
+                               "Check: ls /dev/ttyAMA*\n"
+                               "Fix: Verify M01 laser is connected and powered (5V)");
         return;
     }
 
@@ -264,7 +265,8 @@ void test_protocol_parsing(const std::string& device) {
 
         TEST_ASSERT(valid_count > 0, "Received valid protocol frames");
         TEST_ASSERT(invalid_count == 0, "No invalid range values");
-        std::cout << "  INFO: " << valid_count << " valid, " << invalid_count << " invalid frames\n";
+        std::cout << "  INFO: " << valid_count << " valid, " << invalid_count
+                  << " invalid frames\n";
     } else {
         std::cout << "  INFO: LRF streaming status frames (no target), protocol OK\n";
     }
@@ -281,22 +283,22 @@ void test_thread_safety(const std::string& device) {
     LaserRangefinder lrf;
 
     if (!lrf.init(device)) {
-        TEST_ASSERT(false,
-            "M01 LASER NOT CONNECTED on " + device + "\n"
-            "      Check: ls /dev/ttyAMA*\n"
-            "      Fix: Connect M01 laser rangefinder to UART");
+        TEST_ASSERT(false, "M01 LASER NOT CONNECTED on " + device +
+                               "\n"
+                               "      Check: ls /dev/ttyAMA*\n"
+                               "      Fix: Connect M01 laser rangefinder to UART");
         return;
-        }
+    }
 
-        std::cout << "  INFO: Waiting 2s for LRF warm-up...\n";
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::cout << "  INFO: Waiting 2s for LRF warm-up...\n";
+    std::this_thread::sleep_for(std::chrono::seconds(2));
 
-        if (!lrf.start_continuous()) {
+    if (!lrf.start_continuous()) {
         lrf.stop();
-        TEST_ASSERT(false, 
-            "M01 LASER NOT RESPONDING on " + device + "\n"
-            "Check: ls /dev/ttyAMA*\n"
-            "Fix: Verify M01 laser is connected and powered");
+        TEST_ASSERT(false, "M01 LASER NOT RESPONDING on " + device +
+                               "\n"
+                               "Check: ls /dev/ttyAMA*\n"
+                               "Fix: Verify M01 laser is connected and powered");
         return;
     }
 
@@ -319,39 +321,38 @@ void test_thread_safety(const std::string& device) {
 
     std::atomic<int> read_errors{0};
     std::atomic<int> read_count{0};
-    
+
     // Spawn multiple reader threads
     const int num_threads = 4;
     std::thread readers[num_threads];
-    
+
     for (int t = 0; t < num_threads; ++t) {
         readers[t] = std::thread([&]() {
             for (int i = 0; i < 100; ++i) {
                 float range = lrf.latest_range_m();
                 uint64_t ts = lrf.last_reading_ns();
-                
+
                 // Verify atomic consistency
                 if (range > 0.0f && ts == 0) {
                     read_errors++;
                 }
                 read_count++;
-                
+
                 std::this_thread::sleep_for(std::chrono::microseconds(100));
             }
         });
     }
-    
+
     // Wait for all threads
     for (int t = 0; t < num_threads; ++t) {
         readers[t].join();
     }
-    
+
     TEST_ASSERT(read_errors == 0, "No atomic consistency errors");
     TEST_ASSERT(read_count == num_threads * 100, "All reads completed");
-    
-    std::cout << "  INFO: " << read_count << " concurrent reads, " 
-              << read_errors << " errors\n";
-    
+
+    std::cout << "  INFO: " << read_count << " concurrent reads, " << read_errors << " errors\n";
+
     lrf.stop();
 }
 
@@ -360,13 +361,13 @@ void test_thread_safety(const std::string& device) {
  */
 void test_range_accuracy(const std::string& device) {
     std::cout << "\n=== Test: Range Accuracy ===\n";
-    std::cout << "  INFO: Place target at " << kTestDistanceM << "m (±" 
-              << kAccuracyToleranceM << "m tolerance)\n";
+    std::cout << "  INFO: Place target at " << kTestDistanceM << "m (±" << kAccuracyToleranceM
+              << "m tolerance)\n";
     std::cout << "  INFO: Press Enter to continue or skip with Ctrl+C...\n";
-    
+
     // Give user time to set up target
     std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-    
+
     LaserRangefinder lrf;
 
     if (!lrf.init(device)) {
@@ -376,10 +377,12 @@ void test_range_accuracy(const std::string& device) {
 
     if (lrf.diagnose_wiring() != 0) {
         lrf.stop();
-        TEST_ASSERT(false,
-            "M01 laser not responding on " + device + "\n"
-            "      Check: ls /dev/ttyAMA*\n"
-            "      Fix: Connect M01 LRF to UART pins GPIO14/15, ensure VCC=3.3V and ENA=HIGH");
+        TEST_ASSERT(
+            false,
+            "M01 laser not responding on " + device +
+                "\n"
+                "      Check: ls /dev/ttyAMA*\n"
+                "      Fix: Connect M01 LRF to UART pins GPIO14/15, ensure VCC=3.3V and ENA=HIGH");
         return;
     }
 
@@ -404,39 +407,38 @@ void test_range_accuracy(const std::string& device) {
     // Collect samples
     const int sample_count = 20;
     float samples[sample_count];
-    
+
     for (int i = 0; i < sample_count; ++i) {
         samples[i] = lrf.latest_range_m();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    
+
     // Calculate mean
     float sum = 0.0f;
     for (int i = 0; i < sample_count; ++i) {
         sum += samples[i];
     }
     float mean = sum / sample_count;
-    
+
     std::cout << "  INFO: Mean measured distance: " << mean << "m\n";
-    
+
     // Verify accuracy
     float error = std::abs(mean - kTestDistanceM);
     bool accurate = error <= kAccuracyToleranceM;
-    
-    TEST_ASSERT(accurate, 
-                "Accuracy within tolerance (error=" + std::to_string(error) + "m)");
-    
+
+    TEST_ASSERT(accurate, "Accuracy within tolerance (error=" + std::to_string(error) + "m)");
+
     lrf.stop();
 }
 
 int main(int argc, char* argv[]) {
     const std::string device = (argc > 1) ? argv[1] : "/dev/ttyAMA0";
-    
+
     std::cout << "===========================================\n";
     std::cout << "Laser Rangefinder Hardware Tests\n";
     std::cout << "Device: " << device << "\n";
     std::cout << "===========================================\n";
-    
+
     // Run tests
     test_construction_and_init();
     test_uart_initialization(device);
@@ -444,12 +446,11 @@ int main(int argc, char* argv[]) {
     test_protocol_parsing(device);
     test_thread_safety(device);
     // test_range_accuracy(device);  // Optional - requires manual target setup
-    
+
     // Summary
     std::cout << "\n===========================================\n";
-    std::cout << "Test Summary: " << tests_passed << " passed, " 
-              << tests_failed << " failed\n";
+    std::cout << "Test Summary: " << tests_passed << " passed, " << tests_failed << " failed\n";
     std::cout << "===========================================\n";
-    
+
     return (tests_failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

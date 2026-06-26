@@ -1,10 +1,11 @@
 #pragma once
 
+#include <sys/types.h>
+
 #include <atomic>
 #include <functional>
 #include <mutex>
 #include <string>
-#include <sys/types.h>
 #include <thread>
 #include <vector>
 
@@ -24,10 +25,10 @@ namespace aurore {
  *   RESET            → on_reset()
  */
 class CommandSocket {
-public:
-    using ModeCallback    = std::function<void(const std::string& mode)>;
+   public:
+    using ModeCallback = std::function<void(const std::string& mode)>;
     using FreecamCallback = std::function<void(float az_deg, float el_deg)>;
-    using ResetCallback   = std::function<void()>;
+    using ResetCallback = std::function<void()>;
 
     struct Config {
         std::string socket_path = "/tmp/aurore_cmd.sock";
@@ -46,23 +47,23 @@ public:
     void set_freecam_callback(FreecamCallback cb);
     void set_reset_callback(ResetCallback cb);
 
-private:
+   private:
     void accept_loop();
     void client_loop(int fd);
     void dispatch(const std::string& line);
 
-    Config               cfg_;
-    int                  server_fd_{-1};
-    std::atomic<bool>    running_{false};
-    std::thread          accept_thread_;
+    Config cfg_;
+    int server_fd_{-1};
+    std::atomic<bool> running_{false};
+    std::thread accept_thread_;
 
-    mutable std::mutex   clients_mutex_;
-    std::vector<int>     client_fds_;
+    mutable std::mutex clients_mutex_;
+    std::vector<int> client_fds_;
 
-    mutable std::mutex   cb_mutex_;
-    ModeCallback         on_mode_;
-    FreecamCallback      on_freecam_;
-    ResetCallback        on_reset_;
+    mutable std::mutex cb_mutex_;
+    ModeCallback on_mode_;
+    FreecamCallback on_freecam_;
+    ResetCallback on_reset_;
 };
 
 }  // namespace aurore

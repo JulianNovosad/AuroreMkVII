@@ -1,7 +1,7 @@
 #pragma once
+#include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <algorithm>
 #include <cstdint>
 #include <optional>
 
@@ -41,20 +41,22 @@ struct CameraIntrinsics {
 // Converts pixel offset → servo angle, accepts commands from AUTO or FREECAM source.
 // Camera is rigidly mounted on turret payload (identity transform to gimbal frame).
 class GimbalController {
-public:
+   public:
     explicit GimbalController(const CameraIntrinsics& cam = {});
 
     // AUTO mode: compute delta angle from track centroid, apply to current angle
     GimbalCommand command_from_pixel(float centroid_x, float centroid_y, float gain = 1.0f);
 
     // FREECAM mode: direct absolute angle command from Link
-    GimbalCommand command_absolute(float az_deg, float el_deg, std::optional<uint32_t> seq_num = std::nullopt);
+    GimbalCommand command_absolute(float az_deg, float el_deg,
+                                   std::optional<uint32_t> seq_num = std::nullopt);
 
     // Process command with sequence gap detection (returns std::nullopt if gap detected)
-    std::optional<GimbalCommand> process_command_with_gap_check(float az_deg, float el_deg, uint32_t seq_num);
+    std::optional<GimbalCommand> process_command_with_gap_check(float az_deg, float el_deg,
+                                                                uint32_t seq_num);
 
     void set_source(GimbalSource s) { source_.store(s, std::memory_order_release); }
-    GimbalSource source() const     { return source_.load(std::memory_order_acquire); }
+    GimbalSource source() const { return source_.load(std::memory_order_acquire); }
 
     // Get last commanded angles (from either source)
     float current_az() const { return az_.load(std::memory_order_relaxed); }
@@ -93,7 +95,7 @@ public:
         reset_rate_limiter();
     }
 
-private:
+   private:
     CameraIntrinsics cam_;
     std::atomic<GimbalSource> source_{GimbalSource::AUTO};
     std::atomic<float> az_{0.f};
@@ -115,14 +117,15 @@ private:
     // prev_az_cmd_ / prev_el_cmd_ hold the last rate-limited output angle
     // prev_az_vel_ / prev_el_vel_ hold the last velocity (°/s) for accel clamping
     // prev_cmd_ns_ holds the timestamp of the last command (0 = not yet set)
-    std::atomic<float>    prev_az_cmd_{0.0f};
-    std::atomic<float>    prev_el_cmd_{0.0f};
-    std::atomic<float>    prev_az_vel_{0.0f};
-    std::atomic<float>    prev_el_vel_{0.0f};
+    std::atomic<float> prev_az_cmd_{0.0f};
+    std::atomic<float> prev_el_cmd_{0.0f};
+    std::atomic<float> prev_az_vel_{0.0f};
+    std::atomic<float> prev_el_vel_{0.0f};
     std::atomic<uint64_t> prev_cmd_ns_{0};
 
     // Apply velocity + acceleration clamping to a desired (az, el) pair.
     // Updates all limiter state and returns the clamped (az, el).
-    std::pair<float, float> apply_rate_limit(float az_desired, float el_desired);};
+    std::pair<float, float> apply_rate_limit(float az_desired, float el_desired);
+};
 
 }  // namespace aurore
